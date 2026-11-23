@@ -1,191 +1,195 @@
-// A chart of the authored starting state, not a galaxy simulation. World coordinates never depend on the skin.
-const NS = 'http://www.w3.org/2000/svg';
-function svg(tag, attrs = {}, text) {
-  const e = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text != null) e.textContent = text;
-  return e;
-}
+import { overviewView } from './universalviewcamera.js';
+
+// Only paint a still of the chosen preset. For a quick selection change the new names/owners
+// appear immediately; late results never repaint a different campaign's map.
 export function strategicPreview(host) {
-  host.innerHTML = `<div class="uc-chart-bounds" aria-hidden="true"></div><div class="uc-chart-hud"><div class="uc-map-tools" role="group" aria-label="Map controls"></div><details class="uc-owners"><summary>Faction key</summary><div class="uc-map-key"></div></details><span class="uc-map-readout"></span></div>`;
-  const bounds = host.querySelector('.uc-chart-bounds'),
-    bar = host.querySelector('.uc-map-tools'),
-    readout = host.querySelector('.uc-map-readout'),
-    legend = host.querySelector('.uc-map-key');
-  const map = svg('svg', { class: 'uc-starmap', 'aria-label': 'Starting galaxy map', role: 'group', tabindex: 0 }),
-    guides = svg('g', { class: 'uc-guides', 'aria-hidden': 'true' }),
-    layer = svg('g');
-  host.prepend(map);
-  const camera = svg('g');
-  camera.append(guides, layer);
-  map.append(camera);
-  let zoom = 1,
-    panX = 0,
-    panY = 0,
-    drag = null,
-    worlds = [],
-    routes = [],
-    lane = null,
-    extent = null,
-    frame;
-  // Dragging changes one transform; only fitting/zooming recomputes paths and label collisions.
-  function pan() {
-    camera.setAttribute('transform', `translate(${panX} ${panY})`);
-  }
-  // The SVG always covers the viewport. Fit into the visible area instead of clipping the chart to a panel.
-  function layout() {
-    const w = map.clientWidth,
-      h = map.clientHeight;
-    if (!w || !h) return;
-    map.setAttribute('viewBox', `0 0 ${w} ${h}`);
-    const b = { x: bounds.offsetLeft, y: bounds.offsetTop, w: bounds.clientWidth, h: bounds.clientHeight };
-    frame = { cx: b.x + b.w / 2, cy: b.y + b.h / 2 };
-    if (!extent) return;
-    const size = Math.min(Math.max(1, b.w - 62) / extent.w, Math.max(1, b.h - 28) / extent.h);
-    pan();
-    const { cx, cy } = frame;
-    guides.setAttribute('transform', `translate(${cx} ${cy}) scale(${(Math.max(1, Math.min(b.w, b.h)) / 600) * zoom})`);
-    const taken = [];
-    for (const a of worlds) {
-      a.x = cx + (a.wx - extent.cx) * size * zoom;
-      a.y = cy - (a.wy - extent.cy) * size * zoom;
-      a.g.setAttribute('transform', `translate(${a.x} ${a.y})`);
-      const width = Math.min(220, a.name.length * 6.4 + 7);
-      const left = a.x + panX + 9 + width > b.x + b.w && a.x + panX - 9 - width >= b.x;
-      const x = left ? a.x - 9 - width : a.x + 9;
-      a.text.setAttribute('x', left ? -9 : 9);
-      a.text.setAttribute('text-anchor', left ? 'end' : 'start');
-      const clash = taken.some(o => Math.abs(a.y - o.y) < 15 && x < o.x + o.w && o.x < x + width);
-      a.text.classList.toggle('uc-label-muted', clash);
-      if (!clash) taken.push({ x, y: a.y, w: width });
-    }
-    lane.setAttribute('d', routes.map(([i, j]) => `M${worlds[i].x} ${worlds[i].y}L${worlds[j].x} ${worlds[j].y}`).join(''));
-  }
-  function setZoom(f, x = frame?.cx, y = frame?.cy) {
-    if (!extent || !frame) return;
-    const z = Math.max(1, Math.min(10, zoom * f));
-    panX = x - frame.cx - ((x - frame.cx - panX) * z) / zoom;
-    panY = y - frame.cy - ((y - frame.cy - panY) * z) / zoom;
+  host.innerHTML = `<div class="uc-map" role="group" aria-label="Starting galaxy map" tabindex="0"><div class="uc-plane"><canvas></canvas><div class="uc-worlds"></div></div></div><div class="uc-key" aria-label="Faction key"></div>`;
+  const map = host.querySelector('.uc-map'),
+    plane = host.querySelector('.uc-plane'),
+    canvas = host.querySelector('canvas'),
+    ctx = canvas.getContext('2d'),
+    labels = host.querySelector('.uc-worlds'),
+    key = host.querySelector('.uc-key');
+  let selection,
+    worker,
+    timer,
+    sequence = 0,
+    zoom = 1,
+    x = 0,
+    y = 0,
+    drag,
+    cache = new Map(),
+    requestKey = '';
+  const move = () => (plane.style.transform = `translate(${x}px,${y}px) scale(${zoom})`);
+  function scale(f, px, py) {
+    const z = Math.min(5, Math.max(1, zoom * f));
+    x = px - ((px - x) * z) / zoom;
+    y = py - ((py - y) * z) / zoom;
     zoom = z;
-    if (z === 1) panX = panY = 0;
-    layout();
+    if (z === 1) x = y = 0;
+    move();
   }
-  function fit() {
-    zoom = 1;
-    panX = panY = 0;
-    layout();
-  }
-  for (const [label, name, fn] of [
-    ['−', 'Zoom out', () => setZoom(1 / 1.4)],
-    ['+', 'Zoom in', () => setZoom(1.4)],
-    ['Fit', 'Fit map', fit]
-  ]) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = label;
-    b.setAttribute('aria-label', name);
-    b.onclick = fn;
-    bar.append(b);
-  }
-  for (const r of [125, 225, 300]) guides.append(svg('circle', { r }));
-  guides.append(svg('path', { d: 'M-324 0h30 M294 0h30 M0 -324v30 M0 294v30' }));
   map.onwheel = e => {
     e.preventDefault();
-    const rect = map.getBoundingClientRect();
-    setZoom(e.deltaY < 0 ? 1.22 : 1 / 1.22, e.clientX - rect.left, e.clientY - rect.top);
+    const r = map.getBoundingClientRect();
+    scale(e.deltaY < 0 ? 1.18 : 1 / 1.18, e.clientX - r.left, e.clientY - r.top);
   };
   map.onpointerdown = e => {
-    if (e.button !== 0) return;
-    drag = { id: e.pointerId, x: e.clientX - panX, y: e.clientY - panY };
-    map.setPointerCapture(e.pointerId);
+    if (e.button === 0) {
+      drag = [e.clientX - x, e.clientY - y];
+      map.setPointerCapture(e.pointerId);
+    }
   };
   map.onpointermove = e => {
-    if (drag?.id !== e.pointerId) return;
-    panX = e.clientX - drag.x;
-    panY = e.clientY - drag.y;
-    pan();
+    if (drag) {
+      x = e.clientX - drag[0];
+      y = e.clientY - drag[1];
+      move();
+    }
   };
   map.onlostpointercapture = () => (drag = null);
   map.onkeydown = e => {
-    if (e.key === '+' || e.key === '=') setZoom(1.4);
-    else if (e.key === '-') setZoom(1 / 1.4);
-    else if (e.key === 'Home') fit();
-    else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-      panX += e.key === 'ArrowLeft' ? 42 : e.key === 'ArrowRight' ? -42 : 0;
-      panY += e.key === 'ArrowUp' ? 42 : e.key === 'ArrowDown' ? -42 : 0;
-      pan();
-    } else return;
+    if (e.key === 'Home') {
+      zoom = 1;
+      x = y = 0;
+      move();
+    } else if (['+', '=', '-'].includes(e.key)) scale(e.key === '-' ? 1 / 1.18 : 1.18, map.clientWidth / 2, map.clientHeight / 2);
+    else return;
     e.preventDefault();
   };
-  const obs = new ResizeObserver(layout);
-  obs.observe(bounds);
-  obs.observe(map);
-  function clear() {
-    extent = null;
-    worlds = [];
-    routes = [];
-    lane = null;
-    layer.replaceChildren();
-    legend.replaceChildren();
-    guides.style.display = 'none';
-    readout.textContent = 'No campaign map available';
+  function stop() {
+    sequence++;
+    clearTimeout(timer);
+    worker?.terminate();
+    worker = null;
   }
+  function clear() {
+    stop();
+    selection = null;
+    requestKey = '';
+    labels.replaceChildren();
+    key.replaceChildren();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    delete host.dataset.scene;
+  }
+  function layout() {
+    if (!selection || !map.clientWidth || !map.clientHeight) return;
+    const { p, m, worlds, variant } = selection,
+      w = map.clientWidth,
+      h = map.clientHeight,
+      view = overviewView(worlds, p.camera, w, h),
+      id = [p.id, p.revision, variant.map, w, h].join(':');
+    labels.style.setProperty('--planet-type', JSON.stringify(p.overlay.font));
+    labels.style.setProperty('--planet-size', Math.max(8, p.overlay.pt * 1.6 * Math.min(w / 1024, h / 768)) + 'px');
+    if (requestKey === id) return;
+    stop();
+    requestKey = id;
+    const gen = sequence;
+    view.labels.forEach(([u, v], i) => {
+      const el = labels.children[i];
+      el.style.left = u * 100 + '%';
+      el.style.top = v * 100 + '%';
+    });
+    const factor = Math.min(devicePixelRatio || 1, 1.5, 1600 / w, 1400 / h);
+    canvas.width = Math.max(1, Math.round(w * factor));
+    canvas.height = Math.max(1, Math.round(h * factor));
+    function paint(pic) {
+      ctx.drawImage(pic, 0, 0, canvas.width, canvas.height);
+      host.dataset.scene = 'native';
+    }
+    if (cache.has(id)) {
+      paint(cache.get(id));
+      return;
+    }
+    host.dataset.scene = 'loading';
+    timer = setTimeout(() => {
+      try {
+        worker = new Worker(new URL('./universalviewworker.js', import.meta.url), { type: 'module' });
+        const failed = e => {
+          if (gen !== sequence) return;
+          console.warn('Galaxy preview:', e.message);
+          host.dataset.scene = 'unavailable';
+          stop();
+        };
+        worker.onerror = failed;
+        worker.onmessage = ({ data }) => {
+          if (gen !== sequence) {
+            data.bitmap?.close();
+            return;
+          }
+          if (data.error) {
+            failed(new Error(data.error));
+            return;
+          }
+          paint(data.bitmap);
+          cache.set(id, data.bitmap);
+          if (cache.size > 3) {
+            const k = cache.keys().next().value;
+            cache.get(k).close();
+            cache.delete(k);
+          }
+          host.dataset.models = String(data.placed);
+          stop();
+        };
+        worker.postMessage({
+          profile: p.id,
+          revision: p.revision,
+          w: canvas.width,
+          h: canvas.height,
+          worlds,
+          overlay: p.overlay,
+          colors: m.worlds.map(([, o]) => p.facts[o]?.color || '#bbb'),
+          scenery: m.scenery.map(i => p.planets[i]),
+          routes: m.routes,
+          looks: p.looks,
+          camera: p.camera
+        });
+      } catch (e) {
+        host.dataset.scene = 'unavailable';
+        stop();
+      }
+    }, 180);
+  }
+  const observer = new ResizeObserver(layout);
+  observer.observe(map);
   return {
     clear,
-    dispose: () => obs.disconnect(),
-    show(profile, variant) {
+    dispose() {
       clear();
-      const data = profile.maps[variant.map],
-        counts = new Map();
-      if (!data.worlds.length) return;
-      guides.style.display = '';
-      lane = svg('path', { class: 'uc-trade-lanes' });
-      layer.append(lane);
-      const hint = `${data.worlds.length} worlds  /  ${data.routes.length} trade routes`;
-      readout.textContent = hint;
-      for (const [i, owner] of data.worlds) {
-        const p = profile.planets[i],
-          f = profile.facts[owner],
-          name = p[1] || p[0],
-          side = f?.label || owner || 'Unclaimed';
-        const g = svg('g', { tabindex: 0, role: 'img', 'aria-label': `${name} — ${side}`, 'data-planet': p[0], 'data-owner': owner || '' });
-        g.style.setProperty('--owner', f?.color || '#939aa0');
-        const text = svg('text', { class: 'uc-star-name', x: 9, y: 4 }, name);
-        g.append(
-          svg('title', {}, `${name} — ${side}`),
-          svg('circle', { r: 7, class: 'uc-world-corona' }),
-          svg('circle', { r: 3.4, class: 'uc-world-disc' }),
-          text
-        );
-        g.onmouseenter = g.onfocus = () => {
-          readout.textContent = `${name}  /  ${side}`;
-        };
-        g.onmouseleave = g.onblur = () => {
-          readout.textContent = hint;
-        };
-        worlds.push({ wx: p[2], wy: p[3], name, g, text });
-        layer.append(g);
-        counts.set(owner, (counts.get(owner) || 0) + 1);
+      observer.disconnect();
+      for (const pic of cache.values()) pic.close();
+      cache.clear();
+    },
+    show(p, variant) {
+      clear();
+      const m = p.maps[variant.map],
+        worlds = m.worlds.map(([i]) => p.planets[i]);
+      if (!worlds.length) return;
+      selection = { p, m, worlds, variant };
+      zoom = 1;
+      x = y = 0;
+      move();
+      const counts = new Map();
+      for (const [i, o] of m.worlds) {
+        const planet = p.planets[i],
+          fact = p.facts[o],
+          el = document.createElement('span');
+        el.dataset.planet = planet[0];
+        el.dataset.owner = o || '';
+        el.style.setProperty('--owner', fact?.color || '#bbb');
+        if (fact?.ink?.length === 3) el.style.setProperty('--ink', `rgb(${fact.ink.join(',')})`);
+        el.textContent = planet[1] || planet[0];
+        el.title = el.textContent + ' — ' + (fact?.label || o || 'Unclaimed');
+        labels.append(el);
+        counts.set(o, (counts.get(o) || 0) + 1);
       }
-      routes = data.routes.filter(([a, b]) => worlds[a] && worlds[b]);
-      const xs = worlds.map(a => a.wx),
-        ys = worlds.map(a => a.wy),
-        x0 = Math.min(...xs),
-        x1 = Math.max(...xs),
-        y0 = Math.min(...ys),
-        y1 = Math.max(...ys);
-      extent = { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) };
-      for (const [owner, n] of [...counts].sort((a, b) => b[1] - a[1])) {
-        const f = profile.facts[owner],
-          chip = document.createElement('span'),
-          count = document.createElement('b');
-        chip.style.setProperty('--owner', f?.color || '#939aa0');
-        chip.textContent = f?.label || owner || 'Unclaimed';
-        count.textContent = n;
-        chip.append(count);
-        legend.append(chip);
+      for (const [o, n] of [...counts].sort((a, b) => b[1] - a[1])) {
+        const chip = document.createElement('span');
+        chip.style.setProperty('--owner', p.facts[o]?.color || '#bbb');
+        chip.textContent = (p.facts[o]?.label || o || 'Unclaimed') + ' · ' + n;
+        key.append(chip);
       }
-      fit();
+      layout();
     }
   };
 }

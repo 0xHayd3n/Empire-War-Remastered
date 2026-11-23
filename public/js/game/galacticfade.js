@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from '../../vendor/three/build/three.module.js';
 
 export function galacticDistanceFade(distance, radius, near, excluded = false) {
   if (excluded) return 1;

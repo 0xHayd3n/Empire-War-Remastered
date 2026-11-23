@@ -99,6 +99,7 @@ export async function serveUniversal(port, openBrowser, startGame, { home = libr
         server.closeAllConnections();
       });
       for (const s of mounts.values()) await (await s).close();
+      atlas.closeArt();
     }
   };
 }

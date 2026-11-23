@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from '../../vendor/three/build/three.module.js';
 import { ROUTE_SPARK_SEEDS, routeSparkFraction } from './galacticroutes.js';
 
 const QUAD_VERT = `

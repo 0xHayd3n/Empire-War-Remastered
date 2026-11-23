@@ -24,6 +24,9 @@ const assert = require('node:assert/strict'),
     page.setDefaultTimeout(120000);
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
+    page.on('console', m => {
+      if (m.text().includes('Galaxy preview:')) console.error(m.text());
+    });
     await page.goto(url);
     const f = page.frameLocator('#game');
     await f.locator('[data-id="IDC_MAIN_MENU_SINGLE_PLAYER_GAMES"]').click();
@@ -48,8 +51,7 @@ const assert = require('node:assert/strict'),
     const board = f.locator('[data-universal-screen="campaign"]'),
       field = k => board.locator(`[data-field="${k}"]`);
     await field('story').waitFor();
-    // Escape dismisses the drawer before leaving setup, and re-entry creates exactly one plate.
-    await board.getByRole('button', { name: 'Close configuration' }).click();
+    // Escape leaves setup without a visible Back control.
     await page.keyboard.press('Escape');
     await board.waitFor({ state: 'detached' });
     await f.locator('[data-id="IDC_CUSTOM_CAMPAIGN_BUTTON"]').click();
@@ -64,13 +66,19 @@ const assert = require('node:assert/strict'),
       if (r.url().includes('/api/mount/')) mounts++;
       if (r.url().includes('/asset/') && !r.url().startsWith(`http://127.0.0.1:${port + 1}/`)) assets++;
     });
-    const times = [];
+    const times = [],
+      checked = new Set();
     async function select(id) {
       const t = performance.now();
       await field('story').selectOption(id);
       assert.equal(await board.getAttribute('data-profile'), id);
       assert.equal(await board.evaluate(e => e.marker), root);
       times.push(Math.round(performance.now() - t));
+      if (process.env.SWR_TEST_ALL_ERAS && !checked.has(id)) {
+        await board.locator('[data-scene="native"],[data-scene="unavailable"]').waitFor();
+        assert.equal(await board.locator('.uc-canvas').getAttribute('data-scene'), 'native', id + ' preview');
+        checked.add(id);
+      }
     }
     await select('1976399102');
     await field('faction').selectOption('Empire');
@@ -105,8 +113,7 @@ const assert = require('node:assert/strict'),
     assert.match(target, process.env.SWR_TEST_THR ? /KnownSmall_Era_2_Empire_CCoGM/i : /Era_4_Empire/i);
     const stars = await board.locator('[data-planet]').evaluateAll(es => es.map(e => [e.dataset.planet, e.dataset.owner]));
     assert(stars.length > 10 && new Set(stars.map(p => p[1])).size > 1);
-    await board.getByRole('button', { name: 'Zoom in' }).click();
-    await board.getByRole('button', { name: 'Fit map' }).click();
+    assert.equal(await board.getByRole('button', { name: /Zoom|Fit|Configure|Back/i }).count(), 0);
     await field('difficulty').selectOption('hard');
     const cap = await field('treasury')
       .locator('option')
@@ -118,38 +125,23 @@ const assert = require('node:assert/strict'),
     const snap = async name => {
       if (process.env.SWR_TEST_SCREENSHOTS) await page.screenshot({ path: path.join(process.env.SWR_TEST_SCREENSHOTS, name + '.png') });
     };
-    const toggle = board.getByRole('button', { name: 'Configure' }),
-      drawer = board.locator('.uc-drawer'),
-      chart = board.getByRole('group', { name: 'Starting galaxy map' });
-    const fullBleed = () =>
-      chart.evaluate(e => {
-        const r = e.getBoundingClientRect();
-        return r.x === 0 && r.y === 0 && r.width === innerWidth && r.height === innerHeight;
+    const inline = () =>
+      board.evaluate(e => {
+        const p = e.querySelector('aside').getBoundingClientRect(),
+          m = e.querySelector('.uc-map').getBoundingClientRect();
+        return p.right === innerWidth && p.top === 0 && p.height === innerHeight && m.right === p.left && m.height === innerHeight;
       });
-    assert(await fullBleed());
-    assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
+    assert(await inline());
+    assert((await board.locator('.uc-key span:visible').count()) > 1);
+    await board.locator('[data-scene="native"],[data-scene="unavailable"]').waitFor();
+    assert.equal(await board.locator('.uc-canvas').getAttribute('data-scene'), 'native');
+    assert(Number(await board.locator('.uc-canvas').getAttribute('data-models')) > 10);
     await field('story').scrollIntoViewIfNeeded();
     await snap('fall-atlas');
-    await board.getByRole('button', { name: 'Close configuration' }).click();
-    await drawer.waitFor({ state: 'hidden' });
-    assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
-    assert(await fullBleed());
-    assert.equal(await board.getAttribute('data-campaign'), target);
-    await board.locator('.uc-owners > summary').click();
-    assert((await board.locator('.uc-map-key span').count()) > 1);
-    await snap('map-only');
-    await board.locator('.uc-owners > summary').click();
     await page.setViewportSize({ width: 390, height: 844 });
-    assert(await fullBleed());
-    await snap('compact-map');
-    await toggle.click();
+    assert(await inline());
     assert.equal(await field('difficulty').inputValue(), 'hard');
-    await field('story').focus();
-    await page.keyboard.press('Escape');
-    await drawer.waitFor({ state: 'hidden' });
-    assert.equal(await toggle.evaluate(e => e === document.activeElement), true);
     await page.setViewportSize({ width: 1366, height: 768 });
-    await toggle.click();
     assert.equal(await field('treasury').inputValue(), cap);
     assert.equal(await board.getAttribute('data-campaign'), target);
     const mountUrl = `**/api/mount/${process.env.SWR_TEST_THR ? '1125571106' : '1976399102'}`;
@@ -194,6 +186,7 @@ const assert = require('node:assert/strict'),
         switchChecksMs: times,
         previewPlanets: stars.length,
         uniqueOwners: new Set(stars.map(p => p[1])).size,
+        nativeProfiles: [...checked],
         documentLoadsWhileBrowsing: 0,
         launchDocuments: docs,
         target,

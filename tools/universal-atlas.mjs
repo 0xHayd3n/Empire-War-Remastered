@@ -4,7 +4,7 @@ import { Worker } from 'node:worker_threads';
 import { createHash, randomUUID } from 'node:crypto';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { openGame } from './megfs.mjs';
-import { assertPrivateLibrary } from './universal-library.mjs';
+import { assertPrivateLibrary, loadPack } from './universal-library.mjs';
 import { languageId } from '../public/js/language.js';
 import { validValue } from '../public/js/game/universalrules.js';
 const digest = s => createHash('sha256').update(s).digest('hex');
@@ -96,10 +96,7 @@ export function atlasStore({ home, library, eras }) {
   async function one(id, lang) {
     stamp ??= stockStamp(library.game);
     const rev = id === 'stock' ? 'stock' : JSON.parse(fs.readFileSync(path.join(home, 'profiles', id + '.json'))).revision;
-    const filename = path.join(
-      directory,
-      `${id}-${lang}-${digest((id === '1125571106' ? 'atlas-tr-2:' : 'atlas-1:') + stamp + ':' + rev)}.gz`
-    );
+    const filename = path.join(directory, `${id}-${lang}-${digest('galaxy-scene-2:' + stamp + ':' + rev)}.gz`);
     try {
       return JSON.parse(gunzipSync(fs.readFileSync(filename)));
     } catch {}
@@ -140,8 +137,35 @@ export function atlasStore({ home, library, eras }) {
     }
     return sets.get(lang);
   }
+  // One read-only art VFS for the last preview. No gameplay server, DOM, saves or campaign scripts are mounted.
+  let art, artKey, idle;
+  function closeArt() {
+    art?.close();
+    art = null;
+    artKey = null;
+    clearTimeout(idle);
+  }
+  function picture(id, revision, name) {
+    if (!/^Data\/Art\/(?:Models\/.+\.alo|Textures\/.+\.(?:dds|tga)|Shaders\/.+\.fxo)$/i.test(name) || name.split(/[\\/]/).includes('..'))
+      return null;
+    if (artKey !== id + ':' + revision) {
+      if (!eras().some(e => e.ready && e.id === id)) return null;
+      const pack = id === 'stock' ? null : loadPack(home, id, library.items.get(id)?.folder);
+      if ((pack?.revision || 'stock') !== revision) return null;
+      closeArt();
+      art = openGame(library.game, [], { packedLayer: pack?.entries });
+      artKey = id + ':' + revision;
+    }
+    clearTimeout(idle);
+    idle = setTimeout(closeArt, 60000);
+    idle.unref();
+    const key = art.resolve(name);
+    return key ? art.read(key) : null;
+  }
   return {
     get,
+    picture,
+    closeArt,
     async issue(q) {
       const a = (await get(q.language)).atlas,
         plan = launchPlan(a, q);

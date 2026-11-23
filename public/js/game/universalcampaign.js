@@ -151,7 +151,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
       ? `Expedition: capture ${v.sites.join(', ')} for a one-time 3,000-credit grant.`
       : row?.scripted
         ? 'Authored setup scenario. Its script chooses the final galaxy after launch.'
-        : 'Initial control from the campaign data. Story events can change ownership after launch.';
+        : '';
   }
   function render() {
     const eras = [...data.eras].sort((a, b) => chronology.indexOf(periods[a.id]) - chronology.indexOf(periods[b.id]));
@@ -240,11 +240,6 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     }
     ui.allow(!!v);
     ui.el.dataset.campaign = v?.id || '';
-    ui.context.textContent = [p.name, p.facts[faction]?.label].filter(Boolean).join('  /  ');
-    ui.title.textContent = (row?.label || p.name) + (v?.date ? '  /  ' + v.date : '');
-    ui.summary.textContent =
-      (row?.description || (row ? '' : 'No listed campaigns in this storyline.')).replace(/\\n/g, '\n') +
-      (techDate ? '\n' + p.yearLegend : '');
     if (v) ui.map.show(p, v);
     else ui.map.clear();
     note();

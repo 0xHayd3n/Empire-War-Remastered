@@ -4,11 +4,14 @@ import { parentPort, workerData } from 'node:worker_threads';
 import { openGame } from './megfs.mjs';
 import { loadPack } from './universal-library.mjs';
 import { portableRules } from './universal-rule-catalog.mjs';
-import { db, loadGameData } from '../public/js/gamedata.js';
+import { parseXML } from '../public/js/xml.js';
+import { db, loadGameData, loadFileList } from '../public/js/gamedata.js';
 import { loadCampaignData, startingGalaxy } from '../public/js/game/galaxy.js';
 import { campaignDefaults, campaignLimits, techAdjust } from '../public/js/game/campaignsettings.js';
 import { ruleFields, expeditionSites } from '../public/js/game/universalrules.js';
 import { parseRC } from '../public/js/game/dialogs.js';
+import { routeSettings, routeStyle } from '../public/js/game/galacticroutes.js';
+import { galacticLight } from '../public/js/game/galacticlighting.js';
 import { menuTable, thrawnSelections } from './universal-loader-table.mjs';
 import { campaignChoices } from '../public/js/game/universalcampaign.js';
 const { game, home, folder, id, language } = workerData,
@@ -58,12 +61,37 @@ try {
         .map(c => c.text.trim())
         .join('\n')
     : '';
+  // Same base command-bar components as GalacticGame.buildNames; no HUD models or scripts are needed.
+  const menus = await loadFileList('CommandBarComponentFiles.xml'),
+    components = new Map();
+  for (const file of menus.length ? menus : ['CommandBarComponents.xml']) {
+    const bytes = read('Data/XML/' + file);
+    if (!bytes) continue;
+    for (const top of parseXML(bytes.toString('latin1')).children)
+      for (const c of top.children) if (c.attrs.Name) components.set(c.attrs.Name.toUpperCase(), c);
+  }
+  const ring = components.get('G_PLANET_RING'),
+    name = components.get('G_PLANET_NAME');
+  const overlay = {
+    ring: ring ? ring.val('Icon_Texture_Name').trim() : 'planet_ring.tga',
+    scale: ring?.num('Scale', 1) ?? 1,
+    alpha:
+      (ring
+        ?.val('Color')
+        .trim()
+        .split(/[\s,]+/)
+        .map(Number)[3] ?? 255) / 255,
+    font: name?.val('Font_Name') || 'EmpireAtWar-Bold',
+    pt: name?.num('Font_Point_Size', 7) ?? 7
+  };
   const facts = {},
     planets = [],
     planetKeys = new Map(),
     maps = [],
     mapKeys = new Map(),
-    rows = [];
+    rows = [],
+    looks = [],
+    lookKeys = new Map();
   for (const f of db.factions.values()) {
     const rgb = f
       .str('Color')
@@ -73,6 +101,12 @@ try {
       .map(Number);
     facts[f.name] = {
       label: label(f),
+      ink: f
+        .str('Display_Font_Color')
+        .trim()
+        .split(/[\s,]+/)
+        .slice(0, 3)
+        .map(Number),
       color:
         rgb.length === 3
           ? '#' +
@@ -91,21 +125,56 @@ try {
     const g = startingGalaxy(data, c),
       worlds = [],
       routes = [],
-      idx = new Map();
+      idx = new Map(),
+      scenery = [];
     for (const p of g.planets) {
-      if (p.background) continue;
       if (!planetKeys.has(p.name)) {
         planetKeys.set(p.name, planets.length);
-        planets.push([p.name, label(p.type), p.pos[0], p.pos[1]]);
+        const t = p.type;
+        planets.push([
+          p.name,
+          label(t),
+          ...p.pos,
+          t.str('Galactic_Model_Name'),
+          t.num('Scale_Factor', 1),
+          t.bool('In_Background') ? 1 : t.bool('In_Midground') ? 2 : t.bool('In_Midforeground') ? 3 : 0,
+          t.bool('Exclude_From_Distance_Fade')
+        ]);
+      }
+      if (p.background) {
+        scenery.push(planetKeys.get(p.name));
+        continue;
       }
       idx.set(p.index, worlds.length);
       worlds.push([planetKeys.get(p.name), p.owner]);
     }
-    for (const r of g.routes) if (idx.has(r.a) && idx.has(r.b)) routes.push([idx.get(r.a), idx.get(r.b)]);
-    const key = JSON.stringify([worlds, routes]);
+    for (const r of g.routes)
+      if (idx.has(r.a) && idx.has(r.b)) {
+        const a = g.planets[r.a].owner,
+          b = g.planets[r.b].owner,
+          f = db.faction(a),
+          line = data.lines.get((r.type.str('Visible_Line_Name') || 'Default').toUpperCase()) || data.lines.get('DEFAULT');
+        const allied = (a, b) =>
+          a?.toUpperCase() === b?.toUpperCase() ||
+          db
+            .faction(a)
+            ?.list('Allies')
+            .some(n => n.toUpperCase() === b?.toUpperCase());
+        let style = routeStyle(a, b, f, db.constants, g.active, false, allied);
+        if (!line?.sub('Settings_For_Faction').some(n => n.attrs.Name?.toUpperCase() === style.toUpperCase()))
+          style = routeStyle(a, b, f, db.constants, g.active, true, allied);
+        const look = routeSettings(line, style),
+          key = JSON.stringify(look);
+        if (!lookKeys.has(key)) {
+          lookKeys.set(key, looks.length);
+          looks.push(look);
+        }
+        routes.push([idx.get(r.a), idx.get(r.b), lookKeys.get(key)]);
+      }
+    const key = JSON.stringify([worlds, routes, scenery]);
     if (!mapKeys.has(key)) {
       mapKeys.set(key, maps.length);
-      maps.push({ worlds, routes });
+      maps.push({ worlds, routes, scenery });
     }
     return {
       id: c.name,
@@ -196,6 +265,18 @@ try {
   parentPort.postMessage({
     id,
     revision: pack?.revision || 'stock',
+    overlay,
+    camera: {
+      pitch: db.constants.num('GMC_InitialPitchAngleDegrees', -30),
+      plane: db.constants.num('Galactic_Scroll_Plane', 10),
+      light: galacticLight(
+        db.constants.vec('Galactic_Zoom_Out_Light_Angle', [0, 160, 58]),
+        db.constants.vec('Galactic_Zoom_In_Light_Angle', [0, 235, 18]),
+        db.constants.num('Galactic_Zoom_Light_Level', 0.5),
+        0
+      )
+    },
+    looks,
     facts,
     planets,
     maps,

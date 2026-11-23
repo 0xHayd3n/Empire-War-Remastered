@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { execFile } from 'node:child_process';
 import path from 'node:path';
+import { campaignRulesCatalog } from './universal-rule-catalog.mjs';
 import { readLibrary } from './workshop-library.mjs';
 import { libraryHome, listPacks, loadPack, primaries } from './universal-library.mjs';
 
@@ -50,7 +51,7 @@ export async function serveUniversal(port, openBrowser, startGame, { home = libr
       if (id !== 'stock' && !listPacks(home).find(p => p.id === id)?.ready) return send(409, 'Build this profile first.');
       if (id !== 'stock' && library.ambiguous?.has(id)) return send(409, 'Multiple installed parents with this ID.');
       const pack = id === 'stock' ? null : loadPack(home, id, library.items.get(id)?.folder);
-      active = { id, ...(await startGame(library.game, [], { port: port + 1 + order.indexOf(id), library: origin, pack })) };
+      active = { id, ...(await startGame(library.game, [], { port: port + 1 + order.indexOf(id), library: origin, pack, campaignRules: () => campaignRulesCatalog(home, library) })) };
       redirect(active.url);
     } catch (e) {
       console.error('Universal:', e.message);

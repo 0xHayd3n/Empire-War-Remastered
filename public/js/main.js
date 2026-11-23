@@ -3530,6 +3530,17 @@ async function boot() {
     launch(staged0);
     return;
   }
+  if (params.has('universal-campaign') && document.querySelector('meta[name="swr-universal"]') && window.parent === window) {
+    hideSplash();
+    history.replaceState(null, '', location.pathname);
+    const { openUniversalCampaign } = await import('./game/universalcampaign.js');
+    await openUniversalCampaign({
+      profileId: document.querySelector('meta[name="swr-pack-revision"]')?.content.split(':')[0],
+      back: () => leaveTo(location.pathname),
+      start: setup => { audio.unlock(); exits.start(setup); }
+    });
+    return;
+  }
   showSplash('menu');
   await mainMenu();
 }

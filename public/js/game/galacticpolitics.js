@@ -1,4 +1,5 @@
 import { db } from '../gamedata.js';
+import { surveySite } from './universalrules.js';
 import { adjustCredits } from './galacticeconomy.js';
 import { planetPolitics } from './planetstats.js';
 
@@ -178,7 +179,10 @@ export function changeController(planet, faction, g = null) {
   planet.politicalTargetOwner = undefined;
   politicalFlip(planet);
   const bonus = g ? captureBonus(g, planet, faction) : 0;
-  if (g) controllerListener?.(planet, old, faction, bonus);
+  if (g) {
+    const surveyed = !planet.destroyed && g.universalRules?.expedition && surveySite(g, planet.name, faction, n => adjustCredits(g, faction, n));
+    controllerListener?.(planet, old, faction, bonus, surveyed);
+  }
   return old;
 }
 
@@ -203,7 +207,7 @@ export const politicallyHeld = p => (p.politicalValue ?? 1) > 0;
 export function stepPolitics(g, dt, captured = null) {
   if (!(dt > 0)) return;
   const top = maxControl(),
-    change = Math.max(1e-3, db.constants.num('Political_Control_Change_Time_Seconds', 7)),
+    change = Math.max(1e-3, g.universalRules?.politics ?? db.constants.num('Political_Control_Change_Time_Seconds', 7)),
     now = g.time || 0;
   let orbitOf = null;
   for (const p of g.planets) {

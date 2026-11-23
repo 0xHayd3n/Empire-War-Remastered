@@ -175,7 +175,7 @@ export function planetBreakdown(g, p, viewer, tint = null) {
 
 export function creditCap(g, owner) {
   if (g.creditCapOverride) return g.creditCapOverride;
-  const perPlanet = db.constants.num('Credit_Cap_Per_Planet', 40000);
+  const perPlanet = g.universalRules?.treasury ?? db.constants.num('Credit_Cap_Per_Planet', 40000);
   return perPlanet < 0 ? Infinity : Math.max(1, g.planets.filter(p => p.owner === owner && !p.background).length) * perPlanet;
 }
 

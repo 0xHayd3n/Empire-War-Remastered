@@ -1,3 +1,4 @@
+import { restoreUniversalRules } from './universalrules.js';
 import { db, ObjType, loadFileList } from '../gamedata.js';
 import { fetchText } from '../vfs.js';
 import { parseXML } from '../xml.js';
@@ -312,6 +313,8 @@ export function snapshotGalaxy(g) {
       ]);
   return {
     campaign: g.campaign.name,
+    ...(g.universalPath ? { universalPath: 1 } : {}),
+    ...(g.universalRules ? { universalRules: structuredClone(g.universalRules) } : {}),
     ...(g.humans ? { humans: g.humans.slice() } : {}),
     time: g.time || 0,
     sabotageOff: !!g.sabotageOff,
@@ -470,6 +473,11 @@ export function snapshotGalaxy(g) {
 export function applyGalaxy(g, s) {
   const t = name => (name ? db.type(name) || null : null),
     list = l => l.map(([n, owner, markerId = -1, flags = {}]) => ({ type: t(n), owner, markerId, ...flags })).filter(x => x.type);
+  if (s.universalPath === 1) g.universalPath = 1;
+  else delete g.universalPath;
+  const rules = s.universalPath === 1 && restoreUniversalRules(s.universalRules);
+  if (rules) g.universalRules = rules;
+  else delete g.universalRules;
   g.time = s.time || 0;
   g.diplomacy = s.diplomacy ? { ...s.diplomacy } : undefined;
   setDiplomacy(g.diplomacy);

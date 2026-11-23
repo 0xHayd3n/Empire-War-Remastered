@@ -78,6 +78,7 @@ import { GalacticStoryDialog } from './galacticstorydialog.js';
 import { GalacticMovies } from './galacticmovies.js';
 import { GalacticLog } from './galacticlog.js';
 import { Menus } from './menus.js';
+import { beginUniversalRules } from './universalrules.js';
 import { stepIncome, orbitFleets, cycleNumber, creditCap } from './galacticeconomy.js';
 import { GalacticAI } from './galacticai.js';
 import { GalacticBattles } from './galacticbattles.js';
@@ -241,13 +242,16 @@ export class GalacticGame {
     const data = (this.data = await loadCampaignData());
     await loadBlackMarket();
     if (this.setup.net) seedSim(this.setup.seed >>> 0);
-    const want = String(this.setup.campaign || '').toUpperCase();
+    const exactPath = (this.setup.restore || this.setup).universalPath === 1;
+    const want = String((exactPath && this.setup.restore?.campaign) || this.setup.campaign || '').toUpperCase();
+    if (exactPath && this.setup.net) throw new Error('Universal campaign paths are single-player only.');
+    if (exactPath && !data.campaigns.has(want)) throw new Error('The selected campaign is missing from this profile.');
     let camp =
       data.campaigns.get(want) ||
       [...data.campaigns.values()].find(c => c.name.toUpperCase().includes(want)) ||
       [...data.campaigns.values()][0];
     const side = db.faction(this.setup.faction);
-    if (camp && side && !this.setup.net) {
+    if (camp && side && !this.setup.net && !exactPath) {
       const set = camp.str('Campaign_Set').toUpperCase();
       camp =
         [...data.campaigns.values()].find(
@@ -260,6 +264,10 @@ export class GalacticGame {
     const g = (this.galaxy = startingGalaxy(data, camp));
     if (this.setup.restore) applyGalaxy(g, this.setup.restore);
     else if (this.setup.campaignSettings) applyCampaignSettings(g, this.setup.campaignSettings, camp.str('Starting_Active_Player'));
+    if (exactPath && !this.setup.restore) {
+      g.universalPath = 1;
+      beginUniversalRules(g, this.setup.universalOptions, db.faction(g.active)?.list('Allies'));
+    }
     if (this.setup.net) this.multiplayerGalaxy(g);
     g.budgetCreditChange = (owner, amount) => this.ai?.creditChange?.(owner, amount);
     g.storyEntry = (fleet, planet) => !!this.story?.entryAllowed?.(fleet, planet);
@@ -424,14 +432,18 @@ export class GalacticGame {
     });
     this.storyDialog = new GalacticStoryDialog(this);
     this.galacticLog = new GalacticLog(this, hud);
+    if (!this.setup.restore && g.universalRules?.expedition) {
+      const names = g.universalRules.expedition.sites.map(n => db.t(db.type(n)?.str('Text_ID')) || n);
+      this.galacticLog.message('Star Map Expedition: gain control of ' + names.join(', ') + '. Survey each once for a 3,000-credit grant.');
+    }
     onOrbit((planet, owner, units, raid) => {
       if (this.galaxy.planets.includes(planet)) this.story?.fleetEntered?.({ owner, units, raid: raid ? planet.index : undefined }, planet);
     });
     onLanded((g, planet, unit) => {
       if (g === this.galaxy) this.story?.unitLanded?.(planet, unit);
     });
-    onControllerChange((planet, old, now, bonus) => {
-      if (!this.over) this.planetChangedHands(planet, old, now, bonus);
+    onControllerChange((planet, old, now, bonus, surveyed) => {
+      if (!this.over) this.planetChangedHands(planet, old, now, bonus, surveyed);
     });
     g.hostSnapshot = () => ({ controlsLocked: !!this.controlsLocked, suspendAI: !!this.suspendAI, tutorialPlayer: !!this.tutorialPlayer });
     if (g.hostSaved) {
@@ -1312,7 +1324,13 @@ export class GalacticGame {
     }
   }
 
-  planetChangedHands(planet, old, now, bonus) {
+  planetChangedHands(planet, old, now, bonus, surveyed) {
+    const g = this.galaxy;
+    if (surveyed && g.universalRules?.expedition && g.planets[planet.index] === planet) {
+      const {found,sites} = g.universalRules.expedition;
+      this.galacticLog?.message(`Star Map Expedition: ${db.t(planet.type.str('Text_ID')) || planet.name} surveyed (${found.length}/${sites.length}).` +
+        (found.length === sites.length ? ' Expedition complete. Grant applied under campaign credit rules.' : ''));
+    }
     const mine = now === this.me,
       name = f => db.t(db.faction(f)?.str('Text_ID')) || f || '';
     const text = String(db.t(mine && bonus ? 'TEXT_PLANET_CHANGED_HANDS_BONUS' : 'TEXT_PLANET_CHANGED_HANDS'));

@@ -121,8 +121,30 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(302, { Location: '/play.html', 'Cache-Control': 'no-store' }); return res.end();
     }
     if (session.eras && p === '/api/universal/eras') return send(res, 200, JSON.stringify(session.eras()), MIME['.json'], { 'Cache-Control':'no-store' });
-    if (session.campaignRules && p === '/api/universal/rules') {
-      return send(res, 200, JSON.stringify(session.catalog ||= session.campaignRules()), MIME['.json'], { 'Cache-Control':'no-store' });
+    if (session.atlas && p.startsWith('/api/universal/atlas')) {
+      const hdr = { 'Cache-Control': 'no-store' };
+      try {
+        if (p === '/api/universal/atlas' && req.method === 'GET') {
+          const { bytes } = await session.atlas.get(url.searchParams.get('language') || 0);
+          return send(res, 200, bytes, MIME['.json'], { ...hdr, 'Content-Encoding': 'gzip' });
+        }
+        if (req.method !== 'POST' || req.headers.origin !== `http://127.0.0.1:${session.port}`) return send(res, 403, 'Use the game window.');
+        const parts = [];
+        let size = 0;
+        for await (const b of req) {
+          if ((size += b.length) > 4096) return send(res, 413, 'Selection too large.');
+          parts.push(b);
+        }
+        const q = JSON.parse(Buffer.concat(parts).toString());
+        if (p === '/api/universal/atlas/start') return send(res, 200, JSON.stringify(await session.atlas.issue(q)), MIME['.json'], hdr);
+        if (p === '/api/universal/atlas/consume') {
+          const setup = session.atlas.take(session.profileId, session.pack?.revision || 'stock', q.ticket);
+          return send(res, 200, JSON.stringify(setup), MIME['.json'], hdr);
+        }
+        return send(res, 404, 'Unknown catalog request.');
+      } catch (e) {
+        return send(res, 409, e.message, 'text/plain', hdr);
+      }
     }
     if (session.library && p === '/play.html') {
       // A frame navigation on loopback is cross-origin. Only this document is embeddable, by the trusted ancestors below; assets stay same-origin.

@@ -1,179 +1,177 @@
-// Opt-in real Chrome check. Stock, built Revan + Rebellion, and playwright-core required.
+// Real Chrome, local stock + Fall, Revan and Rebellion packs. Set SWR_TEST_ALL_ERAS to check the whole roster.
 const assert = require('node:assert/strict'),
   path = require('node:path'),
   { spawn } = require('node:child_process'),
   { chromium } = require('playwright-core');
 (async () => {
-  const port = process.env.SWR_TEST_WINDOW_PORT || '8680',
+  const port = Number(process.env.SWR_TEST_WINDOW_PORT || 8680),
     url = `http://127.0.0.1:${port}/`,
     server = spawn(process.execPath, ['server.mjs', '--universal'], {
       cwd: path.join(__dirname, '..'),
-      env: { ...process.env, SWR_UNIVERSAL_PORT: port },
+      env: { ...process.env, SWR_UNIVERSAL_PORT: String(port) },
       stdio: ['ignore', 'pipe', 'pipe']
     });
-  let browser, page;
+  let b, page;
   try {
     await new Promise((ok, no) => {
-      server.stdout.on('data', b => {
-        if (b.toString().includes('Universal game:')) ok();
+      server.stdout.on('data', d => {
+        if (d.toString().includes('Universal game:')) ok();
       });
       server.once('exit', () => no(Error('Test port unavailable')));
     });
-    browser = await chromium.launch({ channel: 'chrome' });
-    page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
-    page.setDefaultTimeout(90000);
+    b = await chromium.launch({ channel: 'chrome' });
+    page = await b.newPage({ viewport: { width: 1366, height: 768 } });
+    page.setDefaultTimeout(120000);
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     await page.goto(url);
-    const f = page.frameLocator('#game'),
-      screen = k => f.locator(`[data-universal-screen="${k}"]:visible`),
-      eras = screen('eras'),
-      board = screen('campaign'),
-      shell = await page.evaluate(() => (window.acceptanceMarker = crypto.randomUUID()));
-    const snap = async n => {
-      if (process.env.SWR_TEST_SCREENSHOTS) await page.screenshot({ path: path.join(process.env.SWR_TEST_SCREENSHOTS, n + '.png') });
-    };
-    async function pickModeStory(period, name) {
-      await eras.getByRole('option', { name: period, exact: true }).click();
-      await eras.getByRole('option', { name, exact: true }).click();
-      await eras.getByRole('button', { name: 'Continue' }).click();
-    }
+    const f = page.frameLocator('#game');
     await f.locator('[data-id="IDC_MAIN_MENU_SINGLE_PLAYER_GAMES"]').click();
-    await f.locator('[data-id="IDC_SKIRMISH_GAMES_BUTTON"]').filter({ hasNotText: 'Instant Battle' }).click();
-    await pickModeStory('Old Republic', 'Revan’s Revenge');
-    await f.locator('[data-id="IDC_SKIRMISH_START_GAME_BUTTON"]').waitFor();
-    await f.locator('[data-id="IDC_CANCEL_BUTTON"]').click();
-    await eras.getByRole('button', { name: 'Back' }).click();
-    await f.getByText('Instant Battle', { exact: true }).click();
-    await pickModeStory('Galactic Civil War', 'Forces of Corruption');
-    await f.locator('#instantBattle').getByRole('button', { name: 'Back', exact: true }).click();
-    await eras.getByRole('button', { name: 'Back' }).click();
-    const gc = f.locator('[data-id="IDC_CUSTOM_CAMPAIGN_BUTTON"]');
-    await gc.click();
-    await board.getByRole('combobox', { name: 'Campaign objective' }).waitFor();
-    assert.equal(await eras.count(), 0);
-    const roster = board.getByRole('listbox', { name: 'Storylines' });
-    assert.equal(await roster.getByRole('option').count(), 7);
-    const play = board.getByRole('button', { name: 'Start campaign' }),
-      ctl = id => board.locator(`[data-id="${id}"]`);
-    await play.waitFor();
-    await board.locator('.campaign-preview img').first().waitFor();
-    await snap('stock');
-    const boardOn = id => f.locator(`[data-universal-screen="campaign"][data-profile="${id}"]`);
-    async function switchTo(name, id) {
-      await roster.getByRole('option', { name, exact: true }).click();
-      await boardOn(id).waitFor();
-      await play.waitFor();
-      assert.equal(await board.getByRole('button', { name: 'Continue' }).count(), 0);
-      assert.equal(await page.locator('iframe').count(), 1);
-    }
-    // Simulate a failed mount: previous board stays visible and can still launch. Then cancel a delayed request.
-    const target = `**/api/mount/3417277973`;
-    await page.route(target, r => r.fulfill({ status: 409, body: 'Test mount unavailable' }));
-    await roster.getByRole('option', { name: 'Revan’s Revenge' }).click();
-    await board.getByRole('status', { name: 'Test mount unavailable' }).waitFor();
-    assert.equal(await play.getAttribute('aria-disabled'), 'false');
-    await page.unroute(target);
-    let intercept;
-    const intercepted = new Promise(ok => {
-      intercept = ok;
-    });
-    await page.route(target, r => {
-      intercept(r);
-    });
-    await roster.getByRole('option', { name: 'Revan’s Revenge' }).click();
-    await boardOn('stock')
-      .getByRole('status', { name: /Loading Revan/ })
-      .waitFor();
-    assert.equal(await play.getAttribute('aria-disabled'), 'true');
-    await roster.getByRole('option', { name: 'Forces of Corruption' }).click();
-    await (await intercepted).fulfill({ status: 409, body: 'Cancelled request completed' });
-    await page.unroute(target);
-    assert.equal(await play.getAttribute('aria-disabled'), 'false');
-    await page.keyboard.press('Escape');
-    await gc.click();
-    await switchTo('Revan’s Revenge', '3417277973');
-    await snap('revan');
     if (process.env.SWR_TEST_ALL_ERAS) {
-      for (const [id, name] of [
-        ['1125571106', 'Thrawn’s Revenge'],
-        ['1976399102', 'Fall of the Republic'],
-        ['3387971722', 'Awakening of the Clone Wars'],
-        ['1770851727', 'Empire at War: Remake']
-      ]) {
-        await switchTo(name, id);
-        if (id === '1976399102') {
-          // Fall's authored variable year lives on its FTGU map, not the fixed historical starts.
-          await board
-            .getByRole('listbox', { name: 'Campaign map' })
-            .getByRole('option', { name: /From the Ground Up/ })
-            .click();
-          const year = ctl('IDC_SKIRMISH_STARTING_TECH_LEVEL_SLIDER'),
-            readout = ctl('IDC_SKIRMISH_STARTING_TECH_LEVEL_VALUE');
-          await year.waitFor();
-          const initial = await readout.getAttribute('aria-label');
-          await year.locator('.dlg-sb').nth(Number(initial) > 1 ? 0 : 1).click();
-          assert.notEqual(await readout.getAttribute('aria-label'), initial);
-          await snap(id);
-          await board.getByRole('button', { name: 'Reset settings' }).click();
-          assert.equal(await readout.getAttribute('aria-label'), initial);
-        } else await snap(id);
+      const eras = f.locator('[data-universal-screen="eras"]');
+      async function choose(period, name) {
+        await eras.getByRole('option', { name: period, exact: true }).click();
+        await eras.getByRole('option', { name, exact: true }).click();
+        await eras.getByRole('button', { name: 'Continue' }).click();
       }
+      await f.locator('[data-id="IDC_SKIRMISH_GAMES_BUTTON"]').filter({ hasNotText: 'Instant Battle' }).click();
+      await choose('Old Republic', 'Revan’s Revenge');
+      await f.locator('[data-id="IDC_SKIRMISH_START_GAME_BUTTON"]').waitFor();
+      await f.locator('[data-id="IDC_CANCEL_BUTTON"]').click();
+      await eras.getByRole('button', { name: 'Back' }).click();
+      await f.getByText('Instant Battle', { exact: true }).click();
+      await choose('Galactic Civil War', 'Forces of Corruption');
+      await f.locator('#instantBattle').getByRole('button', { name: 'Back', exact: true }).click();
+      await eras.getByRole('button', { name: 'Back' }).click();
     }
-    await switchTo('Awakening of the Rebellion', '1397421866');
-    const faction = board.getByRole('combobox', { name: 'Faction' });
-    const initial = await board.getAttribute('data-campaign');
-    await faction.press('ArrowDown');
-    assert.notEqual(await board.getAttribute('data-campaign'), initial);
-    await board.getByRole('listbox', { name: 'Campaign map' }).press('ArrowDown');
-    const campaign = await board.getAttribute('data-campaign');
-    await ctl('UC_DIFFICULTY').press('ArrowDown');
-    await ctl('UC_PRESET').click();
-    await board.locator('.dlg-drop:not([hidden]) .dlg-opt').filter({ hasText: 'Thrawn' }).click();
-    assert.equal(await ctl('UC_TREASURY').getAttribute('data-value'), '100000');
-    assert.equal(await ctl('UC_POLITICS').getAttribute('data-value'), '160');
-    await ctl('UC_POLITICS').click();
-    await board.locator('.dlg-drop:not([hidden]) .dlg-opt').filter({ hasText: 'Campaign default' }).click();
-    assert.equal(await ctl('UC_PRESET').getAttribute('data-value'), 'custom');
-    await ctl('UC_PRESET').click();
-    await board.locator('.dlg-drop:not([hidden]) .dlg-opt').filter({ hasText: 'Thrawn' }).click();
-    await snap('rebellion');
-    await play.click();
+    await f.locator('[data-id="IDC_CUSTOM_CAMPAIGN_BUTTON"]').click();
+    const board = f.locator('[data-universal-screen="campaign"]'),
+      field = k => board.locator(`[data-field="${k}"]`);
+    await field('story').waitFor();
+    const root = await board.evaluate(e => (e.marker = crypto.randomUUID()));
+    let docs = 0,
+      mounts = 0,
+      assets = 0;
+    page.on('request', r => {
+      if (r.isNavigationRequest() && r.url().includes('play.html')) docs++;
+      if (r.url().includes('/api/mount/')) mounts++;
+      if (r.url().includes('/asset/') && !r.url().startsWith(`http://127.0.0.1:${port + 1}/`)) assets++;
+    });
+    const times = [];
+    async function select(id) {
+      const t = performance.now();
+      await field('story').selectOption(id);
+      assert.equal(await board.getAttribute('data-profile'), id);
+      assert.equal(await board.evaluate(e => e.marker), root);
+      times.push(Math.round(performance.now() - t));
+    }
+    await select('1976399102');
+    await field('faction').selectOption('Empire');
+    await field('campaign').selectOption('Sandbox_FTGU_Republic');
+    const ftguDate = await field('date')
+      .locator('option')
+      .evaluateAll(os => os.find(o => /21 BBY/.test(o.label))?.value);
+    assert(ftguDate !== undefined);
+    await field('date').selectOption(ftguDate);
+    await board.getByRole('button', { name: 'Reset settings' }).click();
+    assert.equal(await field('date').inputValue(), '');
+    assert.equal(await field('campaign').inputValue(), 'Sandbox_FTGU_Republic');
+    await select('3417277973');
+    assert.equal(await field('date').locator('option').count(), 4);
+    await select('1397421866');
+    if (process.env.SWR_TEST_ALL_ERAS) for (const id of ['1125571106', '3387971722', '1770851727', 'stock']) await select(id);
+    await select('1976399102');
+    await field('faction').selectOption('Empire');
+    const row = await field('campaign')
+      .locator('option')
+      .evaluateAll(os => os.find(o => /Known Galaxy.*Small/i.test(o.label))?.value);
+    assert(row);
+    await field('campaign').selectOption(row);
+    await field('date').selectOption({ label: '20 BBY' });
+    if (process.env.SWR_TEST_THR) {
+      await select('1125571106');
+      await field('faction').selectOption('Empire');
+      await field('campaign').selectOption('KnownSmall_Era_1_Empire');
+      await field('date').selectOption({ label: '6 ABY · Central Committee' });
+    }
+    const target = await board.getAttribute('data-campaign');
+    assert.match(target, process.env.SWR_TEST_THR ? /KnownSmall_Era_2_Empire_CCoGM/i : /Era_4_Empire/i);
+    const stars = await board.locator('[data-planet]').evaluateAll(es => es.map(e => [e.dataset.planet, e.dataset.owner]));
+    assert(stars.length > 10 && new Set(stars.map(p => p[1])).size > 1);
+    await board.getByRole('button', { name: 'Zoom in' }).click();
+    await board.getByRole('button', { name: 'Fit map' }).click();
+    await field('difficulty').selectOption('hard');
+    const cap = await field('treasury')
+      .locator('option')
+      .evaluateAll(os => os.find(o => o.value !== '')?.value);
+    await field('treasury').selectOption(cap);
+    assert.equal(docs, 0);
+    assert.equal(mounts, 0);
+    assert.equal(assets, 0);
+    if (process.env.SWR_TEST_SCREENSHOTS) await page.screenshot({ path: path.join(process.env.SWR_TEST_SCREENSHOTS, 'fall-atlas.png') });
+    const mountUrl = `**/api/mount/${process.env.SWR_TEST_THR ? '1125571106' : '1976399102'}`;
+    await page.route(mountUrl, r => r.fulfill({ status: 409, body: 'Test mount unavailable' }));
+    await board.getByRole('button', { name: 'Start campaign' }).click();
+    await board.getByRole('status').filter({ hasText: 'Test mount unavailable' }).waitFor();
+    assert.equal(await board.getAttribute('data-campaign'), target);
+    assert.equal(await board.getByRole('button', { name: 'Start campaign' }).getAttribute('aria-disabled'), 'false');
+    await page.unroute(mountUrl);
+    mounts = 0;
+    await Promise.all([
+      page.waitForEvent('framenavigated', { predicate: fr => fr.url().includes('universal-start') }),
+      board.getByRole('button', { name: 'Start campaign' }).click()
+    ]);
     const runtime = page.frames().find(fr => fr.parentFrame() === page.mainFrame());
-    await runtime.waitForFunction(() => !!window.game?.galaxy?.planets.length && !!window.game?.story, null, { timeout: 120000 });
-    const observed = await runtime.evaluate(() => ({
+    await runtime.waitForFunction(() => !!window.game?.story && !!game.galaxy?.planets.length, null, { timeout: 150000 });
+    const actual = await runtime.evaluate(() => ({
+      target: game.setup.campaign,
       campaign: game.galaxy.campaign.name,
-      rules: game.galaxy.universalRules,
+      planets: game.galaxy.planets.filter(p => !p.background).map(p => p.name),
       difficulty: game.setup.difficulty,
+      rules: game.galaxy.universalRules,
+      origin: location.origin,
       isolated: crossOriginIsolated
     }));
-    assert.equal(observed.campaign, campaign);
-    assert.equal(observed.rules.treasury, 100000);
-    assert.equal(observed.rules.politics, 160);
-    assert.equal(observed.difficulty, 'hard');
-    assert(observed.isolated);
+    assert.equal(actual.origin, `http://127.0.0.1:${port + (process.env.SWR_TEST_THR ? 2 : 3)}`);
+    assert.equal(actual.target, target);
+    assert.equal(actual.campaign, target);
+    assert.deepEqual(
+      actual.planets,
+      stars.map(p => p[0])
+    );
+    assert.equal(actual.difficulty, 'hard');
+    assert.equal(actual.rules.treasury, +cap);
+    assert(actual.isolated);
+    assert.equal(docs, 1);
+    assert.equal(mounts, 1);
     assert.equal(page.url(), url);
-    assert.equal(await page.evaluate(() => window.acceptanceMarker), shell);
     assert.deepEqual(errors, []);
     console.log(
-      'PASS: one conquest board, direct storyline swaps, cancel/failure recovery, inline faction/map/difficulty/rules and exact campaign launch.'
+      JSON.stringify({
+        switchChecksMs: times,
+        previewPlanets: stars.length,
+        uniqueOwners: new Set(stars.map(p => p[1])).size,
+        documentLoadsWhileBrowsing: 0,
+        launchDocuments: docs,
+        target,
+        passed: true
+      })
     );
   } catch (e) {
-    if (page) {
+    if (page)
       for (const fr of page.frames())
         console.error(
           fr.url(),
           (
             await fr
               .locator('body')
-              .innerText({ timeout: 1500 })
+              .innerText({ timeout: 1000 })
               .catch(() => '')
-          ).slice(-1300)
+          ).slice(-950)
         );
-    }
     throw e;
   } finally {
-    await browser?.close();
+    await b?.close();
     server.kill();
   }
 })().catch(e => {

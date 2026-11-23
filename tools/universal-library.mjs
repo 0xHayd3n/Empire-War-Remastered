@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { createHash, randomUUID } from 'node:crypto';
 import { openGame } from './megfs.mjs';
 
@@ -17,6 +18,18 @@ export const libraryHome = () =>
   path.resolve(
     process.env.SWR_UNIVERSAL_LIBRARY || path.join(process.env.LOCALAPPDATA || os.homedir(), 'EaWBrowserUniversal', 'library-v1')
   );
+export function assertPrivateLibrary(home, library) {
+  const canonical = p => (fs.existsSync(p) ? fs.realpathSync(p) : path.join(canonical(path.dirname(p)), path.basename(p)));
+  for (const root of [
+    fileURLToPath(new URL('..', import.meta.url)),
+    library.game,
+    ...[...library.items.values()].map(m => m.folder)
+  ].filter(Boolean)) {
+    const rel = path.relative(canonical(root), canonical(path.resolve(home)));
+    if (!rel || (!path.isAbsolute(rel) && rel !== '..' && !rel.startsWith('..' + path.sep)))
+      throw Error('Choose a private library directory outside the checkout, game and Workshop installs.');
+  }
+}
 const json = f => JSON.parse(fs.readFileSync(f, 'utf8'));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const objectFile = (home, sha) => path.join(home, 'objects', sha.slice(0, 2), sha);

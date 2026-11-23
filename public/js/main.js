@@ -3488,12 +3488,18 @@ async function boot() {
     return;
   }
   if (topFrame()) watchForResume(() => window.game);
-  // Preparing another storyline only opens its setup board. Do not consume a staged save/start on its origin.
-  if (universal && params.get('universal-prepare') === '1' && params.get('universal-mode') === 'conquest') {
+  // A prepared start goes straight to its exact authored target, never through the board or a placeholder galaxy.
+  if (universal && params.has('universal-start')) {
+    const ticket = params.get('universal-start');
     history.replaceState(null, '', location.pathname);
-    hideSplash();
-    const ok = await universal.run('conquest');
-    window.parent.postMessage({kind: ok ? 'universal-board-ready' : 'universal-board-failed', id:profileId || 'stock'}, universalHost);
+    const r = await fetch('/api/universal/atlas/consume', { method: 'POST', body: JSON.stringify({ ticket }) });
+    if (!r.ok) {
+      hideSplash();
+      showMessage(await r.text());
+      universal.localModes();
+      return;
+    }
+    await launch(await r.json());
     return;
   }
   let pending = null;

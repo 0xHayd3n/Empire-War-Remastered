@@ -1,13 +1,8 @@
-import { db } from '../gamedata.js';
-import { loadCampaignData, startingGalaxy } from './galaxy.js';
-import { expeditionSites, revanId, ruleFields } from './universalrules.js';
-import { action, bindWindow, choices, enableAction } from './universaldialog.js';
-import { campaignBackdrop, drawCampaignPreview, bindCampaignSettings } from './campaignmenu.js';
-import { campaignDefaults, campaignLimits } from './campaignsettings.js';
+import { activeLanguage } from '../language.js';
+import { ruleFields } from './universalrules.js';
 import { ruleChoices, rulePresets } from './universalrulemenu.js';
 import { periods, chronology } from './universalmodes.js';
-import { openBoard, boardCombo } from './universalboard.js';
-const label = type => db.t(type?.str('Text_ID')) || type?.name || '';
+import { atlasBoard } from './universalboard.js';
 export function campaignChoices(campaigns, factionOf) {
   return [...campaigns.values()].filter(
     c =>
@@ -18,279 +13,256 @@ export function campaignChoices(campaigns, factionOf) {
       factionOf(c.str('Starting_Active_Player'))?.bool('Is_Playable')
   );
 }
-const get = async (url, fallback) => {
-  try {
-    const r = await fetch(url);
-    if (r.ok) return await r.json();
-  } catch {}
-  return fallback;
-};
+const cached = new Map(),
+  opt = (value, label) => ({ value, label });
+async function request(path, body) {
+  const r = await fetch('/api/universal/atlas' + path, body === undefined ? {} : { method: 'POST', body: JSON.stringify(body) });
+  if (!r.ok) throw Error(await r.text());
+  return r.json();
+}
 export async function openUniversalCampaign({ start, back, profileId = 'stock', host }) {
-  const [data, catalog, eras] = await Promise.all([
-    loadCampaignData(),
-    get('/api/universal/rules', { donors: [], unavailable: ['Rule catalog'] }),
-    get('/api/universal/eras', [])
-  ]);
-  const { dlg, advanced, years, legend, hasPreview } = await openBoard();
-  const current = profileId || 'stock',
-    era = eras.find(e => e.id === current) || {
-      id: current,
-      name: current === 'stock' ? 'Forces of Corruption' : 'Current storyline',
-      ready: true
-    };
-  if (!eras.length) eras.push(era);
-  const campaigns = campaignChoices(data.campaigns, n => db.faction(n)),
-    factions = [...new Set(campaigns.map(c => c.str('Starting_Active_Player')))].map(value => ({
-      value,
-      label: label(db.faction(value)) || value
-    }));
-  const defaults = Object.fromEntries(Object.entries(ruleFields).map(([k, r]) => [k, db.constants.num(r.tag, r.fallback)]));
-  const presets = [{ key: '', label: 'Campaign defaults', options: {} }, ...rulePresets(catalog.donors, defaults)];
-  let faction = factions[0]?.value,
-    campaign,
-    difficulty = 'medium',
-    options = {},
+  const origin = profileId || 'stock',
+    language = activeLanguage;
+  let data,
+    p,
+    row,
+    v,
+    faction,
+    difficulty,
+    options,
     settings,
-    sites = [],
-    pending = '',
-    closed = false,
-    canPrepare = false,
-    resetSettings;
-  const el = dlg.veil;
-  el.dataset.profile = current;
-  const send = m => {
-    if (window.parent !== window) window.parent.postMessage(m, host);
-  };
-  const status = t => dlg.setText('UC_STATUS', t);
-  const close = bindWindow(dlg, 'campaign', 'Universal Galactic Conquest', () => leave());
+    busy = false,
+    closed = false;
+  const ui = await atlasBoard(
+    () => {
+      if (!busy) {
+        finish();
+        back();
+      }
+    },
+    launch,
+    () => {
+      if (!busy && row) {
+        defaults();
+        v = row.variants[row.initial] || row.variants[0];
+        render();
+      }
+    }
+  );
+  ui.allow(false);
+  ui.status.textContent = 'Reading the local campaign atlas…';
   function finish() {
     closed = true;
-    removeEventListener('message', message);
-    close();
+    removeEventListener('message', error);
+    ui.close();
   }
-  function leave() {
-    if (pending) send({ kind: 'universal-board-cancel' });
-    finish();
-    back();
-  }
-  function play() {
-    if (closed || pending || !campaign) return;
-    finish();
-    start({
-      mode: 'galactic',
-      players: [],
-      teamFactions: [],
-      campaign: campaign.name,
-      faction: campaign.str('Starting_Active_Player'),
-      difficulty,
-      universalPath: 1,
-      universalOptions: { ...options },
-      ...(settings?.custom ? { campaignSettings: { ...settings } } : {})
-    });
-  }
-  function message(e) {
-    if (e.source !== window.parent || e.origin !== host) return;
-    if (e.data?.kind === 'universal-board-supported') canPrepare = true;
-    if (pending && ((e.data?.kind === 'universal-board-error' && e.data.id === pending) || e.data?.kind === 'universal-error')) {
-      pending = '';
-      roster();
-      status(e.data.error);
+  function error(e) {
+    if (e.origin === host && e.source === window.parent && e.data?.kind === 'universal-error') {
+      busy = false;
+      ui.panel.inert = false;
+      ui.allow(!!v);
+      ui.status.textContent = e.data.error;
     }
   }
-  addEventListener('message', message);
-  send({ kind: 'universal-board-probe' });
-  const captions = {
-    IDC_INTERNET_DIALOG_HEADER: 'Galactic Conquest',
-    UC_ERAS_TITLE: 'Storyline  /  Time period',
-    UC_MAP_TITLE: 'Campaign maps',
-    UC_FACTION_TITLE: 'Faction',
-    UC_BRIEF_TITLE: 'Campaign briefing',
-    UC_RULE_TITLE: 'Campaign settings',
-    UC_DIFFICULTY_TITLE: 'Difficulty',
-    UC_PRESET_TITLE: 'Economy and politics preset',
-    UC_TREASURY_TITLE: 'Treasury cap per owned planet',
-    UC_POLITICS_TITLE: 'Time per political-control point',
-    UC_PATH_TITLE: 'Campaign objective',
-    UC_ADV_TITLE: years ? 'Starting year' : 'Starting conditions',
-    UC_PERIOD: periods[current] + '  /  ' + era.name
-  };
-  for (const [id, t] of Object.entries(captions)) dlg.setText(id, t);
-  dlg.ctl('UC_STATUS').setAttribute('role', 'status');
-  const desc = dlg.ctl('IDC_CAMPAIGN_DESCRIPTION');
-  desc.classList.add('uc-briefing');
-  desc.tabIndex = 0;
-  if (!hasPreview) {
-    dlg.show('IDC_IMAGE', false);
-    if (!el.matches('dialog')) Object.assign(desc.style, { top: '100px', height: '500px' });
-  } else campaignBackdrop(dlg).catch(() => {});
-  if (years) {
-    dlg.setText('UC_YEAR_LEGEND', legend);
-    const l = dlg.ctl('UC_YEAR_LEGEND');
-    l.classList.add('uc-briefing');
-    l.tabIndex = 0;
+  addEventListener('message', error);
+  async function launch() {
+    if (!v || busy || closed) return;
+    busy = ui.panel.inert = true;
+    ui.allow(false);
+    ui.status.textContent = 'Opening ' + p.name + '…';
+    try {
+      const plan = await request('/start', { profile: p.id, language, row: row.id, target: v.id, difficulty, ...options, settings });
+      if (p.id === origin) {
+        const setup = await request('/consume', { ticket: plan.ticket });
+        finish();
+        start(setup);
+      } else if (window.parent !== window) {
+        window.parent.postMessage({ kind: 'universal-start', id: p.id, ticket: plan.ticket }, host);
+      } else throw Error('Open the Universal game window to launch another storyline.');
+    } catch (e) {
+      busy = ui.panel.inert = false;
+      ui.allow(true);
+      ui.status.textContent = e.message;
+    }
   }
-  action(dlg, 'IDC_PLAY_BUTTON', 'Start campaign', play);
-  action(dlg, 'IDC_CANCEL_BUTTON', 'Back', leave);
-  action(dlg, 'UC_DEFAULTS', 'Reset settings', () => {
-    if (pending) return;
-    options = {};
+  function defaults() {
     difficulty = 'medium';
-    resetSettings?.();
-    renderRules();
-  });
-  const combo = (id, name, rows, v, fn) =>
-    boardCombo(dlg, id, name, rows, v, value => {
-      dlg.ctl(id).dataset.value = String(value);
-      fn(value);
-    });
-  function availability() {
-    enableAction(dlg, 'IDC_PLAY_BUTTON', !!campaign && !pending);
-    el.dataset.loading = pending;
-    for (const node of el.querySelectorAll('[data-id]'))
-      if (
-        !['UC_STORIES', 'IDC_CANCEL_BUTTON'].includes(node.dataset.id) &&
-        !node.closest('[data-id="UC_STORIES"]') &&
-        node.matches('[role=listbox],[role=combobox],.dlg-slider,.dlg-btn,select,input')
-      )
-        node.inert = !!pending;
+    options = {};
+    settings = {};
   }
-  function inform() {
-    if (pending) return;
-    status(
-      !campaign
-        ? 'No listed playable campaigns in this storyline.'
-        : options.expedition
-          ? 'Expedition: capture ' + sites.join(', ') + ' for a one-time 3,000-credit grant.'
-          : catalog.unavailable.length
-            ? 'Unavailable rule sources: ' + catalog.unavailable.join(', ')
-            : 'Original campaign objectives and victory conditions.'
-    );
+  function pickProfile(id) {
+    p = data.profiles.find(p => p.id === id);
+    faction = p?.rows[0]?.faction;
+    defaults();
+    pickMap(p?.rows[0]);
   }
-  function roster() {
-    const rows = [...eras]
-      .sort((a, b) => chronology.indexOf(periods[a.id]) - chronology.indexOf(periods[b.id]))
-      .map(e => ({
-        ...e,
-        key: e.id,
-        label: e.name,
-        columns: [{ text: e.name }, { text: e.ready ? periods[e.id] : 'Not built', at: 0.64 }]
-      }));
-    choices(dlg, 'UC_STORIES', 'Storylines', rows, current, row => {
-      if (row.id === current) {
-        if (pending) send({ kind: 'universal-board-cancel' });
-        pending = '';
-        availability();
-        inform();
-        return;
-      }
-      if (!row.ready || window.parent === window) {
-        if (pending) send({ kind: 'universal-board-cancel' });
-        pending = '';
-        roster();
-        status(
-          row.ready
-            ? 'Open the Universal game window to change storylines.'
-            : row.name + ' is not built locally. Your selection has not changed.'
-        );
-        return;
-      }
-      pending = row.id;
-      availability();
-      status('Loading ' + row.name + '…');
-      send(canPrepare ? { kind: 'universal-board-prepare', id: row.id } : { kind: 'universal-select', id: row.id, mode: 'conquest' });
-    });
+  function pickMap(next) {
+    row = next;
+    v = row?.variants[row.initial] || row?.variants[0];
+    settings = {};
+    delete options.expedition;
+    render();
   }
-  const levels = ['easy', 'medium', 'hard'].map((value, i) => ({
-    value,
-    label: db.t(['TEXT_DIFFICULTY_EASY_NAME', 'TEXT_DIFFICULTY_NORMAL_NAME', 'TEXT_DIFFICULTY_HARD_NAME'][i]) || value
-  }));
-  function renderRules() {
-    combo('UC_DIFFICULTY', 'Difficulty', levels, difficulty, v => (difficulty = v));
-    const match = presets.find(p => Object.keys(defaults).every(k => p.options[k] === options[k]));
-    const prs = presets.map(({ key, label }) => ({ value: key, label }));
-    if (!match) prs.push({ value: 'custom', label: 'Custom mix' });
-    combo('UC_PRESET', 'Economy and politics preset', prs, match?.key ?? 'custom', v => {
-      const p = presets.find(p => p.key === v);
-      if (p) {
-        for (const k of Object.keys(defaults)) {
-          delete options[k];
-          if (k in p.options) options[k] = p.options[k];
+  function drawRules() {
+    const donors = data.profiles.filter(p => p.donor).map(p => ({ name: p.name, values: p.donor.values })),
+      ps = [{ key: '', label: 'Campaign defaults', options: {} }, ...rulePresets(donors, p.defaults)],
+      match = ps.find(e => Object.keys(ruleFields).every(k => e.options[k] === options[k]));
+    ui.field(
+      'preset',
+      'Economy & politics',
+      ps.map(e => opt(e.key, e.label)).concat(match ? [] : [opt('custom', 'Custom mix')]),
+      match?.key ?? 'custom',
+      value => {
+        const a = ps.find(e => e.key === value);
+        if (a) {
+          for (const k of Object.keys(ruleFields)) delete options[k];
+          Object.assign(options, a.options);
+          drawRules();
         }
-        renderRules();
       }
-    });
+    );
     for (const [k, r] of Object.entries(ruleFields)) {
-      const rows = [
-        { value: '', label: `Campaign default · ${defaults[k].toLocaleString()} ${r.unit}` },
-        ...ruleChoices(catalog.donors, k, defaults[k]).map(([v, n]) => ({
-          value: String(v),
-          label: `${v.toLocaleString()} ${r.unit} — ${n.join(' / ')}`
-        }))
-      ];
-      combo('UC_' + k.toUpperCase(), r.label, rows, options[k] ?? '', v => {
-        if (v === '') delete options[k];
-        else options[k] = Number(v);
-        renderRules();
+      ui.field(
+        k,
+        k === 'treasury' ? 'Treasury / planet' : 'Political control / point',
+        [
+          opt('', `Default · ${p.defaults[k].toLocaleString()} ${r.unit}`),
+          ...ruleChoices(donors, k, p.defaults[k]).map(([n, names]) => opt(n, `${n.toLocaleString()} ${r.unit} — ${names.join(' / ')}`))
+        ],
+        options[k] ?? '',
+        value => {
+          if (value === '') delete options[k];
+          else options[k] = +value;
+          drawRules();
+        }
+      );
+    }
+    const paths = [opt('', 'Authored objectives')];
+    if (p.id !== '3417277973' && v?.sites.length && data.profiles.some(p => p.donor?.hasSearch))
+      paths.push(opt('expedition', 'Star Map Expedition'));
+    ui.field('path', 'Objective', paths, options.expedition ? 'expedition' : '', value => {
+      if (value) options.expedition = true;
+      else delete options.expedition;
+      note();
+    });
+  }
+  function note() {
+    ui.status.textContent = options.expedition
+      ? `Expedition: capture ${v.sites.join(', ')} for a one-time 3,000-credit grant.`
+      : row?.scripted
+        ? 'Authored setup scenario. Its script chooses the final galaxy after launch.'
+        : 'Initial control from the campaign data. Story events can change ownership after launch.';
+  }
+  function render() {
+    const eras = [...data.eras].sort((a, b) => chronology.indexOf(periods[a.id]) - chronology.indexOf(periods[b.id]));
+    ui.el.dataset.profile = p.id;
+    ui.field(
+      'story',
+      'Storyline / time period',
+      eras.map(e => ({
+        ...opt(e.id, `${periods[e.id]} · ${e.name}${!e.ready ? ' (not built)' : data.unavailable.includes(e.id) ? ' (unavailable)' : ''}`),
+        disabled: !e.ready || data.unavailable.includes(e.id)
+      })),
+      p.id,
+      pickProfile
+    );
+    const fs = [...new Set(p.rows.map(r => r.faction))],
+      rows = p.rows.filter(r => r.faction === faction);
+    ui.field(
+      'faction',
+      'Faction',
+      fs.map(f => opt(f, p.facts[f].label)),
+      faction,
+      f => {
+        faction = f;
+        pickMap(p.rows.find(r => r.faction === f));
+      }
+    );
+    const labels = new Set(),
+      dup = new Set();
+    for (const r of rows) {
+      if (labels.has(r.label)) dup.add(r.label);
+      labels.add(r.label);
+    }
+    ui.field(
+      'campaign',
+      'Campaign',
+      rows.map(r => opt(r.id, dup.has(r.label) ? `${r.label} — ${r.id}` : r.label)),
+      row?.id,
+      id => pickMap(rows.find(r => r.id === id))
+    );
+    const techDate = row?.limits.custom && row.slots.includes('tech') && !!p.yearLegend;
+    if (techDate) {
+      const legends = new Map([...p.yearLegend.matchAll(/^(\d+)\.\s*-\s*(.+)$/gm)].map(m => [+m[1], m[2]])),
+        choices = [opt('', 'Campaign default')],
+        adj = p.facts[faction].adj;
+      for (let n = row.limits.minTech; n <= row.limits.maxTech && choices.length < 256; n++)
+        choices.push(opt(n - adj, legends.get(n) || String(n)));
+      ui.field('date', 'Starting date', choices, settings.tech ?? '', value => {
+        if (value === '') delete settings.tech;
+        else settings.tech = +value;
+      });
+    } else
+      ui.field('date', 'Starting date', row?.variants.map(v => opt(v.id, v.date || 'Authored start')) || [], v?.id, id => {
+        v = row.variants.find(v => v.id === id);
+        delete options.expedition;
+        render();
+      });
+    ui.field(
+      'difficulty',
+      'Difficulty',
+      ['easy', 'medium', 'hard'].map((n, i) => opt(n, p.levels[i] || n)),
+      difficulty,
+      n => (difficulty = n)
+    );
+    drawRules();
+    for (const [k, title] of Object.entries({
+      credits: 'Starting credits',
+      tech: 'Starting tech',
+      maxTech: 'Maximum tech',
+      autoResolve: 'Auto-resolve'
+    })) {
+      if (!row?.limits.custom || !row.slots.includes(k) || (techDate && k === 'tech')) {
+        ui.hide(k);
+        continue;
+      }
+      const l = row.limits,
+        adj = p.facts[faction].adj;
+      let values = [];
+      if (k === 'autoResolve') values = [opt(0, 'Always'), opt(2, 'Ask')];
+      else if (k === 'credits') {
+        for (let n = l.minCredits; n <= l.maxCredits && values.length < 1000; n += 1000) values.push(opt(n, n.toLocaleString()));
+      } else for (let n = l.minTech; n <= l.maxTech && values.length < 256; n++) values.push(opt(n - adj, String(n)));
+      ui.field(k, title, [opt('', 'Campaign default'), ...values], settings[k] ?? '', s => {
+        if (s === '') delete settings[k];
+        else settings[k] = +s;
       });
     }
-    const paths = [{ value: 'authored', label: 'Authored objectives' }];
-    if (sites.length) paths.push({ value: 'expedition', label: 'Star Map Expedition' });
-    combo('UC_PATH', 'Campaign objective', paths, options.expedition ? 'expedition' : 'authored', v => {
-      if (v === 'expedition') options.expedition = true;
-      else delete options.expedition;
-      inform();
-    });
-    inform();
+    ui.allow(!!v);
+    ui.el.dataset.campaign = v?.id || '';
+    ui.title.textContent = (row?.label || p.name) + (v?.date ? '  /  ' + v.date : '');
+    ui.summary.textContent =
+      (row?.description || (row ? '' : 'No listed campaigns in this storyline.')).replace(/\\n/g, '\n') +
+      (techDate ? '\n' + p.yearLegend : '');
+    if (v) ui.map.show(p, v);
+    else ui.map.clear();
+    note();
   }
-  function inlineSettings() {
-    const custom = !!advanced.length && !!campaign && campaignLimits(campaign).custom;
-    for (const [id, name] of advanced) {
-      for (const key of [id, id + '_LABEL']) dlg.show(key, custom);
-      if (id.endsWith('_SLIDER')) dlg.show(id.replace('_SLIDER', '_VALUE'), custom);
-      dlg.setText(id + '_LABEL', years ? 'Starting year selector' : name);
-    }
-    dlg.show('UC_YEAR_LEGEND', custom && years);
-    dlg.show('UC_FIXED', !custom);
-    dlg.setText('UC_FIXED', 'Starting conditions are set by this campaign.');
-    settings = custom ? campaignDefaults(campaign, faction) : null;
-    resetSettings = settings ? bindCampaignSettings(dlg, settings, campaign, faction) : null;
-  }
-  function refreshMaps() {
-    const maps = campaigns
-      .filter(c => c.str('Starting_Active_Player') === faction)
-      .sort((a, b) => a.num('Sort_Order') - b.num('Sort_Order') || label(a).localeCompare(label(b)));
-    const counts = new Map();
-    for (const c of maps) counts.set(label(c), (counts.get(label(c)) || 0) + 1);
-    const rows = maps.map(c => ({ key: c.name, c, label: counts.get(label(c)) > 1 ? `${label(c)} — ${c.name}` : label(c) }));
-    const pick = r => {
-      if (pending || (r && campaign === r.c)) return;
-      campaign = r?.c;
-      el.dataset.campaign = campaign?.name || '';
-      el.dataset.faction = faction || '';
-      dlg.setText(
-        'IDC_CAMPAIGN_DESCRIPTION',
-        campaign ? label(campaign) + '\n\n' + (db.t(campaign.str('Description_Text')) || '') : 'No listed playable campaign.'
+  try {
+    if (!cached.has(language))
+      cached.set(
+        language,
+        request('?language=' + language).catch(e => {
+          cached.delete(language);
+          throw e;
+        })
       );
-      desc.scrollTop = 0;
-      if (hasPreview) drawCampaignPreview(dlg, campaign).catch(() => {});
-      delete options.expedition;
-      sites =
-        campaign && current !== revanId && catalog.donors.some(d => d.id === revanId && d.hasSearch)
-          ? expeditionSites(startingGalaxy(data, campaign), db.faction(faction)?.list('Allies')).map(n => label(db.type(n)) || n)
-          : [];
-      inlineSettings();
-      renderRules();
-      availability();
-    };
-    choices(dlg, 'IDC_STAGING_MAP_LIST', 'Campaign map', rows, rows[0]?.key, pick);
-    if (!rows.length) pick(null);
+    data = await cached.get(language);
+    if (closed) return true;
+    pickProfile(data.profiles.some(p => p.id === origin) ? origin : data.profiles[0].id);
+    ui.focus();
+  } catch (e) {
+    if (!closed) ui.status.textContent = 'Campaign atlas unavailable. Restart Universal from this checkout and reopen setup. ' + e.message;
   }
-  combo('IDC_FACTION_COMBO', 'Faction', factions, faction, v => {
-    faction = v;
-    refreshMaps();
-  });
-  refreshMaps();
-  roster();
-  dlg.ctl('UC_STORIES').focus();
   return true;
 }

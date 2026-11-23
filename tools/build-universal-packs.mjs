@@ -1,7 +1,4 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { buildPack, libraryHome, primaries } from './universal-library.mjs';
+import { assertPrivateLibrary, buildPack, libraryHome, primaries } from './universal-library.mjs';
 import { readLibrary } from './workshop-library.mjs';
 const args = process.argv.slice(2),
   materialize = args.includes('--materialize'),
@@ -10,16 +7,7 @@ if (ids.some(id => !primaries.has(id))) throw new Error('Expected a supported pr
 const lib = readLibrary(),
   home = libraryHome(),
   unique = new Map();
-function canonical(p) {
-  return fs.existsSync(p) ? fs.realpathSync(p) : path.join(canonical(path.dirname(p)), path.basename(p));
-}
-for (const root of [fileURLToPath(new URL('..', import.meta.url)), lib.game, ...[...lib.items.values()].map(m => m.folder)].filter(
-  Boolean
-)) {
-  const rel = path.relative(canonical(root), canonical(home));
-  if (rel === '' || (!path.isAbsolute(rel) && rel !== '..' && !rel.startsWith('..' + path.sep)))
-    throw new Error('Choose a private library directory outside the checkout, game and Workshop installs.');
-}
+assertPrivateLibrary(home, lib);
 let count = 0,
   bytes = 0;
 for (const id of ids.length ? new Set(ids) : primaries.keys()) {

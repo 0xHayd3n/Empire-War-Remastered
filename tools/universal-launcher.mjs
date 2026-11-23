@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import { execFile } from 'node:child_process';
 import path from 'node:path';
-import { campaignRulesCatalog } from './universal-rule-catalog.mjs';
+import { atlasStore } from './universal-atlas.mjs';
 import { readLibrary } from './workshop-library.mjs';
 import { libraryHome, listPacks, loadPack, primaries } from './universal-library.mjs';
 
@@ -18,7 +18,7 @@ export async function serveUniversal(port, openBrowser, startGame, { home = libr
     { id: 'stock', name: 'Forces of Corruption', ready: true },
     ...listPacks(home).map(e => ({ ...e, ready: e.ready && !library.ambiguous?.has(e.id) }))
   ];
-  let catalog;
+  const atlas = atlasStore({ home, library, eras });
   // A mount is immutable within this run. Opening another era never remounts or disconnects an existing game/tab.
   async function mount(id) {
     if (!mounts.has(id)) {
@@ -32,7 +32,8 @@ export async function serveUniversal(port, openBrowser, startGame, { home = libr
           library: origin,
           pack,
           eras,
-          campaignRules: () => (catalog ||= campaignRulesCatalog(home, library))
+          atlas,
+          profileId: id
         })
       );
     }
@@ -81,6 +82,7 @@ export async function serveUniversal(port, openBrowser, startGame, { home = libr
   });
   await new Promise((ok, no) => server.once('error', no).listen(port, '127.0.0.1', ok));
   console.log(`Universal game: ${origin}/`);
+  if (library.game) atlas.get(0).catch(e => console.warn('Campaign catalog:', e.message));
   if (openBrowser && process.platform === 'win32')
     execFile(
       path.join(process.env.SystemRoot, 'System32', 'rundll32.exe'),

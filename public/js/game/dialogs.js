@@ -30,7 +30,7 @@ function args(s) {
 }
 const unq = s => (s || '').replace(/^"|"$/g, '');
 
-function parseRC(text) {
+export function parseRC(text) {
   const dialogs = new Map();
   const lines = text.replace(/\r/g, '').split('\n');
   for (let i = 0; i < lines.length; i++) {

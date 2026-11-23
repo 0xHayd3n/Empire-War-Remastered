@@ -103,7 +103,10 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
   function choose(next, selection) {
     const s = selection.choice;
     if (next.p !== p) defaults();
-    if (s.row !== row) settings = {};
+    if (s.row !== row) {
+      settings = {};
+      if (!s.row.eraProgression || !row?.eraProgression) delete options.progressive;
+    }
     if (s.variant !== v) delete options.expedition;
     family = next;
     p = next.p;
@@ -224,6 +227,17 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
       difficulty,
       n => (difficulty = n)
     );
+    if (row.eraProgression)
+      ui.field(
+        'progression',
+        'Era progression',
+        [opt('', 'Static era'), opt('on', 'Progressive era')],
+        options.progressive ? 'on' : '',
+        s => {
+          options.progressive = s === 'on';
+        }
+      );
+    else ui.hide('progression');
     drawRules();
     for (const [k, title] of Object.entries({
       credits: 'Starting credits',

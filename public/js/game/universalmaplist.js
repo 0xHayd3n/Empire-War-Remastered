@@ -13,7 +13,7 @@ function startsFor(p, r, prefix) {
   if (!techCalendar(p, r))
     return r.variants.map(v => {
       const label = v.date || prefix || 'Authored start';
-      return { row: r, variant: v, label, year: dateParts(label), initial: v === first };
+      return { row: r, variant: v, label, year: dateParts(label), ftgu: r.eraProgression, initial: v === first };
     });
   const legend = new Map([...p.yearLegend.matchAll(/^(\d+)\.\s*-\s*(.+)$/gm)].map(m => [+m[1], m[2].trim()])),
     adj = p.facts[r.faction].adj,
@@ -23,7 +23,9 @@ function startsFor(p, r, prefix) {
       initial = tech === r.base.tech,
       description = legend.get(n) || String(n),
       year = dateParts(description);
-    starts.push({ row: r, variant: first, label: year || description, year, initial, tech: initial ? undefined : tech });
+    const ftgu = n === 1 && r.prewarFtgu,
+      label = ftgu ? 'FTGU · pre-22 BBY' : r.scripted && /FTGU-only/i.test(description) ? `Starting tech ${n}` : year || description;
+    starts.push({ row: r, variant: first, label, year, ftgu, initial, tech: initial ? undefined : tech });
   }
   if (!starts.some(s => s.initial)) starts.unshift({ row: r, variant: first, label: 'Campaign default', year: '', initial: true });
   return starts;
@@ -49,7 +51,7 @@ export function mapFamilies(p) {
         for (const s of choices) {
           let key = s.label;
           if (choices.filter(c => c.label === s.label).length > 1) key += ' — ' + (s.tech ?? s.variant.id);
-          if (!starts.has(key)) starts.set(key, { label: key, year: s.year, choices: [] });
+          if (!starts.has(key)) starts.set(key, { label: key, year: s.year, ftgu: s.ftgu, choices: [] });
           starts.get(key).choices.push(s);
         }
       }

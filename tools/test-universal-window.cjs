@@ -65,7 +65,7 @@ const assert = require('node:assert/strict'),
         const { width, height } = await year.boundingBox();
         const x = 8 + (width - 16) * (await tick.evaluate(e => parseFloat(e.style.left) / 100));
         await year.click({ position: { x, y: height / 2 } });
-        assert.equal(await year.getAttribute('aria-valuetext'), label);
+        assert.equal(await year.getAttribute('aria-valuetext'), label === '4 ABY' ? '4 ABY · FTGU available' : label);
       };
     await current.waitFor();
     // Escape leaves setup without a visible Back control.
@@ -92,6 +92,17 @@ const assert = require('node:assert/strict'),
           ['--crest-left', '--crest-right'].map(k => getComputedStyle(e).getPropertyValue(k).trim())
         );
         palettes.add(palette.join('/'));
+        const sides = await card.evaluate(e => ['--era-left', '--era-right'].map(k => getComputedStyle(e).getPropertyValue(k).trim()));
+        const shot = await decodePNG(Uint8Array.from(await card.screenshot()).buffer);
+        for (const [i, x] of [5, shot.width - 6].entries()) {
+          const rgb = shot.data.subarray(4 * (6 * shot.width + x), 4 * (6 * shot.width + x) + 3);
+          const distance = hex =>
+            hex
+              .slice(1)
+              .match(/../g)
+              .reduce((sum, v, j) => sum + Math.abs(rgb[j] - parseInt(v, 16)), 0);
+          assert(distance(sides[i]) + 35 < distance(sides[1 - i]), `Wrong background side on ${await card.textContent()}`);
+        }
         const { width: w, height: h, data } = await decodePNG(Uint8Array.from(await crest.screenshot()).buffer);
         for (const [side, color] of palette.entries()) {
           assert.match(color, /^#[a-f\d]{6}$/i);
@@ -182,6 +193,14 @@ const assert = require('node:assert/strict'),
     assert.equal(await year.getAttribute('aria-valuetext'), '20 BBY');
     await fall.getByRole('button', { name: /From the Ground Up/ }).click();
     assert.equal(await year.getAttribute('aria-valuetext'), '20 BBY');
+    await year.focus();
+    await page.keyboard.press('Home');
+    assert.equal(await year.getAttribute('aria-valuetext'), 'FTGU · pre-22 BBY');
+    assert.equal(await fall.locator('.uc-map-choice').count(), 1);
+    assert.equal(await dates.getByRole('button', { name: /FTGU/i }).count(), 0);
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await year.getAttribute('aria-valuetext'), '22 BBY');
+    await selectPeriod('FTGU · pre-22 BBY');
     await selectPeriod('21 BBY');
     assert.equal(await board.getAttribute('data-campaign'), 'Sandbox_FTGU_Republic');
     await board.getByRole('button', { name: 'Reset settings' }).click();
@@ -200,6 +219,7 @@ const assert = require('node:assert/strict'),
     assert.equal(await year.getAttribute('aria-valuetext'), '20 BBY');
     await select('3417277973');
     assert.equal(await dates.getByRole('button').count(), 1);
+    assert.equal(await dates.locator('[data-year="3976 BBY"]').count(), 0);
     const stops = await dates.locator('[data-year]').evaluateAll(es => es.map(e => parseFloat(e.style.left) / 100));
     assert(Math.abs(stops[1] - 2 / 7) < 1e-5);
     assert(Math.abs(stops[2] - 5 / 7) < 1e-5);
@@ -209,6 +229,12 @@ const assert = require('node:assert/strict'),
       .getByRole('button', { name: /Mandalorian Onslaught/ })
       .click();
     assert.match(await current.textContent(), /3964 - 3962 BBY/);
+    assert.equal(
+      await group('3417277973')
+        .getByRole('button', { name: /From the Ground Up/ })
+        .count(),
+      1
+    );
     await year.focus();
     await page.keyboard.press('ArrowRight');
     assert.equal(await year.getAttribute('aria-valuetext'), '3964 BBY');
@@ -241,8 +267,39 @@ const assert = require('node:assert/strict'),
       await regimes.getByRole('button', { name: '6 ABY · Central Committee', exact: true }).click();
       assert.equal(await field('faction').getByRole('radio').count(), 1);
     }
+    const opening = process.env.SWR_TEST_FTGU;
+    if (opening) {
+      if (process.env.SWR_TEST_THR) {
+        await selectPeriod('4 ABY');
+        const label = dates.locator('[data-year="4 ABY"] small');
+        assert.match(await label.innerText(), /FTGU/);
+        assert(await label.evaluate(e => e.getBoundingClientRect().height <= parseFloat(getComputedStyle(e).lineHeight) + 1));
+        assert.match(await group('1125571106').locator('.uc-map-choice').first().innerText(), /From the Ground Up/);
+        await group('1125571106')
+          .getByRole('button', { name: /From the Ground Up/ })
+          .click();
+        await radio('faction', 'Empire').check();
+        await field('progression').selectOption('on');
+        await board.getByRole('button', { name: 'Reset settings' }).click();
+        assert.equal(await field('progression').inputValue(), '');
+        await field('progression').selectOption('on');
+      } else {
+        await selectPeriod('FTGU · pre-22 BBY');
+        await fall.getByRole('button', { name: /From the Ground Up/ }).click();
+        await radio('faction', 'Rebel').check();
+      }
+    }
     const target = await board.getAttribute('data-campaign');
-    assert.match(target, process.env.SWR_TEST_THR ? /KnownSmall_Era_2_Empire_CCoGM/i : /Era_4_Empire/i);
+    assert.match(
+      target,
+      process.env.SWR_TEST_THR
+        ? opening
+          ? /^FTGU_Era_1_Empire$/i
+          : /KnownSmall_Era_2_Empire_CCoGM/i
+        : opening
+          ? /^Sandbox_FTGU_CIS$/i
+          : /Era_4_Empire/i
+    );
     const stars = await board.locator('[data-planet]').evaluateAll(es => es.map(e => [e.dataset.planet, e.dataset.owner]));
     assert(stars.length > 10 && new Set(stars.map(p => p[1])).size > 1);
     assert.equal(await board.getByRole('button', { name: /Zoom|Fit|Configure|Back/i }).count(), 0);
@@ -317,6 +374,7 @@ const assert = require('node:assert/strict'),
       campaign: game.galaxy.campaign.name,
       planets: game.galaxy.planets.filter(p => !p.background).map(p => p.name),
       difficulty: game.setup.difficulty,
+      startingTech: game.setup.startingTechLevel ?? game.setup.campaignSettings?.tech,
       rules: game.galaxy.universalRules,
       origin: location.origin,
       isolated: crossOriginIsolated
@@ -324,6 +382,7 @@ const assert = require('node:assert/strict'),
     assert.equal(actual.origin, `http://127.0.0.1:${port + (process.env.SWR_TEST_THR ? 2 : 3)}`);
     assert.equal(actual.target, target);
     assert.equal(actual.campaign, target);
+    if (opening) assert.equal(actual.startingTech, process.env.SWR_TEST_THR ? 4 : 0);
     assert.deepEqual(
       actual.planets,
       stars.map(p => p[0])

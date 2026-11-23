@@ -62,6 +62,11 @@ export function launchPlan(atlas, q) {
     universalPath: 1,
     universalOptions: options
   };
+  if (q.progressive != null) {
+    if (typeof q.progressive !== 'boolean' || !r.eraProgression) throw Error('Era progression unavailable.');
+    // The native FTGU popup sends reward parameter 4 for progressive, and no override for static.
+    if (q.progressive) setup.startingTechLevel = 4;
+  }
   if (q.settings && Object.keys(q.settings).length) {
     if (!r.limits.custom || !r.slots.length) throw Error('Starting conditions are fixed.');
     const st = { ...r.base, custom: true },
@@ -96,7 +101,7 @@ export function atlasStore({ home, library, eras }) {
   async function one(id, lang) {
     stamp ??= stockStamp(library.game);
     const rev = id === 'stock' ? 'stock' : JSON.parse(fs.readFileSync(path.join(home, 'profiles', id + '.json'))).revision;
-    const filename = path.join(directory, `${id}-${lang}-${digest('galaxy-cards-2:' + stamp + ':' + rev)}.gz`);
+    const filename = path.join(directory, `${id}-${lang}-${digest('galaxy-ftgu-2:' + stamp + ':' + rev)}.gz`);
     try {
       return JSON.parse(gunzipSync(fs.readFileSync(filename)));
     } catch {}

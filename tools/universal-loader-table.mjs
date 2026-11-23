@@ -40,12 +40,16 @@ export function menuTable(source) {
 // in the authored availability table and resolve to a real single-player scenario in the mounted VFS.
 export function thrawnSelections(trans, availability) {
   const rows = [];
-  for (const map of [...trans.ProgressiveMaps, ...trans.RegionalMaps, ...trans.HistoricalMaps]) {
+  // The standard FTGU opener has one extra native choice (static or progressive). Custom_FTGU
+  // uses a different selector, including learner mode; leave it and later FTGU starts there.
+  const ftgu = trans.CustomMaps?.includes('FTGU') ? ['FTGU'] : [];
+  for (const map of [...trans.ProgressiveMaps, ...trans.RegionalMaps, ...trans.HistoricalMaps, ...ftgu]) {
     const historical = trans.HistoricalMaps.includes(map);
     for (const faction of trans.AllFactions) {
       if (faction === 'IMPERIAL_PROTEUS') continue; // separate subfaction chooser, not an ordinary start
       const targets = [];
       for (const era of historical ? ['Historical'] : trans.ProgressiveEras.slice(0, 7)) {
+        if (map === 'FTGU' && era !== '4ABY') continue;
         if (availability[map]?.[era]?.[faction] !== true) continue;
         const base = [map, historical ? '' : trans.Era_XML_Nums[era], faction].filter(Boolean).join('_'),
           date = historical ? '' : era.replace('ABY', ' ABY');

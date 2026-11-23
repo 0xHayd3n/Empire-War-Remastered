@@ -42,6 +42,7 @@ for (const bad of [
   { difficulty: '4' },
   { settings: { tech: 4 } },
   { treasury: 8899 },
+  { progressive: true },
   { expedition: true }
 ])
   assert.throws(() => launchPlan(atlas, { ...q, ...bad }));
@@ -66,6 +67,20 @@ assert.deepEqual(thrawnSelections(trans, { KnownSmall: t.map }), [
     ]
   }
 ]);
+const openings = {
+  ...trans,
+  CustomMaps: ['FTGU', 'Custom_FTGU'],
+  ProgressiveEras: ['4ABY', '6ABY'],
+  Era_XML_Nums: { '4ABY': 'Era_1', '6ABY': 'Era_2' }
+};
+assert.deepEqual(thrawnSelections(openings, { FTGU: { '4ABY': { EMPIRE: true, REBEL: false }, '6ABY': { EMPIRE: true } } }), [
+  { map: 'FTGU', targets: [['FTGU_Era_1_EMPIRE', '4 ABY']] }
+]);
+const staticAtlas = structuredClone(atlas);
+staticAtlas.profiles[0].rows[0].eraProgression = true;
+assert.equal(launchPlan(staticAtlas, q).setup.startingTechLevel, undefined);
+assert.equal(launchPlan(staticAtlas, { ...q, progressive: true }).setup.startingTechLevel, 4);
+assert.throws(() => launchPlan(staticAtlas, { ...q, progressive: 4 }));
 // Display families group faction-specific starts, but never supply the launch ID themselves.
 const row = (id, family, faction, dates, extra = {}) => ({
   id,
@@ -140,6 +155,18 @@ assert.deepEqual(
   yearStops(['4 ABY', '12 ABY', '11.5 ABY', '20 - 19 BBY', 'Pre-Clone Wars'].map(label => ({ label }))).map(s => s.at),
   [0, 7.5 / 8, 1]
 );
+const prewar = { label: 'FTGU · pre-22 BBY', ftgu: true };
+const withOpening = yearStops([...uneven.map(s => s.period), prewar]);
+assert.equal(withOpening[0].year, null);
+assert.equal(nearestStop(withOpening, 0).period, prewar);
+assert.equal(nearestStop(withOpening, 0.2).year, -3964);
+assert(Math.abs((withOpening[2].at - withOpening[1].at) / (1 - withOpening[1].at) - 2 / 7) < 1e-12);
+assert.deepEqual(
+  yearStops([prewar, { label: '22 BBY' }]).map(s => s.at),
+  [0, 1]
+);
+assert.equal(yearStops([{ label: 'Scenario starts' }]).length, 0);
+assert.equal(yearStops([{ label: '4 ABY', ftgu: true }])[0].year, 4);
 const fall = { ...profile, id: '1976399102' },
   awakening = { ...profile, id: '3387971722', rows: [row('script', '', 'Red', [['loader', 'Original in-game selector']])] },
   old = { ...profile, id: '3417277973', rows: [row('base-b', 'A', 'Blue', [['b22', '22 BBY']])] };

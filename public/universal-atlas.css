@@ -188,28 +188,32 @@ dialog.uc-atlas[open] {
   min-width: 0;
   padding: 5px 2px;
   color: #f2ede1;
-  border: 1px solid color-mix(in srgb, var(--era-tint) 64%, #969796);
+  border: 1px solid color-mix(in srgb, var(--era-left), var(--era-right));
   border-radius: 4px;
-  background: radial-gradient(ellipse at 50% 9%, color-mix(in srgb, var(--era-tint) 78%, #292d32), #14171d 95%);
+  background: linear-gradient(to top, #11151bd9, transparent 75%), linear-gradient(to right, var(--era-left), var(--era-right));
   font: 500 13px/1.12 var(--ui-font);
 }
 .uc-era-card[data-era='Old Republic'] {
-  --era-tint: #50345f;
+  --era-left: #235882;
+  --era-right: #862e41;
   --crest-left: #9bddff;
   --crest-right: #ff8997;
 }
 .uc-era-card[data-era='Clone Wars'] {
-  --era-tint: #254d76;
-  --crest-left: #f3e5c6;
+  --era-left: #856925;
+  --era-right: #205782;
+  --crest-left: #ffe39a;
   --crest-right: #78c3ff;
 }
 .uc-era-card[data-era='Galactic Civil War'] {
-  --era-tint: #63352c;
+  --era-left: #98452d;
+  --era-right: #4e5d6c;
   --crest-left: #ff9770;
   --crest-right: #d2dce5;
 }
 .uc-era-card[data-era='New Republic'] {
-  --era-tint: #1c564e;
+  --era-left: #896127;
+  --era-right: #314c60;
   --crest-left: #ffdb88;
   --crest-right: #9dbccd;
 }
@@ -321,6 +325,7 @@ dialog.uc-atlas[open] {
 .uc-year-tick small {
   position: absolute;
   top: 14px;
+  white-space: nowrap;
   left: 50%;
   transform: translateX(-50%);
   font: 12px/1 var(--ui-font);
@@ -363,7 +368,7 @@ dialog.uc-atlas[open] {
   background: #825e2c;
   box-shadow: 0 0 6px #e0b05780;
 }
-.uc-year-range[data-dated='false']::-webkit-slider-thumb {
+.uc-year-range[data-on-track='false']::-webkit-slider-thumb {
   background: transparent;
   border-style: dashed;
   border-color: #b6c0c0;

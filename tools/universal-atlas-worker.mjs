@@ -209,6 +209,9 @@ try {
     rows.push({
       id: c.name,
       family: c.str('Campaign_Set').trim().toUpperCase(),
+      ...(known && id === '1976399102' && plot === 'CONQUESTS/CLONEWARSFTGU/STORY_PLOTS_SANDBOX_FTGU_CONTAINER.XML'
+        ? { prewarFtgu: true }
+        : {}),
       label: label(c),
       description: db.t(c.str('Description_Text')),
       order: c.num('Sort_Order'),
@@ -229,6 +232,7 @@ try {
         rows.push({
           id: c.name,
           family,
+          ...(family === 'selector:FTGU' ? { eraProgression: true } : {}),
           label: label(c),
           description: db.t(c.str('Description_Text')),
           faction,
@@ -259,7 +263,7 @@ try {
           add(
             choices[0][0],
             choices.map(([c, date]) => variant(c, date)),
-            -100 + choices[0][0].num('Sort_Order'),
+            map === 'FTGU' ? -1000 : -100 + choices[0][0].num('Sort_Order'),
             'selector:' + map
           );
       }

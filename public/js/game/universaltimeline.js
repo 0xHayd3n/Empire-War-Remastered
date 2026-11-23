@@ -7,10 +7,11 @@ import { mapFamilies, mapStart, techCalendar } from './universalmaplist.js';
 const scenario = 'Scenario starts';
 export function periodOf(f, d) {
   if (d.year) return d.year;
-  if (techCalendar(f.p, d.choices[0].row) && d.label !== 'Campaign default') return d.label;
+  const row = d.choices[0].row;
+  if (techCalendar(f.p, row) && !row.scripted && d.label !== 'Campaign default') return d.label;
   return scenario;
 }
-const time = label => calendarYear(label) ?? Infinity;
+const time = p => calendarYear(p.label) ?? (p.ftgu ? -Infinity : Infinity);
 export function eraTimeline(data) {
   const profiles = new Map(data.profiles.map(p => [p.id, p]));
   return chronology.map(name => {
@@ -28,16 +29,18 @@ export function eraTimeline(data) {
         first ??= family;
         for (const date of family.dates) {
           const key = periodOf(family, date);
-          if (!by.has(key)) by.set(key, new Map());
-          const entries = by.get(key);
+          if (!by.has(key)) by.set(key, { label: key, maps: new Map(), ftgu: false });
+          const period = by.get(key),
+            entries = period.maps;
+          if (date.ftgu) period.ftgu = true;
           if (!entries.has(family)) entries.set(family, []);
           entries.get(family).push(date);
         }
       }
     }
-    const periods = [...by]
-      .map(([label, maps]) => ({ label, maps }))
-      .sort((a, b) => (a.label === scenario) - (b.label === scenario) || time(a.label) - time(b.label) || a.label.localeCompare(b.label));
+    const periods = [...by.values()].sort(
+      (a, b) => (a.label === scenario) - (b.label === scenario) || time(a) - time(b) || a.label.localeCompare(b.label)
+    );
     return { name, periods, missing, first };
   });
 }

@@ -10,14 +10,6 @@ export function periodOf(f, d) {
   if (techCalendar(f.p, d.choices[0].row) && d.label !== 'Campaign default') return d.label;
   return scenario;
 }
-function eraArt(name, profiles, logo) {
-  const badge = (id, f) => profiles.get(id)?.facts[f]?.emblem;
-  if (name === 'Old Republic') return [logo || badge('3417277973', 'Empire')].filter(Boolean);
-  if (name === 'Clone Wars') return ['/art/clone-phase-iii.svg'];
-  if (name === 'New Republic') return [badge('1125571106', 'Rebel')].filter(Boolean);
-  const id = ['stock', '1397421866', '1770851727'].find(id => badge(id, 'Rebel') && badge(id, 'Empire'));
-  return id ? [badge(id, 'Rebel'), badge(id, 'Empire')] : [];
-}
 const time = label => calendarYear(label) ?? Infinity;
 export function eraTimeline(data) {
   const profiles = new Map(data.profiles.map(p => [p.id, p]));
@@ -46,14 +38,7 @@ export function eraTimeline(data) {
     const periods = [...by]
       .map(([label, maps]) => ({ label, maps }))
       .sort((a, b) => (a.label === scenario) - (b.label === scenario) || time(a.label) - time(b.label) || a.label.localeCompare(b.label));
-    return {
-      name,
-      periods,
-      missing,
-      first,
-      art: eraArt(name, profiles, data.swtorLogo),
-      wordmark: name === 'Old Republic' && !!data.swtorLogo
-    };
+    return { name, periods, missing, first };
   });
 }
 // Only choose within the selected map and the filtered subset. Keep faction keys profile-local.

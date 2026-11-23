@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <!-- All the factions occupy the same disc. The narrow cut keeps the two silhouettes
+         distinct at HUD sizes; only the outer rim is uninterrupted. -->
+    <clipPath id="west"><path d="M0 0h49v100H0z"/></clipPath>
+    <clipPath id="east"><path d="M51 0h49v100H51z"/></clipPath>
+    <g id="rim" fill="none" stroke-width="4.8">
+      <path d="M50 3a47 47 0 0 0 0 94" stroke="var(--crest-left)"/>
+      <path d="M50 3a47 47 0 0 1 0 94" stroke="var(--crest-right)"/>
+    </g>
+
+    <path id="cog-spoke" d="M45 13h10v5h-2v20h-6V18h-2z"/>
+    <g id="imperial-cog">
+      <circle cx="50" cy="50" r="39" fill="none" stroke="currentColor" stroke-width="4.5"/>
+      <circle cx="50" cy="50" r="18"/>
+      <use href="#cog-spoke"/><use href="#cog-spoke" transform="rotate(60 50 50)"/>
+      <use href="#cog-spoke" transform="rotate(120 50 50)"/><use href="#cog-spoke" transform="rotate(180 50 50)"/>
+      <use href="#cog-spoke" transform="rotate(240 50 50)"/><use href="#cog-spoke" transform="rotate(300 50 50)"/>
+    </g>
+    <g id="republic-axis"><path d="M46 10h8v20h-8z M46 70h8v20h-8z"/></g>
+    <g id="republic-cog">
+      <circle cx="50" cy="50" r="38.5" fill="none" stroke="currentColor" stroke-width="5"/>
+      <circle cx="50" cy="50" r="23" fill="none" stroke="currentColor" stroke-width="8"/>
+      <use href="#republic-axis"/><use href="#republic-axis" transform="rotate(45 50 50)"/>
+      <use href="#republic-axis" transform="rotate(90 50 50)"/><use href="#republic-axis" transform="rotate(135 50 50)"/>
+    </g>
+    <g id="confederacy" stroke="currentColor" stroke-width="5" fill="none" stroke-linejoin="round">
+      <path d="M30 15h40l20 35-20 35H30L10 50z M43 38h14l7 12-7 12H43l-7-12z"/>
+      <path d="m57 38 13-23m-6 35h26M57 62l13 23m-27-23L30 85m6-35H10m33-12L30 15"/>
+    </g>
+    <path id="starbird" d="M50 9c4 9 9 14 15 18-9-1-13 5-12 16l2 15c1 5 7 5 12 1 11-7 12-23 3-40 15 10 22 23 21 37-1 21-19 34-41 36C28 90 10 77 9 56 8 42 15 29 30 19c-9 17-8 33 3 40 5 4 11 4 12-1l2-15c1-11-3-17-12-16 6-4 11-9 15-18z"/>
+    <path id="star" d="m50 8 1.6 3.3 3.6.5-2.6 2.6.6 3.6-3.2-1.7-3.2 1.7.6-3.6-2.6-2.6 3.6-.5z"/>
+    <g id="new-republic"><use href="#starbird" transform="translate(16 16) scale(.68)"/>
+      <use href="#star" transform="rotate(-18 50 50)"/><use href="#star" transform="rotate(-54 50 50)"/>
+      <use href="#star" transform="rotate(-90 50 50)"/><use href="#star" transform="rotate(-126 50 50)"/>
+      <use href="#star" transform="rotate(-162 50 50)"/>
+    </g>
+  </defs>
+
+  <!-- Contours follow the supplied Jedi/Sith split reference, including the cog end caps. -->
+  <symbol id="old-republic" viewBox="0 0 100 100"><use href="#rim"/>
+    <g transform="scale(.13587)">
+      <g fill="var(--crest-left)">
+        <path d="M272 79C139 159 158 267 230 322c25 19 37 31 37 46l1 94c-77 6-145-65-149-170-4-91 47-179 153-213z"/>
+        <path d="M103 224c-27 118 23 222 132 245 26 5 39 28 44 58-64 30-150-1-189-80-30-62-24-149 13-223z"/>
+        <path d="M324 159c-30 39-17 81 10 96 16 8 25 13 25 23v391c-60-1-116-19-156-52 22-3 44-17 61-36-78 51-122-12-174-100 37 40 72 69 109 69 28 1 44 0 58-4 36-9 45 48 56 54 12 5 33-93 32-186 0-66-1-96-23-130-13-20-28-27-42-27 4-40 17-67 44-98z"/>
+        <path d="m364 168-5 24h-38v2l29 9v2l-29 9v2h38l5 24h3v-72z"/>
+      </g>
+      <path fill="var(--crest-right)" d="M381 55l99 62-10 17-49-30-16 148 65 38 120-88-48-27 9-18 102 55-5 117-18-1v-58l-136 61v75l136 60v-57l18-1 4 117-101 54-9-17 48-28-120-88-66 38 17 148 49-29 10 17-99 62z"/>
+    </g>
+  </symbol>
+  <symbol id="clone-wars" viewBox="0 0 100 100"><use href="#rim"/>
+    <g clip-path="url(#west)" color="var(--crest-left)" fill="currentColor"><use href="#republic-cog"/></g>
+    <g clip-path="url(#east)" color="var(--crest-right)"><use href="#confederacy"/></g>
+  </symbol>
+  <symbol id="galactic-civil-war" viewBox="0 0 100 100"><use href="#rim"/>
+    <g clip-path="url(#west)" fill="var(--crest-left)"><use href="#starbird"/></g>
+    <g clip-path="url(#east)" color="var(--crest-right)" fill="currentColor"><use href="#imperial-cog"/></g>
+  </symbol>
+  <symbol id="new-republic-era" viewBox="0 0 100 100"><use href="#rim"/>
+    <g clip-path="url(#west)" fill="var(--crest-left)"><use href="#new-republic"/></g>
+    <g clip-path="url(#east)" color="var(--crest-right)" fill="currentColor"><use href="#imperial-cog"/></g>
+  </symbol>
+</svg>

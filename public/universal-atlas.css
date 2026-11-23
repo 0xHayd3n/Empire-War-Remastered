@@ -188,50 +188,36 @@ dialog.uc-atlas[open] {
   min-width: 0;
   padding: 5px 2px;
   color: #f2ede1;
-  border: 1px solid #67615b;
+  border: 1px solid color-mix(in srgb, var(--era-tint) 64%, #969796);
   border-radius: 4px;
-  background: radial-gradient(ellipse at top, var(--era-tint, #604448), #171b20 84%);
+  background: radial-gradient(ellipse at 50% 9%, color-mix(in srgb, var(--era-tint) 78%, #292d32), #14171d 95%);
   font: 500 13px/1.12 var(--ui-font);
 }
-.uc-era-card:nth-child(2) {
-  --era-tint: #344d68;
+.uc-era-card[data-era='Old Republic'] {
+  --era-tint: #50345f;
+  --crest-left: #9bddff;
+  --crest-right: #ff8997;
 }
-.uc-era-card:nth-child(3) {
-  --era-tint: #5d4c32;
+.uc-era-card[data-era='Clone Wars'] {
+  --era-tint: #254d76;
+  --crest-left: #f3e5c6;
+  --crest-right: #78c3ff;
 }
-.uc-era-card:nth-child(4) {
-  --era-tint: #32534b;
+.uc-era-card[data-era='Galactic Civil War'] {
+  --era-tint: #63352c;
+  --crest-left: #ff9770;
+  --crest-right: #d2dce5;
 }
-.uc-era-card img,
-.uc-era-mark {
-  width: 32px;
-  height: 32px;
-  object-fit: contain;
-  mix-blend-mode: screen;
+.uc-era-card[data-era='New Republic'] {
+  --era-tint: #1c564e;
+  --crest-left: #ffdb88;
+  --crest-right: #9dbccd;
 }
-.uc-era-art {
-  width: 100%;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-}
-.uc-era-art.wordmark img {
-  width: 95%;
-  height: 100%;
-  mix-blend-mode: normal;
-}
-.uc-era-art.opposed img {
-  width: 34%;
-  max-width: 30px;
-}
-.uc-era-card[data-era='Clone Wars'] img {
-  mix-blend-mode: normal;
-}
-.uc-era-mark {
-  display: grid;
-  place-items: center;
+.uc-era-crest {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  filter: drop-shadow(0 1px 2px #0b0c10);
 }
 .uc-roster .uc-era-card[aria-pressed='true'] {
   border-color: #f1c370;
@@ -656,25 +642,13 @@ dialog.uc-atlas[open] {
     gap: 4px;
   }
   .uc-roster .uc-era-card {
-    flex-direction: row;
     min-height: 40px;
     padding: 3px 2px;
     font-size: 12px;
   }
-  .uc-era-card img,
-  .uc-era-mark {
-    width: 20px;
-    height: 20px;
-    flex: none;
-  }
-  .uc-roster .uc-era-card {
-    flex-direction: column;
-  }
-  .uc-era-art {
-    height: 24px;
-  }
-  .uc-era-art.opposed img {
-    max-width: 20px;
+  .uc-era-crest {
+    width: 28px;
+    height: 28px;
   }
   .uc-periods {
     max-height: 114px;

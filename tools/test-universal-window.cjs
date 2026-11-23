@@ -82,9 +82,40 @@ const assert = require('node:assert/strict'),
       'Galactic Civil War',
       'New Republic'
     ]);
-    assert.equal(await eras.locator('img').count(), 5);
-    assert.match(await eraCard('Clone Wars').locator('img').getAttribute('src'), /clone-phase-iii\.svg$/);
-    assert.equal(await eraCard('Galactic Civil War').locator('img').count(), 2);
+    const { decodePNG } = await import('../public/js/png.js');
+    async function checkCrests() {
+      const palettes = new Set();
+      for (const card of await eras.getByRole('button').all()) {
+        const crest = card.locator('svg.uc-era-crest');
+        assert.equal(await crest.count(), 1);
+        const palette = await card.evaluate(e =>
+          ['--crest-left', '--crest-right'].map(k => getComputedStyle(e).getPropertyValue(k).trim())
+        );
+        palettes.add(palette.join('/'));
+        const { width: w, height: h, data } = await decodePNG(Uint8Array.from(await crest.screenshot()).buffer);
+        for (const [side, color] of palette.entries()) {
+          assert.match(color, /^#[a-f\d]{6}$/i);
+          const rgb = color
+            .slice(1)
+            .match(/../g)
+            .map(v => parseInt(v, 16));
+          let hits = 0,
+            wrong = 0;
+          for (let y = 0; y < h; y++)
+            for (let x = 0; x < w; x++)
+              if (rgb.every((n, c) => Math.abs(data[4 * (y * w + x) + c] - n) < 10)) {
+                if (x < w / 2 === (side === 0)) hits++;
+                else wrong++;
+              }
+          assert(
+            hits > w * h * 0.035 && wrong < w * h * 0.015,
+            `Split emblem: ${await card.textContent()}, ${color}, ${hits}/${wrong} at ${w}x${h}`
+          );
+        }
+      }
+      assert.equal(palettes.size, 4);
+    }
+    await checkCrests();
     assert.equal(await year.count(), 0, 'undated era has no synthetic year axis');
     assert.equal(await eraCard('Galactic Civil War').getAttribute('aria-pressed'), 'true');
     assert.equal(await board.locator('.uc-map-list section').count(), 3);
@@ -262,6 +293,7 @@ const assert = require('node:assert/strict'),
     assert(await board.locator('.uc-fields').evaluate(e => e.scrollWidth === e.clientWidth));
     assert(await board.locator('.uc-roster').evaluate(e => e.scrollWidth === e.clientWidth));
     assert(await eras.evaluate(e => e.scrollWidth === e.clientWidth && [...e.children].every(b => b.getBoundingClientRect().width > 0)));
+    await checkCrests();
     await snap('era-narrow');
     await page.setViewportSize({ width: 1366, height: 768 });
     assert.equal(await checkedValue('treasury'), cap);

@@ -1,8 +1,4 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
-import { swtorLogo } from './universal-era-logo.mjs';
 import { commandImages } from './universal-card-images.mjs';
 import { decodePNG } from '../public/js/png.js';
 const dir = 'Data/Art/Textures/',
@@ -46,17 +42,4 @@ await verify('crest.tga', 2, [4, 2, 0, 255, 7, 5, 3, 170]);
 assert.equal(image('Overhang.tga'), '');
 assert.equal(image('missing.tga'), '');
 assert.equal(image('../unrelated.tga'), '');
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'uc-test-logo-'));
-try {
-  assert.equal(await swtorLogo([root]), '');
-  const folder = path.join(root, 'appcache', 'librarycache', '1286830');
-  fs.mkdirSync(folder, { recursive: true });
-  const logo = path.join(folder, 'logo.png');
-  fs.writeFileSync(logo, Buffer.from(image('crest.tga').split(',')[1], 'base64'));
-  assert.equal(await swtorLogo([root]), image('crest.tga'));
-  fs.writeFileSync(logo, 'bad');
-  assert.equal(await swtorLogo([root]), '');
-} finally {
-  fs.rmSync(root, { recursive: true, force: true });
-}
-console.log('PASS: exact local command-bar crop, optional local Steam logo, out-of-bounds and missing-art fallback.');
+console.log('PASS: exact local command-bar crop, loose crest, alpha, out-of-bounds and missing-art fallback.');

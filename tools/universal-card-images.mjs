@@ -12,7 +12,7 @@ function chunk(name, bytes) {
   c.writeUInt32BE(crc32(c.subarray(4, -4)), c.length - 4);
   return c;
 }
-export function thumb(src, { x = 0, y = 0, w = src.width, h = src.height } = {}) {
+function thumb(src, { x = 0, y = 0, w = src.width, h = src.height } = {}) {
   if (!w || !h || x + w > src.width || y + h > src.height) return '';
   const scale = Math.min(1, 160 / Math.max(w, h)),
     width = Math.max(1, Math.round(w * scale)),

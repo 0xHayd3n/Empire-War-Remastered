@@ -10,7 +10,7 @@ The outer game window stays at the same address. The engine loads only the selec
 
 ### Start a campaign and choose its path
 
-The Old Republic card reads the official SWTOR wordmark from Steam’s local logo cache when available, otherwise uses the mounted Old Republic crest. The Clone Wars card uses an original Phase III-style helmet illustration; the Galactic Civil War uses the Rebel starbird and Imperial cog together, and the New Republic uses its own ringed starbird. No logo download or SWTOR installation is required.
+Each era has one split crest: Jedi Order / Sith Empire on violet, Galactic Republic / Separatist Alliance on blue, Rebel Alliance / Galactic Empire on ember, and New Republic / Imperial Remnant on teal. Hover a card for the faction names. Gold still marks the selected era. These setup icons need no logo download, Steam cache or extra pack.
 
 The settings panel runs the full height of the right edge. The rest of the window shows the starting galaxy with its faction key. Drag to pan or use the wheel to zoom. With the map focused, +/− zoom and Home restores the overview; Escape leaves setup.
 

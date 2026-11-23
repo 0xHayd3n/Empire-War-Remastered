@@ -18,6 +18,12 @@ function button(label, act, cls) {
   b.setAttribute('aria-pressed', 'false');
   return b;
 }
+const heraldry = {
+  'Old Republic': ['old-republic', 'Jedi Order / Sith Empire'],
+  'Clone Wars': ['clone-wars', 'Galactic Republic / Separatist Alliance'],
+  'Galactic Civil War': ['galactic-civil-war', 'Rebel Alliance / Galactic Empire'],
+  'New Republic': ['new-republic-era', 'New Republic / Imperial Remnant']
+};
 const press = (b, on) => b.setAttribute('aria-pressed', String(on));
 export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickDate }) {
   const cards = group('Era', 'uc-era-strip'),
@@ -34,32 +40,18 @@ export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickD
   for (const e of eras) {
     const b = button('', () => pickEra(e), 'uc-era-card');
     b.dataset.era = e.name;
-    if (e.art.length) {
-      const art = node('span', 'uc-era-art');
-      art.classList.toggle('wordmark', e.wordmark);
-      art.classList.toggle('opposed', e.art.length === 2);
-      for (const src of e.art) {
-        const img = node('img');
-        img.src = src;
-        img.alt = '';
-        art.append(img);
-      }
-      b.append(art);
-    } else {
-      const mark = node(
-        'b',
-        'uc-era-mark',
-        e.name
-          .split(' ')
-          .map(s => s[0])
-          .join('')
-      );
-      mark.setAttribute('aria-hidden', 'true');
-      b.append(mark);
-    }
-    b.append(node('span', '', e.name));
+    const [id, pair] = heraldry[e.name],
+      ns = 'http://www.w3.org/2000/svg',
+      art = document.createElementNS(ns, 'svg'),
+      use = document.createElementNS(ns, 'use');
+    art.classList.add('uc-era-crest');
+    art.setAttribute('viewBox', '0 0 100 100');
+    art.setAttribute('aria-hidden', 'true');
+    use.setAttribute('href', '/art/era-crests.svg#' + id);
+    art.append(use);
+    b.append(art, node('span', '', e.name));
     b.disabled = !e.periods.length;
-    if (e.missing.length) b.title = e.missing.join('\n');
+    b.title = [pair, ...e.missing].join('\n');
     cards.append(b);
   }
   let shownEra,

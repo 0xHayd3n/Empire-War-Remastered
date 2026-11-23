@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import { swtorLogo } from './universal-era-logo.mjs';
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { createHash, randomUUID } from 'node:crypto';
@@ -129,7 +128,7 @@ export function atlasStore({ home, library, eras }) {
           }
         }
         if (!profiles.length) throw Error('No campaign catalogs available.');
-        const atlas = { profiles, eras: eras(), unavailable, language: lang, swtorLogo: await swtorLogo() };
+        const atlas = { profiles, eras: eras(), unavailable, language: lang };
         return { atlas, bytes: gzipSync(JSON.stringify(atlas)) };
       });
       sets.set(lang, job);

@@ -55,7 +55,9 @@ const assert = require('node:assert/strict'),
       slider = k => field(k).getByRole('slider'),
       group = id => board.locator(`.uc-roster section[data-profile="${id}"]`),
       current = board.locator('.uc-map-choice[aria-pressed="true"]'),
-      dates = board.getByRole('group', { name: 'Starting date' }),
+      eras = board.getByRole('group', { name: 'Era', exact: true }),
+      eraCard = name => eras.getByRole('button', { name, exact: true }),
+      dates = board.getByRole('group', { name: 'Time period', exact: true }),
       dateButton = label => dates.getByRole('button', { name: label, exact: true });
     await current.waitFor();
     // Escape leaves setup without a visible Back control.
@@ -65,8 +67,16 @@ const assert = require('node:assert/strict'),
     await current.waitFor();
     assert.equal(await board.count(), 1);
     assert.equal(await board.locator('[data-field="story"],[data-field="campaign"],[data-field="date"],[role="tab"]').count(), 0);
-    assert.equal(await board.locator('.uc-roster h2').count(), 7);
-    assert.equal(await board.locator('.uc-dates').count(), 1);
+    assert.equal(await eras.getByRole('button').count(), 4);
+    assert.deepEqual(await eras.getByRole('button').allTextContents(), [
+      'Old Republic',
+      'Clone Wars',
+      'Galactic Civil War',
+      'New Republic'
+    ]);
+    assert.equal(await eras.locator('img').count(), 4);
+    assert.equal(await eraCard('Galactic Civil War').getAttribute('aria-pressed'), 'true');
+    assert.equal(await board.locator('.uc-map-list section').count(), 3);
     const root = await board.evaluate(e => (e.marker = crypto.randomUUID()));
     let docs = 0,
       mounts = 0,
@@ -80,6 +90,17 @@ const assert = require('node:assert/strict'),
       checked = new Set();
     async function select(id) {
       const t = performance.now();
+      const name =
+        { 3417277973: 'Old Republic', 1976399102: 'Clone Wars', 3387971722: 'Clone Wars', 1125571106: 'New Republic' }[id] ||
+        'Galactic Civil War';
+      const changed = (await eraCard(name).getAttribute('aria-pressed')) !== 'true';
+      await eraCard(name).click();
+      if (changed) {
+        assert.equal(await board.getAttribute('data-campaign'), '');
+        assert(await board.getByRole('button', { name: 'Start campaign' }).isDisabled());
+      }
+      const date = { 3417277973: '3964 BBY', 1976399102: '22 BBY', 1125571106: '4 ABY' }[id] || 'Scenario starts';
+      await dateButton(date).click();
       await group(id).locator('.uc-map-choice').first().click();
       assert.equal(await board.getAttribute('data-profile'), id);
       assert.equal(await board.evaluate(e => e.marker), root);
@@ -124,13 +145,27 @@ const assert = require('node:assert/strict'),
     await board.getByRole('button', { name: 'Reset settings' }).click();
     assert.equal(await dateButton('19 BBY').getAttribute('aria-pressed'), 'true');
     assert.equal(await board.getAttribute('data-campaign'), 'Sandbox_FTGU_Republic');
+    assert.equal(await fall.getByRole('button', { name: /Foerost Campaign/ }).count(), 0);
+    await dateButton('20 BBY').click();
     await fall.getByRole('button', { name: /Foerost Campaign/ }).click();
-    assert.equal(await dates.getByRole('button').count(), 0);
-    assert.match(await current.textContent(), /20 BBY/);
+    assert.match(await current.textContent(), /Foerost/);
+    assert.equal(await group('3387971722').count(), 0);
+    await dateButton('21 BBY').click();
+    assert.equal(await current.count(), 0);
+    assert(await board.getByRole('button', { name: 'Start campaign' }).isDisabled());
+    await dateButton('20 BBY').click();
     await fall.getByRole('button', { name: /Known Galaxy - Small/ }).click();
     assert.equal(await dateButton('20 BBY').getAttribute('aria-pressed'), 'true');
     await select('3417277973');
-    assert.equal(await dates.getByRole('button').count(), 4);
+    assert.equal(await dates.getByRole('button').count(), 5);
+    await dateButton('Scenario starts').click();
+    assert.equal(await current.count(), 0);
+    await group('3417277973')
+      .getByRole('button', { name: /Mandalorian Onslaught/ })
+      .click();
+    assert.match(await current.textContent(), /3964 - 3962 BBY/);
+    await dateButton('3959 BBY').click();
+    assert.equal(await group('3417277973').locator('.uc-map-choice').count(), 1);
     assert.equal(await dates.locator('button[aria-pressed="true"]').count(), 1);
     await select('1397421866');
     if (process.env.SWR_TEST_ALL_ERAS) for (const id of ['1125571106', '3387971722', '1770851727', 'stock']) await select(id);
@@ -142,7 +177,9 @@ const assert = require('node:assert/strict'),
       await select('1125571106');
       await radio('faction', 'Empire').check();
       await group('1125571106').locator('[data-family="KnownSmall_Era_1_Rebel"]').click();
-      await dateButton('6 ABY · Central Committee').click();
+      await dateButton('6 ABY').click();
+      const regimes = board.getByRole('group', { name: 'Starting variant' });
+      await regimes.getByRole('button', { name: '6 ABY · Central Committee', exact: true }).click();
       assert.equal(await field('faction').getByRole('radio').count(), 1);
     }
     const target = await board.getAttribute('data-campaign');
@@ -187,7 +224,7 @@ const assert = require('node:assert/strict'),
     assert(Number(await board.locator('.uc-canvas').getAttribute('data-models')) > 10);
     await current.scrollIntoViewIfNeeded();
     await field('faction').scrollIntoViewIfNeeded();
-    await snap('faction-cards');
+    await snap('era-map-browser');
     await field('politics').scrollIntoViewIfNeeded();
     await snap('rule-controls');
     await page.setViewportSize({ width: 390, height: 844 });
@@ -195,7 +232,9 @@ const assert = require('node:assert/strict'),
     assert.equal(await checkedValue('difficulty'), 'hard');
     await field('faction').scrollIntoViewIfNeeded();
     assert(await board.locator('.uc-fields').evaluate(e => e.scrollWidth === e.clientWidth));
-    await snap('cards-narrow');
+    assert(await board.locator('.uc-roster').evaluate(e => e.scrollWidth === e.clientWidth));
+    assert(await eras.evaluate(e => e.scrollWidth === e.clientWidth && [...e.children].every(b => b.getBoundingClientRect().width > 0)));
+    await snap('era-narrow');
     await page.setViewportSize({ width: 1366, height: 768 });
     assert.equal(await checkedValue('treasury'), cap);
     assert.equal(await board.getAttribute('data-campaign'), target);

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mapFamilies, mapStart } from '../public/js/game/universalmaplist.js';
+import { eraTimeline, startWithin } from '../public/js/game/universaltimeline.js';
 import { launchPlan } from './universal-atlas.mjs';
 import { menuTable, thrawnSelections } from './universal-loader-table.mjs';
 import { assertPrivateLibrary } from './universal-library.mjs';
@@ -127,6 +128,57 @@ for (const family of mapFamilies(profile))
       assert.equal(setup.campaign, s.variant.id);
       assert.equal(setup.faction, s.row.faction);
     }
+// Exact starts survive era/period filtering, including maps with identical labels across packs.
+const fall = { ...profile, id: '1976399102' },
+  awakening = { ...profile, id: '3387971722', rows: [row('script', '', 'Red', [['loader', 'Original in-game selector']])] },
+  old = { ...profile, id: '3417277973', rows: [row('base-b', 'A', 'Blue', [['b22', '22 BBY']])] };
+const profiles = [old, fall, awakening];
+const timeline = eraTimeline({
+  profiles,
+  eras: [...profiles.map(({ id }) => ({ id, name: id, ready: true })), { id: '1125571106', name: 'Thrawn', ready: false }]
+});
+const clone = timeline[1],
+  inYear = y => clone.periods.find(p => p.label === y).maps;
+assert.equal(timeline.length, 4);
+assert.equal(timeline[3].periods.length, 0);
+assert.match(timeline[3].missing[0], /Not built/);
+assert.deepEqual(
+  clone.periods.map(p => p.label),
+  ['22 BBY', '21 BBY', '20 BBY', '19 BBY', '6 ABY', 'Scenario starts']
+);
+assert.deepEqual(
+  [...inYear('22 BBY').keys()].map(f => f.id),
+  ['base-b', 'ftgu', 'fixed']
+);
+assert.deepEqual(
+  [...inYear('Scenario starts').keys()].map(f => [f.p.id, f.id]),
+  [
+    ['1976399102', 'range'],
+    ['1976399102', 'irregular'],
+    ['1976399102', 'irregular2'],
+    ['3387971722', 'script']
+  ]
+);
+const [[branched, twins]] = inYear('6 ABY');
+assert.equal(twins.length, 2);
+assert.equal(startWithin(branched, twins, twins[1], 'Blue').choice.variant.id, 'two');
+const [[known, early]] = inYear('22 BBY');
+assert.equal(startWithin(known, early, twins[1], 'Red').choice.variant.id, 'b22');
+const [techMap, techChoices] = [...inYear('21 BBY')].find(([f]) => f.id === 'ftgu');
+assert.equal(startWithin(techMap, techChoices, null, 'Red').choice.tech, 1);
+const expected = profiles
+  .flatMap(p =>
+    mapFamilies(p).flatMap(f => f.dates.flatMap(d => d.choices.map(s => JSON.stringify([p.id, s.row.id, s.variant.id, s.tech]))))
+  )
+  .sort();
+const reachable = timeline
+  .flatMap(e =>
+    e.periods.flatMap(per =>
+      [...per.maps].flatMap(([f, ds]) => ds.flatMap(d => d.choices.map(s => JSON.stringify([f.p.id, s.row.id, s.variant.id, s.tech]))))
+    )
+  )
+  .sort();
+assert.deepEqual(reachable, expected);
 assert.throws(() => assertPrivateLibrary(process.cwd(), { items: new Map() }), /private library/);
 console.log(
   'PASS: exact atlas targets, fixed starts, donor allowlist, literal-only selector tables, faction restriction, regime variants and private cache guard.'

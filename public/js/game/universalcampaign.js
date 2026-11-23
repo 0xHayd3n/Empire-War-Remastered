@@ -1,8 +1,8 @@
 import { activeLanguage } from '../language.js';
 import { ruleFields } from './universalrules.js';
 import { ruleChoices, rulePresets } from './universalrulemenu.js';
-import { periods, chronology } from './universalmodes.js';
-import { mapFamilies, mapStart, techCalendar } from './universalmaplist.js';
+import { eraTimeline, periodOf, startWithin } from './universaltimeline.js';
+import { mapStart, techCalendar } from './universalmaplist.js';
 import { campaignRoster } from './universalroster.js';
 import { atlasBoard } from './universalboard.js';
 export function campaignChoices(campaigns, factionOf) {
@@ -33,6 +33,8 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     family,
     date,
     roster,
+    era,
+    period,
     difficulty,
     options,
     settings,
@@ -106,6 +108,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     family = next;
     p = next.p;
     date = selection.date;
+    period = era.periods.find(x => x.label === periodOf(family, date));
     row = s.row;
     faction = row.faction;
     v = s.variant;
@@ -116,7 +119,22 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     render();
   }
   function pickMap(next) {
-    choose(next, mapStart(next, date, next.p === p ? faction : undefined));
+    choose(next, startWithin(next, period.maps.get(next), date, next.p === p ? faction : undefined));
+  }
+  function pickPeriod(next) {
+    period = next;
+    if (family && period.maps.has(family)) pickMap(family);
+    else {
+      family = row = date = v = null;
+      render();
+    }
+  }
+  function pickEra(next) {
+    if (next === era) return;
+    era = next;
+    const first = next.first;
+    const label = periodOf(first, mapStart(first).date);
+    pickPeriod(next.periods.find(x => x.label === label));
   }
   function pickDate(next) {
     choose(family, { date: next, choice: next.choices.find(s => s.row.faction === faction) || next.choices[0] });
@@ -179,8 +197,17 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
         : '';
   }
   function render() {
-    ui.el.dataset.profile = p.id;
-    roster.show(family, date);
+    roster.show(era, period, family, date);
+    ui.el.toggleAttribute('data-await-map', !family);
+    ui.el.dataset.profile = family ? p.id : '';
+    ui.el.dataset.campaign = v?.id || '';
+    ui.allow(!!v);
+    if (!family) {
+      ui.map.clear();
+      previewProfile = previewMap = null;
+      ui.status.textContent = 'Choose a map to preview its starting galaxy.';
+      return;
+    }
     const techDate = techCalendar(p, row);
     ui.radios(
       'faction',
@@ -220,8 +247,6 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
         else settings[k] = +s;
       });
     }
-    ui.allow(!!v);
-    ui.el.dataset.campaign = v?.id || '';
     if (p !== previewProfile || v?.map !== previewMap) {
       if (v) ui.map.show(p, v);
       else ui.map.clear();
@@ -241,21 +266,13 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
       );
     data = await cached.get(language);
     if (closed) return true;
-    const groups = [...data.eras]
-      .sort((a, b) => chronology.indexOf(periods[a.id]) - chronology.indexOf(periods[b.id]))
-      .map(e => {
-        const profile = data.profiles.find(p => p.id === e.id);
-        return {
-          id: e.id,
-          heading: `${periods[e.id]} · ${e.name}`,
-          maps: profile ? mapFamilies(profile) : [],
-          empty: !e.ready ? 'Not built' : !profile ? 'Unavailable' : 'No listed campaigns'
-        };
-      });
-    roster = campaignRoster(ui.roster, groups, pickMap, pickDate);
-    const initial = groups.find(g => g.id === origin)?.maps[0] || groups.find(g => g.maps.length)?.maps[0];
-    if (initial) {
-      pickMap(initial);
+    const eras = eraTimeline(data);
+    roster = campaignRoster(ui.roster, eras, { pickEra, pickPeriod, pickMap, pickDate });
+    const families = e => e.periods.flatMap(period => [...period.maps.keys()]);
+    era = eras.find(e => families(e).some(f => f.p.id === origin)) || eras.find(e => e.first);
+    if (era) {
+      const initial = families(era).find(f => f.p.id === origin) || era.first;
+      choose(initial, mapStart(initial));
       roster.focus();
     } else ui.status.textContent = 'No playable campaigns available.';
   } catch (e) {

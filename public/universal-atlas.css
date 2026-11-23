@@ -20,7 +20,7 @@ dialog.uc-atlas {
 }
 dialog.uc-atlas[open] {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(255px, 24vw, 355px);
+  grid-template-columns: minmax(0, 1fr) clamp(300px, 29vw, 420px);
 }
 .uc-atlas * {
   box-sizing: border-box;
@@ -142,18 +142,98 @@ dialog.uc-atlas[open] {
 }
 .uc-content {
   display: grid;
-  grid-template-rows: minmax(0, 0.78fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1.42fr) minmax(0, 1fr);
   flex: 1;
   min-height: 0;
 }
 .uc-roster {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
   overflow: auto;
   scrollbar-width: thin;
   overscroll-behavior: contain;
   border-bottom: 1px solid #ffffff30;
   padding: 0 8px 5px;
 }
-.uc-roster h2 {
+.uc-map-list {
+  flex: 1 0 66px;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+}
+.uc-roster .uc-nav-heading {
+  margin: 5px 4px 4px;
+  padding: 0;
+  color: #e5e5e1;
+  font: 500 14px/1.15 var(--ui-font);
+}
+.uc-era-strip {
+  display: flex;
+  flex-shrink: 0;
+  gap: 5px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding: 8px 2px 4px;
+}
+.uc-roster .uc-era-card {
+  flex: 1 0 55px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 5px 2px;
+  color: #f2ede1;
+  border: 1px solid #67615b;
+  border-radius: 4px;
+  background: radial-gradient(ellipse at top, var(--era-tint, #604448), #171b20 84%);
+  font: 500 13px/1.12 var(--ui-font);
+}
+.uc-era-card:nth-child(2) {
+  --era-tint: #344d68;
+}
+.uc-era-card:nth-child(3) {
+  --era-tint: #5d4c32;
+}
+.uc-era-card:nth-child(4) {
+  --era-tint: #32534b;
+}
+.uc-era-card img,
+.uc-era-mark {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  mix-blend-mode: screen;
+}
+.uc-era-mark {
+  display: grid;
+  place-items: center;
+}
+.uc-roster .uc-era-card[aria-pressed='true'] {
+  border-color: #f1c370;
+  box-shadow: 0 0 3px 1px #deb26590;
+}
+.uc-roster .uc-era-card:hover:not(:disabled) {
+  filter: brightness(1.18);
+}
+.uc-atlas[data-await-map] .uc-content {
+  grid-template-rows: minmax(0, 1fr);
+}
+.uc-atlas[data-await-map] .uc-fields,
+.uc-atlas[data-await-map] .uc-reset {
+  display: none;
+}
+.uc-atlas[data-await-map] .uc-canvas {
+  background: radial-gradient(ellipse at 50% 48%, #172532, #080e14 48%, #040609);
+}
+.uc-atlas[data-await-map] .uc-map {
+  cursor: default;
+}
+.uc-map-list h3 {
   position: sticky;
   top: 0;
   z-index: 1;
@@ -164,18 +244,12 @@ dialog.uc-atlas[open] {
   margin: 0;
   border-bottom: 1px solid #ffffff20;
 }
-.uc-roster section > small {
-  display: block;
-  padding: 6px;
-  color: #a5abad;
-}
-.uc-map-row {
-  scroll-margin-block: 40px 4px;
-  border-left: 2px solid transparent;
-}
-.uc-map-row.current {
-  border-color: #d5dbde;
+.uc-roster .uc-map-choice[aria-pressed='true'] {
   background: #34393c;
+  box-shadow: inset 2px 0 #efc372;
+}
+.uc-map-choice {
+  scroll-margin-block: 32px 4px;
 }
 .uc-roster .uc-map-choice {
   display: flex;
@@ -197,10 +271,12 @@ dialog.uc-atlas[open] {
   white-space: nowrap;
 }
 .uc-map-choice:hover,
-.uc-dates button:hover {
+.uc-periods button:hover,
+.uc-branches button:hover {
   background: #41474b;
 }
-.uc-dates {
+.uc-periods,
+.uc-branches {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -208,15 +284,18 @@ dialog.uc-atlas[open] {
   color: #d6dadb;
   font-size: 12px;
 }
-.uc-dates:empty {
-  display: none;
+.uc-periods {
+  flex-shrink: 0;
+  padding: 1px 4px 4px;
 }
-.uc-roster .uc-dates button {
+.uc-roster .uc-periods button,
+.uc-roster .uc-branches button {
   font-size: 12px;
   min-height: 24px;
   padding: 2px 6px;
 }
-.uc-dates button[aria-pressed='true'] {
+.uc-periods button[aria-pressed='true'],
+.uc-branches button[aria-pressed='true'] {
   background: #dbe0e1;
   color: #17191b;
 }
@@ -466,6 +545,33 @@ dialog.uc-atlas[open] {
   }
   .uc-panel h1 {
     font-size: 20px;
+  }
+  .uc-era-strip {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+  }
+  .uc-roster .uc-era-card {
+    flex-direction: row;
+    min-height: 40px;
+    padding: 3px 2px;
+    font-size: 12px;
+  }
+  .uc-era-card img,
+  .uc-era-mark {
+    width: 20px;
+    height: 20px;
+    flex: none;
+  }
+  .uc-periods {
+    max-height: 85px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  .uc-roster .uc-periods button {
+    font-size: 11px;
+    min-height: 23px;
+    padding: 2px 4px;
   }
   .uc-panel footer {
     gap: 4px;

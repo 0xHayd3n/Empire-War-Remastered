@@ -44,10 +44,13 @@ dialog.uc-atlas[open] {
 .uc-map {
   overflow: hidden;
   touch-action: none;
-  cursor: grab;
+  cursor: default;
   user-select: none;
 }
-.uc-map:active {
+.uc-map[data-zoomed] {
+  cursor: grab;
+}
+.uc-map[data-zoomed]:active {
   cursor: grabbing;
 }
 .uc-plane {
@@ -56,7 +59,8 @@ dialog.uc-atlas[open] {
 .uc-worlds span {
   position: absolute;
   white-space: nowrap;
-  transform: translate(7px, -50%);
+  transform-origin: 0 0;
+  transform: scale(var(--label-scale, 1)) translate(7px, -50%);
   font:
     var(--planet-size, 10px) / 1 var(--planet-type, 'EmpireAtWar-Bold'),
     Arial,
@@ -209,8 +213,9 @@ dialog.uc-atlas[open] {
   --crest-right: #78c3ff;
 }
 .uc-era-card:is([data-era='Galactic Civil War'], [data-era='New Republic']) {
-  --era-right: #56585a;
-  --crest-right: #d8d8d8;
+  --era-right: #060606;
+  --crest-right: #ffffff;
+  --right-stop: 68%;
 }
 .uc-era-card[data-era='Galactic Civil War'] {
   --era-left: #98452d;
@@ -246,16 +251,36 @@ dialog.uc-atlas[open] {
 .uc-atlas[data-await-map] .uc-map {
   cursor: default;
 }
-.uc-map-list h3 {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: #242729;
-  color: #c6cbcd;
-  font: 500 13px/1.3 var(--ui-font);
-  padding: 9px 6px 5px;
-  margin: 0;
-  border-bottom: 1px solid #ffffff20;
+.uc-story-tabs {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding: 2px 2px 4px;
+  border-bottom: 1px solid #ffffff28;
+}
+.uc-roster .uc-story-tabs button {
+  flex: none;
+  min-height: 26px;
+  padding: 3px 7px;
+  font-size: 13px;
+}
+.uc-roster .uc-story-tabs [aria-selected='true'] {
+  color: #ffe3ae;
+  border-color: #b99c66;
+  background: #36332c;
+}
+.uc-map-span {
+  display: block;
+}
+.uc-planet-count {
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+.uc-roster .uc-map-choice > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .uc-roster .uc-map-choice[aria-pressed='true'] {
   background: #34393c;

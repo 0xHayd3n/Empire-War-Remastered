@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { mapFamilies, mapStart } from '../public/js/game/universalmaplist.js';
+import { galaxyChart, sectorView } from '../public/js/game/universalgalaxychart.js';
+import { overviewView } from '../public/js/game/universalviewcamera.js';
+import { mapFamilies, mapStart, planetCount } from '../public/js/game/universalmaplist.js';
 import { yearStops, nearestStop } from '../public/js/game/universalyeartrack.js';
 import { eraTimeline, startWithin } from '../public/js/game/universaltimeline.js';
 import { launchPlan } from './universal-atlas.mjs';
@@ -230,6 +232,46 @@ const reachable = timeline
   )
   .sort();
 assert.deepEqual(reachable, expected);
+const mkChart = (id, names, coords) => ({
+  id,
+  camera: { pitch: -37, plane: 10 },
+  planets: [...names.map((name, i) => [name, name, ...coords[i], 10, 'planet.alo', 1, 0]), ['Sky', 'Sky', 0, 0, 0, 'sky.alo', 1, 1]],
+  maps: [{ worlds: names.map((_, i) => [i, 'Demo']), scenery: [names.length] }]
+});
+const ref = mkChart(
+    'stock',
+    ['Core', 'North', 'West'],
+    [
+      [0, 0],
+      [0, 120],
+      [-100, 0]
+    ]
+  ),
+  moved = mkChart(
+    '1770851727',
+    ['Core_WW', 'North_WW', 'West_WW', 'Local_WW'],
+    [
+      [100, 50],
+      [100, 110],
+      [50, 50],
+      [90, 60]
+    ]
+  );
+const prior = JSON.stringify([ref, moved]),
+  chart = galaxyChart([moved, ref]);
+assert.equal(chart.reference, ref);
+assert.deepEqual(chart.sky, [ref.planets[3]]);
+for (let i = 0; i < 3; i++) assert.deepEqual(chart.world(ref, i).placed.slice(2, 5), chart.world(moved, i).placed.slice(2, 5));
+assert.deepEqual(chart.world(moved, 3).placed.slice(2, 4), [-20, 20]);
+assert.equal(JSON.stringify([ref, moved]), prior);
+const all = overviewView(chart.frame, ref.camera, 960, 700, chart.frame),
+  sector = overviewView([chart.world(moved, 3).placed], ref.camera, 960, 700, chart.frame);
+assert.deepEqual(all.eye, sector.eye);
+assert(sectorView(sector.labels).zoom > sectorView(all.labels).zoom);
+const ff = { members: [{}], p: { maps: [{ worlds: [1, 2] }, { worlds: [1, 2, 3] }] } },
+  variations = [{ choices: [{ variant: { map: 0 } }, { variant: { map: 1 } }] }];
+assert.equal(planetCount(ff, variations), '2–3 planets');
+assert.equal(planetCount(ff, variations, { map: 0 }), '2 planets');
 assert.throws(() => assertPrivateLibrary(process.cwd(), { items: new Map() }), /private library/);
 console.log(
   'PASS: exact atlas targets, fixed starts, donor allowlist, literal-only selector tables, faction restriction, regime variants and private cache guard.'

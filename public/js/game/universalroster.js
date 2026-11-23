@@ -1,3 +1,4 @@
+import { planetCount } from './universalmaplist.js';
 import { yearTrack } from './universalyeartrack.js';
 const node = (tag, cls, text) => {
   const n = document.createElement(tag);
@@ -25,11 +26,24 @@ const heraldry = {
   'New Republic': ['new-republic-era', 'New Republic / Imperial Remnant']
 };
 const press = (b, on) => b.setAttribute('aria-pressed', String(on));
-export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickDate }) {
+export function campaignRoster(host, eras, { pickEra, pickPeriod, pickStory, pickMap, pickDate }) {
   const cards = group('Era', 'uc-era-strip'),
     periods = group('Time period', 'uc-periods'),
+    tabs = node('div', 'uc-story-tabs'),
     list = node('div', 'uc-map-list'),
     branches = group('Starting variant', 'uc-branches');
+  tabs.setAttribute('role', 'tablist');
+  tabs.setAttribute('aria-label', 'Storyline');
+  tabs.onkeydown = e => {
+    const items = [...tabs.children],
+      i = items.indexOf(e.target),
+      n = items.length;
+    const next = { ArrowLeft: (i + n - 1) % n, ArrowRight: (i + 1) % n, Home: 0, End: n - 1 }[e.key];
+    if (next === undefined || i < 0) return;
+    e.preventDefault();
+    items[next].focus();
+    items[next].click();
+  };
   list.setAttribute('role', 'group');
   list.setAttribute('aria-label', 'Maps');
   const heading = node('h2', 'uc-nav-heading', 'Time period'),
@@ -37,7 +51,7 @@ export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickD
     readout = node('span', 'uc-year-value'),
     dial = yearTrack(periods, readout, pickPeriod);
   heading.append(readout);
-  host.append(cards, heading, periods, mapHeading, list);
+  host.append(cards, heading, periods, mapHeading, tabs, list);
   for (const e of eras) {
     const b = button('', () => pickEra(e), 'uc-era-card');
     b.dataset.era = e.name;
@@ -57,6 +71,7 @@ export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickD
   }
   let shownEra,
     shownPeriod,
+    shownStory,
     activeFamily,
     entries = new Map();
   list.onkeydown = e => {
@@ -71,7 +86,7 @@ export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickD
   };
   return {
     close: dial.close,
-    show(era, period, family, date) {
+    show(era, period, story, family, date, variant) {
       if (era !== shownEra) {
         shownEra = era;
         [...cards.children].forEach((b, i) => press(b, eras[i] === era));
@@ -79,32 +94,58 @@ export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickD
       }
       if (period !== shownPeriod) {
         shownPeriod = period;
+        shownStory = null;
+        dial.show(period);
+        tabs.replaceChildren();
+        for (const p of new Set([...period.maps.keys()].map(f => f.p))) {
+          const b = node('button', '', p.name);
+          b.type = 'button';
+          b.id = 'uc-story-' + p.id;
+          b.dataset.profile = p.id;
+          b.setAttribute('role', 'tab');
+          b.setAttribute('aria-controls', 'uc-story-panel');
+          b.onclick = () => {
+            if (shownStory !== p) pickStory(p);
+          };
+          tabs.append(b);
+        }
+        mapHeading.textContent = period.scenario ? 'Scenarios' : 'Maps';
+        list.setAttribute('aria-label', period.scenario ? 'Scenarios' : 'Maps');
+      }
+      if (story !== shownStory) {
+        shownStory = story;
         activeFamily = undefined;
         entries.clear();
-        list.replaceChildren();
-        let previous, section;
-        dial.show(period);
-        mapHeading.textContent = period.scenario ? 'Scenarios' : 'Map';
-        list.setAttribute('aria-label', period.scenario ? 'Scenarios' : 'Maps');
+        const section = node('section');
+        section.dataset.profile = story.id;
+        section.id = 'uc-story-panel';
+        section.setAttribute('role', 'tabpanel');
+        section.setAttribute('aria-labelledby', 'uc-story-' + story.id);
+        list.replaceChildren(section);
+        for (const b of tabs.children) {
+          const active = b.dataset.profile === story.id;
+          b.setAttribute('aria-selected', String(active));
+          b.tabIndex = active ? 0 : -1;
+          if (active) tabs.scrollLeft += b.getBoundingClientRect().left - tabs.getBoundingClientRect().left;
+        }
         for (const f of period.maps.keys()) {
-          if (previous !== f.p) {
-            previous = f.p;
-            section = node('section');
-            section.dataset.profile = f.p.id;
-            section.append(node('h3', '', f.p.name));
-            list.append(section);
-          }
+          if (f.p !== story) continue;
           const b = button('', () => pickMap(f), 'uc-map-choice');
           b.dataset.family = f.id;
-          b.append(node('span', '', f.title));
-          if (f.span && f.span !== period.label) b.append(node('small', '', f.span));
+          const label = node('span', '', f.title);
+          if (f.span && f.span !== period.label) label.append(node('small', 'uc-map-span', f.span));
+          b.append(label, node('small', 'uc-planet-count', planetCount(f, period.maps.get(f))));
           entries.set(f, b);
           section.append(b);
         }
         list.scrollTop = 0;
       }
       if (activeFamily !== family) {
-        if (entries.has(activeFamily)) press(entries.get(activeFamily), false);
+        if (entries.has(activeFamily)) {
+          const old = entries.get(activeFamily);
+          press(old, false);
+          old.lastElementChild.textContent = planetCount(activeFamily, period.maps.get(activeFamily));
+        }
         branches.remove();
         branches.replaceChildren();
         activeFamily = family;
@@ -120,7 +161,10 @@ export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickD
         }
       }
       for (const [f, b] of entries) b.tabIndex = f === (family || period.maps.keys().next().value) ? 0 : -1;
-      if (family) [...branches.children].forEach((b, i) => press(b, period.maps.get(family)[i] === date));
+      if (family) {
+        entries.get(family).lastElementChild.textContent = planetCount(family, period.maps.get(family), variant);
+        [...branches.children].forEach((b, i) => press(b, period.maps.get(family)[i] === date));
+      }
     },
     focus() {
       cards.querySelector('[aria-pressed="true"]')?.focus({ preventScroll: true });

@@ -81,7 +81,7 @@ const assert = require('node:assert/strict'),
     await f.locator('[data-id="IDC_CUSTOM_CAMPAIGN_BUTTON"]').click();
     await current.waitFor();
     assert.equal(await board.count(), 1);
-    assert.equal(await board.locator('[data-field="story"],[data-field="campaign"],[data-field="date"],[role="tab"]').count(), 0);
+    assert.equal(await board.locator('[data-field="story"],[data-field="campaign"],[data-field="date"]').count(), 0);
     assert.equal(await eras.getByRole('button').count(), 4);
     assert.deepEqual(await eras.getByRole('button').allTextContents(), [
       'Old Republic',
@@ -144,7 +144,7 @@ const assert = require('node:assert/strict'),
         }
       }
       assert.equal(palettes.size, 4);
-      assert.equal(imperial.size, 1);
+      assert.deepEqual([...imperial], ['#060606/#ffffff']);
       assert(
         await dates.locator('.uc-year-tick small').evaluateAll(labels => {
           const visible = labels.filter(e => getComputedStyle(e).visibility !== 'hidden').map(e => e.getBoundingClientRect());
@@ -156,7 +156,80 @@ const assert = require('node:assert/strict'),
     await checkCrests();
     assert.equal(await year.count(), 0, 'undated era has no synthetic year axis');
     assert.equal(await eraCard('Galactic Civil War').getAttribute('aria-pressed'), 'true');
-    assert.equal(await board.locator('.uc-map-list section').count(), 3);
+    const tabs = board.getByRole('tablist', { name: 'Storyline' }),
+      panel = board.getByRole('tabpanel');
+    assert.equal(await tabs.getByRole('tab').count(), 3);
+    assert.equal(await panel.count(), 1);
+    await tabs.getByRole('tab', { selected: true }).press('ArrowRight');
+    assert.equal(await board.getAttribute('data-campaign'), '');
+    assert(await board.getByRole('button', { name: 'Start campaign' }).isDisabled());
+    await tabs.getByRole('tab', { selected: true }).press('Home');
+    await panel.locator('.uc-map-choice').first().click();
+    const native = board.locator('.uc-canvas[data-scene="native"]');
+    await native.waitFor();
+    const firstPlate = await native.getAttribute('data-backdrop-renders');
+    await panel.locator('.uc-map-choice').nth(1).click();
+    await native.waitFor();
+    assert(
+      firstPlate && (await native.getAttribute('data-backdrop-renders')) === firstPlate,
+      'Second stock map reuses the prerendered backdrop'
+    );
+    assert(
+      await native.evaluate(e => {
+        const [a, b] = [...e.querySelectorAll('canvas')].map(c => c.getContext('2d').getImageData(0, 0, c.width, c.height).data);
+        let lit = 0,
+          match = 0;
+        for (let i = 0; i < a.length; i += 64)
+          if (a[i] + a[i + 1] + a[i + 2] > 25) {
+            lit++;
+            if (Math.max(...[0, 1, 2].map(j => Math.abs(a[i + j] - b[i + j]))) <= 1) match++;
+          }
+        return lit > 100 && match > lit * 0.7;
+      }),
+      'Backdrop pixels must survive the foreground pass upright and without a color shift'
+    );
+    const galaxy = board.locator('.uc-map'),
+      r = await galaxy.boundingBox();
+    async function drag(x1, y1, x2, y2) {
+      await page.mouse.move(r.x + x1, r.y + y1);
+      await page.mouse.down();
+      await page.mouse.move(r.x + x2, r.y + y2, { steps: 3 });
+      await page.mouse.up();
+    }
+    const bounds = () =>
+      galaxy.evaluate(e => {
+        const a = e.getBoundingClientRect(),
+          b = e.firstElementChild.getBoundingClientRect();
+        return [a.left - b.left, a.top - b.top, b.right - a.right, b.bottom - a.bottom];
+      });
+    await galaxy.press('Home');
+    const label = native.locator('[data-planet]').first();
+    const labelSize = await label.boundingBox();
+    await label.dispatchEvent('dblclick');
+    assert.equal(await mapZoomed(), true);
+    assert(Math.abs((await label.boundingBox()).width - labelSize.width) < 0.05, 'Zoom must not enlarge names over neighboring planets');
+    async function mapZoomed() {
+      return galaxy.evaluate(e => e.hasAttribute('data-zoomed'));
+    }
+    await galaxy.press('Home');
+    await drag(20, 20, 220, 165);
+    assert.deepEqual(await bounds(), [0, 0, 0, 0]);
+    await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2);
+    await page.mouse.wheel(0, -120);
+    await board.locator('.uc-map[data-zoomed]').waitFor();
+    for (const [a, b] of [
+      [0.2, 0.8],
+      [0.8, 0.2]
+    ]) {
+      await drag(r.width * a, r.height * a, r.width * b, r.height * b);
+      const gaps = await bounds();
+      assert(
+        gaps.every(n => n >= -0.05),
+        `Viewport exposed: ${gaps}`
+      );
+    }
+    await galaxy.press('Home');
+    assert.deepEqual(await bounds(), [0, 0, 0, 0]);
     const root = await board.evaluate(e => (e.marker = crypto.randomUUID()));
     let docs = 0,
       mounts = 0,
@@ -181,8 +254,11 @@ const assert = require('node:assert/strict'),
       }
       const date = { 3417277973: '3964 BBY', 1976399102: '22 BBY', 1125571106: '4 ABY' }[id] || 'Scenario starts';
       await selectPeriod(date);
+      await tabs.locator(`[data-profile="${id}"]`).click();
       await group(id).locator('.uc-map-choice').first().click();
       assert.equal(await board.getAttribute('data-profile'), id);
+      const count = await board.locator('[data-planet]').count();
+      assert.match(await current.locator('.uc-planet-count').innerText(), new RegExp('^' + count + ' (setup )?planets?$'));
       assert.equal(await board.evaluate(e => e.marker), root);
       times.push(Math.round(performance.now() - t));
       if (process.env.SWR_TEST_ALL_ERAS && !checked.has(id)) {
@@ -206,6 +282,7 @@ const assert = require('node:assert/strict'),
           keyOwners.sort(),
           [...new Set(await board.locator('[data-planet]').evaluateAll(es => es.map(e => e.dataset.owner)))].sort()
         );
+        assert.equal(await native.getAttribute('data-backdrop-renders'), firstPlate, 'Storyline switches keep one galaxy');
         checked.add(id);
       }
     }

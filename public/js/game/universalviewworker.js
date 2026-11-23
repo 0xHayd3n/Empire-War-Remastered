@@ -1,7 +1,6 @@
 // A single still of the game's overview. No galaxy, Lua, ticks, fleets or gameplay document.
 // Each worker gets one immutable VFS namespace; terminating it also discards model and texture caches.
 import * as THREE from '../../vendor/three/build/three.module.js';
-import { overviewView } from './universalviewcamera.js';
 import { renderGalacticScenes, placeGalacticModel } from './galacticscenes.js';
 import { RouteBatches } from './routebatch.js';
 import { routeAxes } from './galacticroutes.js';
@@ -20,7 +19,7 @@ self.onmessage = async ({ data: q }) => {
     renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     const scenes = Array.from({ length: 4 }, () => new THREE.Scene()),
       cam = new THREE.PerspectiveCamera(45, q.w / q.h, 1, 20000),
-      view = overviewView(q.worlds, q.camera, q.w, q.h);
+      view = q.view;
     cam.fov = view.fov;
     cam.updateProjectionMatrix();
     cam.up.set(0, 0, 1);
@@ -56,6 +55,35 @@ self.onmessage = async ({ data: q }) => {
         if (i < q.worlds.length) placed++;
       })
     );
+    // Seed the native background pass with the opaque, pre-rendered pixels. Blit them
+    // verbatim before routes/planets: additive and modulate materials need their real destination.
+    if (q.backplate) {
+      const texture = new THREE.Texture(q.backplate);
+      texture.generateMipmaps = false;
+      texture.minFilter = texture.magFilter = THREE.NearestFilter;
+      texture.needsUpdate = true;
+      const quad = new THREE.Mesh(
+        new THREE.PlaneGeometry(2, 2),
+        new THREE.RawShaderMaterial({
+          uniforms: { plate: { value: texture } },
+          depthTest: false,
+          depthWrite: false,
+          vertexShader:
+            'attribute vec3 position; attribute vec2 uv; varying vec2 v; void main(){v=vec2(uv.x,1.0-uv.y);gl_Position=vec4(position.xy,0.,1.);}',
+          fragmentShader: 'precision highp float; uniform sampler2D plate; varying vec2 v; void main(){gl_FragColor=texture2D(plate,v);}'
+        })
+      );
+      quad.frustumCulled = false;
+      scenes[1].add(quad);
+    }
+    if (q.pass === 'backdrop') {
+      await Promise.all(materials);
+      await texturesReady();
+      renderGalacticScenes(renderer, cam, ...scenes);
+      const bitmap = canvas.transferToImageBitmap();
+      self.postMessage({ bitmap }, [bitmap]);
+      return;
+    }
     const batch = new RouteBatches(
       scenes[0],
       n => loadTexture(n, { repeat: false }),
@@ -119,6 +147,7 @@ self.onmessage = async ({ data: q }) => {
   } catch (e) {
     self.postMessage({ error: e.message });
   } finally {
+    q.backplate?.close();
     renderer?.dispose();
     renderer?.forceContextLoss();
   }

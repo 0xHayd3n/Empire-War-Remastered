@@ -45,6 +45,10 @@ lets you play offline afterwards. The start page walks you through both options.
 - **Mods:** Steam Workshop and local mods load the way the original loads them, and you can stack several in your
   own order. Fixes are made in the engine, never for one particular mod.
 
+### Universal library: one game, separate overhauls
+
+On `universal`, run `npm run universal:build` once with your Steam parents installed, then `npm run universal` or double-click **Universal Library.cmd**. The [local campaign library](http://127.0.0.1:8590/) offers stock and six isolated profiles that share byte-identical files. It doesn't merge campaigns or modify Workshop installs. See [build, disk usage and switching profiles](docs/universal-library.md).
+
 ### Play an installed Steam Workshop stack
 
 **On your PC:** install mods through Steam, then double-click **Workshop Launcher.cmd** in the checkout (Node.js required). The local

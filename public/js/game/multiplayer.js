@@ -46,7 +46,8 @@ export function dataFingerprint() {
       for (const x of v) mix(x);
     }
   }
-  return (h >>> 0).toString(16) + ':' + db.types.size;
+  const pack = globalThis.document?.querySelector('meta[name="swr-pack-revision"]')?.content;
+  return (h >>> 0).toString(16) + ':' + db.types.size + (pack ? ':' + pack.slice(0, 32) : '');
 }
 
 export function inviteLink(gameId, kind = 'internet') {

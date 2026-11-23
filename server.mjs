@@ -13,7 +13,9 @@ const workshopMode = process.argv.includes('--workshop');
 const PORT = Number((portArg > 0 && process.argv[portArg + 1]) || process.env.PORT || (workshopMode ? 8478 : 8377));
 const STATIC = !!process.env.SWR_STATIC || process.argv.includes('--static');
 if (STATIC && workshopMode) throw new Error('Workshop launch needs a local game, not --static.');
-const assetCache = workshopMode ? 'no-store' : 'max-age=86400';
+const universalMode = process.argv.includes('--universal');
+if (universalMode && (STATIC || workshopMode || process.argv.includes('--mod') || process.env.SWR_MOD)) throw new Error('Universal profiles cannot be combined with static, Workshop or extra mod layers.');
+const assetCache = workshopMode || universalMode ? 'no-store' : 'max-age=86400';
 const PUBLIC = path.join(HERE, 'public');
 const defaultMods = process.argv
   .flatMap((a, i) => (a === '--mod' && process.argv[i + 1] ? [process.argv[i + 1]] : []))
@@ -83,9 +85,9 @@ function serveStatic(req, res, rel) {
   });
 }
 
-async function startGame(GAME, MODS) {
+async function startGame(GAME, MODS, session = {}) {
   const t0 = performance.now();
-  const game = !STATIC && fs.existsSync(GAME) ? openGame(GAME, MODS) : null;
+  const game = !STATIC && fs.existsSync(GAME) ? openGame(GAME, MODS, { packedLayer: session.pack?.entries }) : null;
   const indexMs = Math.round(performance.now() - t0);
   if (game) console.log(`Indexed ${game.index.size} game files in ${indexMs} ms`);
   else console.log('No game install mounted: serving static files only');
@@ -94,7 +96,7 @@ async function startGame(GAME, MODS) {
 function gameFor(url) {
   if (!game || url.searchParams.get('game') !== 'eaw') return games.foc;
   if (!games.eaw) {
-    const g = openGame(GAME, MODS, { expansion: false });
+    const g = openGame(GAME, MODS, { expansion: false, packedLayer: session.pack?.entries });
     games.eaw = { game: g, fonts: new NativeFonts(g) };
     console.log(`indexed ${g.index.size} files of the original game`);
   }
@@ -115,6 +117,16 @@ const server = http.createServer(async (req, res) => {
       return send(res, 400, 'bad path');
     }
 
+    if (session.library && (p === '/' || p === '/index.html')) {
+      res.writeHead(302, { Location: session.library + '/', 'Cache-Control': 'no-store' }); return res.end();
+    }
+    if (session.library && p === '/play.html') {
+      const html = fs.readFileSync(path.join(PUBLIC, 'play.html'), 'utf8')
+        .replace('</head>', `<meta name="swr-universal" content="local">${session.pack ? `<meta name="swr-pack-revision" content="${session.pack.mounted.workshop}:${session.pack.revision}">` : ''}</head>`)
+        .replace('</body>',
+        `<a class="universal-return" href="${session.library}/">Campaign library</a><style>.universal-return{display:none}body:has(#frontOverlay,#lobby:not(.hidden),[data-id="IDC_STAGING_MAP_LIST"]) .universal-return{display:block;position:fixed;top:8px;right:12px;z-index:200;font:14px system-ui;color:white;background:#182431;padding:6px 12px;border-radius:4px}</style></body>`);
+      return send(res, 200, html, MIME['.html'], { 'Cache-Control':'no-store', 'Document-Policy':'js-profiling' });
+    }
     if (p === '/api/battle-photo') {
       res.setHeader('Cache-Control', 'no-store');
       const q = url.searchParams;
@@ -136,7 +148,11 @@ const server = http.createServer(async (req, res) => {
         }
       }
       if (!key) return send(res, 204, '');
-      const size = assets.index.get(key).size,
+      const entry = assets.index.get(key);
+      if (entry.ensure) {
+        try { entry.ensure(); } catch (error) { console.warn('Universal asset:', error.message); return send(res, 409, 'Pack unavailable. Restore the parent or rebuild the profile.', undefined, { 'Cache-Control':'no-store' }); }
+      }
+      const size = entry.size,
         range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
       if (range && (range[1] || range[2])) {
         const a = range[1] ? +range[1] : Math.max(0, size - +range[2]),
@@ -163,10 +179,11 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, JSON.stringify(out.sort()), MIME['.json']);
     }
     if (p === '/api/mounted') {
-      return send(res, 200, JSON.stringify(MODS.map(mountedMod)), MIME['.json']);
+      return send(res, 200, JSON.stringify(session.pack ? [session.pack.mounted] : MODS.map(mountedMod)), MIME['.json']);
     }
     if (p === '/api/modinfo') {
       const e = game && gameFor(url).game.index.get((url.searchParams.get('key') || '').replace(/\//g, '\\').toUpperCase());
+      if (session.pack) return send(res, 200, JSON.stringify(e?.packLoose ? session.pack.info : null), MIME['.json']);
       const at = e && e.file && path.resolve(e.file).toLowerCase(),
         root =
           at &&
@@ -184,7 +201,7 @@ const server = http.createServer(async (req, res) => {
     }
   }
   try {
-    await new Promise((ok, fail) => server.once('error', fail).listen(PORT, '127.0.0.1', ok));
+    await new Promise((ok, fail) => server.once('error', fail).listen(session.port ?? PORT, '127.0.0.1', ok));
   } catch (e) { release(); throw e; }
   const url = `http://127.0.0.1:${server.address().port}`;
   console.log(`Game server: ${url}/`);
@@ -196,7 +213,10 @@ const server = http.createServer(async (req, res) => {
   } };
 }
 
-if (workshopMode) {
+if (universalMode) {
+  const { serveUniversal } = await import('./tools/universal-launcher.mjs');
+  await serveUniversal(Number(process.env.SWR_UNIVERSAL_PORT || 8590), process.argv.includes('--open'), startGame);
+} else if (workshopMode) {
   const { serveWorkshop } = await import('./tools/workshop-launcher.mjs');
   serveWorkshop(Number(process.env.SWR_LAUNCHER_PORT ?? 8490), process.argv.includes('--open'), startGame);
 } else await startGame(process.env.SWR_GAME || path.resolve(HERE, '..', 'Star Wars Empire at War'), defaultMods);

@@ -1,0 +1,23 @@
+# Universal campaign library
+
+One local start screen for stock Forces of Corruption and six separately playable overhauls. It is **not** a merged ruleset, a Steam upload, or a change to your subscribed items. Use the normal Workshop launcher for a saved collection with multiple ordered submods.
+
+1. Install stock and whichever parent mods you want through Steam. From the `universal` checkout run `npm run universal:build` to import all supported installed parents, or e.g. `npm run universal:build -- 1125571106` for Thrawn’s Revenge alone. Stop Steam updates during import. Stock needs no import.
+2. Run `npm run universal` (Windows: **Universal Library.cmd**). Open **http://127.0.0.1:8590/** and choose **Play**. The shelves are the three Empire at War Expanded profiles (Thrawn’s Revenge, Fall of the Republic, Revan’s Revenge) and the independent overhauls (Awakening of the Rebellion, Awakening of the Clone Wars, Empire at War: Remake).
+3. Use **Campaign library** on the game menu to return. Save first, **End session**, then select another pack. The same process serves one active game at a time. Each card has a stable, separate loopback origin for saves, resume state, workers and settings. Keep ports 8590–8597 free. Change the block with `SWR_UNIVERSAL_PORT`; changing it changes where the browser looks for saves. Reopen the old port to find old saves.
+
+### What is stripped
+
+A profile is a manifest of the **winning parent layer**: virtual path → SHA-256 object (or a deletion). It does not copy the stock game. MEGs and loose overrides use the original resolver; paths the parent deletes remain absent. Identical bytes, even at different paths or under different names, occupy one object in the library. Different bytes at the same path remain separate, including scripts, localization, campaign XML, textures and models. Every profile keeps its own virtual paths and primary Workshop ID. There is no requirements guess based on filenames, and no attempt to remove individual Lua functions from nonidentical scripts. Functions with the same name need not have the same behavior or callers.
+
+The default build hashes the effective mod files and writes **manifests only**. On first access the local server copies the needed object from that parent, verifies the digest, and atomically publishes it in the shared cache. Keep the parent installed in this mode. A changed uncached file is rejected, not silently substituted; end the session and rerun the build after updates. Other parents do not need to be installed to play the selected profile.
+
+To make an independent **local** copy of the mod payload, run `npm run universal:build -- --materialize` (optionally append specific primary IDs). This eagerly fills the same object store. A fully materialized pack no longer needs its Workshop folder to play, but **always requires the stock game**. Budget disk space before doing this. Neither build mode deletes any Steam files. Updating packs leaves old objects in place; to start over, stop the library and delete only its generated library directory, then rebuild. Browser saves are separate.
+
+The default output is `%LOCALAPPDATA%/EaWBrowserUniversal/library-v1` on Windows (home directory fallback); set `SWR_UNIVERSAL_LIBRARY` to use another private disk. Keep the directory outside the repo and Steam installs. Generated manifests, mod metadata and payloads are local; this repo distributes only the builder, launcher and synthetic tests. Do not redistribute the generated library without the relevant rights and permissions.
+
+### What was verified
+
+For the six installed primary versions in the first import, the effective mod layers totalled **117.56 GiB**, with **76.02 GiB** of distinct payloads by SHA-256: **41.54 GiB (35.3%)** need not be copied twice, including duplicates within as well as between profiles. This is a comparison with six *separate expanded mod-layer copies*, not observed free disk, a smaller Steam download, or a performance claim. It excludes stock, manifests and filesystem overhead.
+
+For all six, the full mounted virtual key sets and sizes matched a direct stock + parent mount in English and German; 35 representative whole mod files also matched byte-for-byte. `npm run test:universal-library` checks synthetic cross-profile sharing, divergent scripts, tombstones, MEG and loose inputs, TGA lookup, ranged reads, stale/corrupt bytes, and reading a fully materialized pack with no parents present. A Chrome smoke test also launched stock and all six packs from the library, checked the mounted primary ID, reached each game menu, returned to the library and ended the session. These checks do not establish complete campaign or multiplayer parity.

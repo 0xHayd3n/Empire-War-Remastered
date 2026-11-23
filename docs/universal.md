@@ -1,6 +1,6 @@
 # Universal remaster experiments
 
-`universal` is the test branch for improvements that belong in the browser engine, not in a required mod pack. Start with an unmodified copy of Empire at War or Forces of Corruption. Workshop collections are optional workloads; their art direction, models, textures, audio, scripts and balance stay with their authors. Existing mods use the same files and load order as before. There is no new manifest for authors to maintain.
+`universal` is the test branch for improvements that belong in the browser engine, not in a required mod pack. Start with an unmodified copy of Empire at War or Forces of Corruption. Workshop collections are optional workloads; their art direction, models, textures, audio, scripts and balance stay with their authors. Existing mods use the same files and load order as before. There is no new manifest for authors to maintain. For the opt-in single-launch library that builds six local stripped-back profiles, see [Universal campaign library](universal-library.md).
 
 ## First change: generate missing texture detail levels with less RAM
 

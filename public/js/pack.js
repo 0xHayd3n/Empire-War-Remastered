@@ -3,7 +3,7 @@ import { reloadPage } from './leaveguard.js';
 
 export async function startServiceWorker({ mayReload = () => true } = {}) {
   if (!('serviceWorker' in navigator)) return false;
-  if (inApp()) {
+  if (inApp() || globalThis.document?.querySelector('meta[name="swr-universal"]')) {
     try {
       for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
     } catch {}

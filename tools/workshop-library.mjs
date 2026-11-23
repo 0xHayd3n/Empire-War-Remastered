@@ -81,5 +81,5 @@ export function readLibrary(libraries = steamLibraries(), profileDir = process.e
   }
   for (const m of items.values()) if (!grouped.has(m.id)) card(m.name, m.id, [m.id], [], false);
   cards.sort((a,b) => Number(b.saved) - Number(a.saved) || a.name.localeCompare(b.name));
-  return { game, items, cards, skipped };
+  return { game, items, cards, skipped, ambiguous };
 }

@@ -32,7 +32,7 @@ function findCaseInsensitive(root, rel) {
 const EXPANSION_DIRS = ['corruption', 'EAWX'],
   GAME_EXES = ['StarWarsG.exe', 'swfoc.exe', 'sweaw.exe'];
 
-export function openGame(gameDir, mods = [], { language = 0, expansion = true } = {}) {
+export function openGame(gameDir, mods = [], { language = 0, expansion = true, packedLayer = null, collectMod = null } = {}) {
   language = languageId(language) ?? 0;
   const languages = new Map();
   const layers = [];
@@ -91,6 +91,7 @@ export function openGame(gameDir, mods = [], { language = 0, expansion = true } 
   }
 
   for (const name of ['GameData', ...(expansion ? EXPANSION_DIRS : [])]) {
+    if (!gameDir) break;
     const root = findCaseInsensitive(gameDir, name);
     if (!root || !fs.existsSync(path.join(root, 'Data', 'megafiles.xml'))) continue;
     const archives = megList(root, language);
@@ -105,17 +106,23 @@ export function openGame(gameDir, mods = [], { language = 0, expansion = true } 
     mount(indexLoose(root));
   }
 
+  const mountMod = entries => {
+    if (collectMod) for (const [key, value] of entries) collectMod.set(key, value);
+    mount(entries);
+  };
   for (const root of mods) {
     const list = findCaseInsensitive(root, 'Data/megafiles.xml');
     if (list)
       for (const m of fs.readFileSync(list, 'latin1').matchAll(/<File>\s*([^<]+?)\s*<\/File>/g)) {
         const f = findCaseInsensitive(root, m[1].replace(/\\/g, '/'));
-        if (f && !fds.has(f)) mount(readMegIndex(f));
+        if (f && !fds.has(f)) mountMod(readMegIndex(f));
       }
-    mount(indexLoose(root, path.basename(findCaseInsensitive(root, 'Data') || 'Data')));
+    mountMod(indexLoose(root, path.basename(findCaseInsensitive(root, 'Data') || 'Data')));
   }
+  if (packedLayer) mount(packedLayer);
 
   for (const root of expansion ? [...EXPANSION_DIRS, 'GameData'] : ['GameData']) {
+    if (!gameDir) break;
     const exe = GAME_EXES.map(name => findCaseInsensitive(gameDir, root + '/' + name)).find(Boolean);
     if (!exe) continue;
     const d = fs.readFileSync(exe);
@@ -188,6 +195,7 @@ export function openGame(gameDir, mods = [], { language = 0, expansion = true } 
       read(key) {
         const e = index.get(key);
         if (!e) return null;
+        e.ensure?.();
         if (e.file && e.off !== undefined) {
           const fd = fs.openSync(e.file, 'r'),
             b = Buffer.allocUnsafe(e.size);
@@ -203,6 +211,7 @@ export function openGame(gameDir, mods = [], { language = 0, expansion = true } 
       readPart(key, start, len) {
         const e = index.get(key);
         if (!e) return null;
+        e.ensure?.();
         len = Math.max(0, Math.min(len, e.size - start));
         const buf = Buffer.allocUnsafe(len),
           at = (e.off || 0) + start;

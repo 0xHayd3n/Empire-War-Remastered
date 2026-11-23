@@ -28,6 +28,7 @@ function cleanMod(mod) {
   if (mod.workshop) out.workshop = String(mod.workshop);
   if (mod.version) out.version = String(mod.version);
   if (mod.files) out.files = mod.files;
+  if (mod.packRevision) out.packRevision = mod.packRevision;
   return out;
 }
 
@@ -70,7 +71,7 @@ export function contentDifferences(saved, running) {
     const here = runningByKey.get(modKey(mod));
     if (!here) out.push(`missing ${mod.name}${mod.version ? ' ' + mod.version : ''}`);
     else if (mod.version && here.version && mod.version !== here.version) out.push(`${mod.name} ${mod.version} save, running ${here.version}`);
-    else if (mod.files && here.files && mod.files !== here.files) out.push(`${mod.name} changed since the save`);
+    else if ((mod.packRevision && here.packRevision && mod.packRevision !== here.packRevision) || (mod.files && here.files && mod.files !== here.files)) out.push(`${mod.name} changed since the save`);
   }
   for (const mod of runningMods) if (!savedKeys.has(modKey(mod))) out.push(`${mod.name} is loaded but was not in the save`);
   const sameSet = savedMods.length === runningMods.length && savedMods.every(mod => runningByKey.has(modKey(mod)));

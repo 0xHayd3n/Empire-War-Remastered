@@ -3408,7 +3408,7 @@ async function boot() {
         return openMainCampaignMenu({start,cancel:back,audio});
       }
       const { openUniversalCampaign } = await import('./game/universalcampaign.js');
-      return openUniversalCampaign({ profileId, back, start });
+      return openUniversalCampaign({ profileId, host: universalHost, back, start });
     }});
   }
   const mainMenu = async () => {
@@ -3488,6 +3488,14 @@ async function boot() {
     return;
   }
   if (topFrame()) watchForResume(() => window.game);
+  // Preparing another storyline only opens its setup board. Do not consume a staged save/start on its origin.
+  if (universal && params.get('universal-prepare') === '1' && params.get('universal-mode') === 'conquest') {
+    history.replaceState(null, '', location.pathname);
+    hideSplash();
+    const ok = await universal.run('conquest');
+    window.parent.postMessage({kind: ok ? 'universal-board-ready' : 'universal-board-failed', id:profileId || 'stock'}, universalHost);
+    return;
+  }
   let pending = null;
   try {
     pending = sessionStorage.getItem('swr-load');

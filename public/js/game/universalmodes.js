@@ -7,7 +7,7 @@ const names = {
   instant: 'Instant Battle',
   load: 'Load game'
 };
-const periods = {
+export const periods = {
   stock: 'Galactic Civil War',
   3417277973: 'Old Republic',
   1976399102: 'Clone Wars',
@@ -16,7 +16,7 @@ const periods = {
   1770851727: 'Galactic Civil War',
   1125571106: 'New Republic'
 };
-const chronology = ['Old Republic', 'Clone Wars', 'Galactic Civil War', 'New Republic'];
+export const chronology = ['Old Republic', 'Clone Wars', 'Galactic Civil War', 'New Republic'];
 const briefing = {
   stock: 'The Empire, Rebellion and Zann Consortium contest the galaxy in Forces of Corruption.',
   3417277973: 'Return to the age of the Old Republic, from the Mandalorian Wars to the Jedi Civil War.',
@@ -82,6 +82,7 @@ export function universalModeNavigation({ setup, current, host }) {
   };
   const pick = async (mode, back = localModes) => {
     if (!eraMode(mode)) return;
+    if (mode === 'conquest') return run(mode, back);
     close();
     let selected,
       closed = false,
@@ -147,11 +148,7 @@ export function universalModeNavigation({ setup, current, host }) {
             sheet.info(
               (briefing[r.id] || r.name) +
                 '\n' +
-                (r.ready
-                  ? mode === 'conquest'
-                    ? 'Continue to faction, campaign map and difficulty.'
-                    : 'Continue to ' + names[mode] + '.'
-                  : 'Not built locally. Choose another storyline or build this pack.')
+                (r.ready ? 'Continue to ' + names[mode] + '.' : 'Not built locally. Choose another storyline or build this pack.')
             );
           });
         }
@@ -165,12 +162,12 @@ export function universalModeNavigation({ setup, current, host }) {
     close();
     const again = () => pick(mode, back);
     try {
-      const ok = await setup(mode, again);
-      if (ok !== false) return;
+      const ok = await setup(mode, mode === 'conquest' ? back : again);
+      if (ok !== false) return true;
     } catch (e) {
       console.warn('Universal mode setup', e);
     }
-    const d = open('UNIVERSAL · ' + names[mode].toUpperCase(), 'Setup unavailable', again);
+    const d = open('UNIVERSAL · ' + names[mode].toUpperCase(), 'Setup unavailable', mode === 'conquest' ? back : again);
     d.querySelector('[role=status]').textContent =
       `This era could not open ${names[mode]}. Its listed campaigns are available under Galactic Conquest.`;
   };

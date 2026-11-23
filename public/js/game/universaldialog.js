@@ -1,9 +1,8 @@
-// Universal adds two pages to the game's dialog system. Skin, sprites and fonts always come from
-// the current VFS; control coordinates below describe new pages, not copies of mod resources.
+// Shared native controls and the era picker for non-conquest modes. Skin, sprites and fonts
+// always come from the current VFS; these coordinates do not copy mod resources.
 import { openDialog } from './dialogs.js';
 
 export const staging = 'IDD_CUSTOM_CAMPAIGN_STAGING_DIALOG';
-const advanced = 'IDD_CAMPAIGN_ADVANCED_OPTIONS_DIALOG';
 const left = 'IDC_STAGING_MAP_LIST',
   right = 'UC_VALUES',
   description = 'IDC_CAMPAIGN_DESCRIPTION',
@@ -139,7 +138,7 @@ function plainSheet() {
 }
 export async function openChoiceSheet({ screen, heading, context, section, backLabel = 'Back', nextLabel = 'Continue', back, next }) {
   const dlg =
-    (await openDialog(screen === 'rules' ? advanced : staging, {
+    (await openDialog(staging, {
       ...nativeSkin,
       anchor: 0,
       size: { w: 855, h: 515 },

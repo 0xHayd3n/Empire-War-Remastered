@@ -174,6 +174,25 @@ export async function openCampaignMenu({ start, cancel = null, audio = null, tut
 export async function campaignOptionsDialog(st, campaign, faction, dialogOptions = {}) {
   const dlg = await openDialog('IDD_CAMPAIGN_ADVANCED_OPTIONS_DIALOG', { modal: true, nativeImages: true, nativeFonts: true, ...dialogOptions });
   if (!dlg) return false;
+  const reset = bindCampaignSettings(dlg, st, campaign, faction);
+  return new Promise(done => {
+    const finish = accepted => {
+      removeEventListener('keydown', escape, true);
+      dlg.close();
+      done(accepted);
+    };
+    const escape = e => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(false); }
+    };
+    addEventListener('keydown', escape, true);
+    dlg.on('IDC_BUTTON_ACCEPT', () => finish(true));
+    dlg.on('IDC_CANCEL_BUTTON', () => finish(false));
+    dlg.on('IDC_DEFAULTS_BUTTON', reset);
+  });
+}
+
+// Same settings and slot mapping for the authored modal and the inline Universal board.
+export function bindCampaignSettings(dlg, st, campaign, faction) {
   const limits = campaignLimits(campaign),
     { lo, hi, adj } = techRange(limits, faction),
     steps = Math.max(1, hi - lo + 1),
@@ -243,23 +262,7 @@ export async function campaignOptionsDialog(st, campaign, faction, dialogOptions
   dlg.show('IDC_ALLOW_RANDOM_EVENTS', false);
   dlg.enable('IDC_ALLOW_RANDOM_EVENTS', false);
   show();
-  return new Promise(done => {
-    const finish = accepted => {
-      removeEventListener('keydown', escape, true);
-      dlg.close();
-      done(accepted);
-    };
-    const escape = e => {
-      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(false); }
-    };
-    addEventListener('keydown', escape, true);
-    dlg.on('IDC_BUTTON_ACCEPT', () => finish(true));
-    dlg.on('IDC_CANCEL_BUTTON', () => finish(false));
-    dlg.on('IDC_DEFAULTS_BUTTON', () => {
-      Object.assign(st, campaignDefaults(campaign, faction));
-      show();
-    });
-  });
+  return () => { Object.assign(st, campaignDefaults(campaign, faction)); show(); };
 }
 
 let blipTexture = null;

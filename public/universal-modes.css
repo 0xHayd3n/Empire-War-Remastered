@@ -1,3 +1,15 @@
+.uc-plain-board {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 14px;
+}
+.uc-plain-board [hidden] {
+  display: none !important;
+}
+.uc-plain-board [data-id='IDC_CAMPAIGN_DESCRIPTION'] {
+  max-height: 200px;
+  white-space: pre-line;
+}
 /* The staging renderer supplies all skin artwork. Only Universal behaviour belongs here. */
 .uc-window {
   z-index: 205;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { openGame } from './megfs.mjs';
-const archive = openGame(fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)), []);
+const archive = openGame(process.env.SWR_GAME || fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)), []);
 globalThis.fetch = async input => {
   const key = archive.resolve(decodeURIComponent(String(input).replace(/^asset\//, '').split('?')[0])),
     data = key && archive.read(key);

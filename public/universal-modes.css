@@ -1,3 +1,27 @@
+/* The staging renderer supplies all skin artwork. Only Universal behaviour belongs here. */
+.uc-window {
+  z-index: 205;
+}
+.uc-window[hidden] {
+  display: none !important;
+}
+.uc-window .uc-briefing {
+  overflow: auto;
+  pointer-events: auto !important;
+  scrollbar-width: thin;
+}
+.uc-window :focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: 2px;
+}
+.uc-fallback section {
+  display: grid;
+  margin: 12px 0;
+}
+.uc-fallback footer {
+  display: flex;
+  justify-content: space-between;
+}
 .era-panel {
   color-scheme: dark;
   box-sizing: border-box;

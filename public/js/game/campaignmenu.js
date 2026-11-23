@@ -141,9 +141,8 @@ export async function openCampaignMenu({ start, cancel = null, audio = null, tut
     dlg.setText('IDC_CAMPAIGN_DESCRIPTION', '');
     refresh();
   }
-  const image = dlg.ctl('IDC_IMAGE') && (await loadTextureCanvas('Galactic_Back.tga').catch(() => null));
+  await campaignBackdrop(dlg);
   if (closed) return false;
-  if (image) dlg.setImage('IDC_IMAGE', image.toDataURL());
   dlg.on('IDC_CANCEL_BUTTON', back);
   dlg.on('IDC_PLAY_BUTTON', play);
   dlg.on('IDC_SELECT_OPTIONS', async () => {
@@ -172,8 +171,8 @@ export async function openCampaignMenu({ start, cancel = null, audio = null, tut
   return true;
 }
 
-export async function campaignOptionsDialog(st, campaign, faction) {
-  const dlg = await openDialog('IDD_CAMPAIGN_ADVANCED_OPTIONS_DIALOG', { modal: true, nativeImages: true, nativeFonts: true });
+export async function campaignOptionsDialog(st, campaign, faction, dialogOptions = {}) {
+  const dlg = await openDialog('IDD_CAMPAIGN_ADVANCED_OPTIONS_DIALOG', { modal: true, nativeImages: true, nativeFonts: true, ...dialogOptions });
   if (!dlg) return false;
   const limits = campaignLimits(campaign),
     { lo, hi, adj } = techRange(limits, faction),
@@ -245,14 +244,17 @@ export async function campaignOptionsDialog(st, campaign, faction) {
   dlg.enable('IDC_ALLOW_RANDOM_EVENTS', false);
   show();
   return new Promise(done => {
-    dlg.on('IDC_BUTTON_ACCEPT', () => {
+    const finish = accepted => {
+      removeEventListener('keydown', escape, true);
       dlg.close();
-      done(true);
-    });
-    dlg.on('IDC_CANCEL_BUTTON', () => {
-      dlg.close();
-      done(false);
-    });
+      done(accepted);
+    };
+    const escape = e => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(false); }
+    };
+    addEventListener('keydown', escape, true);
+    dlg.on('IDC_BUTTON_ACCEPT', () => finish(true));
+    dlg.on('IDC_CANCEL_BUTTON', () => finish(false));
     dlg.on('IDC_DEFAULTS_BUTTON', () => {
       Object.assign(st, campaignDefaults(campaign, faction));
       show();
@@ -290,15 +292,21 @@ function neutralColor() {
   return [c[0] ?? 100, c[1] ?? 100, c[2] ?? 100];
 }
 
-async function drawCampaignPreview(dlg, campaign) {
-  const host = dlg.ctl('IDC_IMAGE');
+export async function campaignBackdrop(dlg) {
+  const image = dlg.ctl('IDC_IMAGE') && (await loadTextureCanvas('Galactic_Back.tga').catch(() => null));
+  if (image && dlg.veil.isConnected) dlg.setImage('IDC_IMAGE', image.toDataURL());
+}
+
+export async function drawCampaignPreview(dlg, campaign) {
+  const ctl = dlg.ctl('IDC_IMAGE'), host = ctl?._image || ctl;
   if (!host || typeof document === 'undefined') return;
+  const request = (host._previewRequest = Symbol());
   host.querySelector(':scope > .campaign-preview')?.remove();
   if (!campaign) return;
   const name = await previewBlipTexture(),
     rect = iconCanvasRect(name),
     atlas = iconAtlas();
-  if (!rect || !atlas) return;
+  if (!rect || !atlas || host._previewRequest !== request || !host.isConnected) return;
   const blip = document.createElement('canvas');
   blip.width = rect.w;
   blip.height = rect.h;

@@ -651,6 +651,7 @@ async function nativeList(parent, id, c) {
       const e = document.createElement('div');
       e.className = 'dlg-native-row';
       e.setAttribute('role', 'option');
+      if (row.label) e.setAttribute('aria-label', row.label);
       e.tabIndex = 0;
       e.style.cssText = `position:relative;left:${-inset.left}px;width:${c.w - sw - ix}px;height:${rowHeight}px;cursor:pointer;white-space:nowrap`;
       visible.set(i, e);
@@ -837,6 +838,8 @@ export async function openDialog(
     nativeFrame = nativeFonts,
     stretch = nativeFonts,
     extra = null,
+    literalText = false,
+    controls = null, // optional replacement layout, still drawn with this dialog's mounted skin
     size = null,
     scroll = null
   } = {}
@@ -844,7 +847,7 @@ export async function openDialog(
   if (!data) await loadDialogs();
   const original = data && data.dialogs.get(id);
   if (!original) return null;
-  const resource = extra?.length || size ? { ...original, ...size, controls: [...original.controls, ...(extra || [])] } : original;
+  const resource = controls || extra?.length || size ? { ...original, ...size, controls: [...(controls || original.controls), ...(extra || [])] } : original;
   anchor ??= at ? 0 : (ENGINE_ANCHOR[id] ?? 0);
   if (anchor === 9 && !stretch) anchor = 0;
   if (anchor >= 1 && anchor <= 8) at = await anchorAt(id, anchor, resource.w, resource.h);
@@ -924,7 +927,7 @@ export async function openDialog(
   const firstControl = el.children.length;
   for (const c0 of dlg.controls) {
     const c = (adjust && adjust(c0)) || c0;
-    const text = /^TEXT_/.test(c.text) ? db.t(c.text) || '' : '';
+    const text = /^TEXT_/.test(c.text) ? db.t(c.text) || '' : literalText && /^(L|C|R)TEXT$/.test(c.kind) ? c.text : '';
     let d;
     if (c.kind === 'PUSHBUTTON' || c.kind === 'DEFPUSHBUTTON') {
       d = box(el, 'dlg-btn', c.x, c.y, c.w, c.h);
@@ -1529,10 +1532,11 @@ export async function openDialog(
           options.find(o => String(o.value) === String(v))
         );
       };
-      const close = () => {
+      c._closeDrop?.();
+      const close = (c._closeDrop = () => {
         c._drop.hidden = true;
         removeEventListener('mousedown', away, true);
-      };
+      });
       const away = ev => {
         if (!c.contains(ev.target) && !c._drop.contains(ev.target)) close();
       };
@@ -1633,6 +1637,7 @@ export async function openDialog(
     close() {
       layoutVersion++;
       unsubscribeLanguage();
+      for (const c of ctls.values()) c._closeDrop?.();
       refreshers.clear();
       sources.clear();
       removeEventListener('resize', resize);

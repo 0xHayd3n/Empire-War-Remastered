@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { db, ObjType } from '../public/js/gamedata.js';
-import { campaignChoices, ruleChoices } from '../public/js/game/universalcampaign.js';
+import { campaignChoices } from '../public/js/game/universalcampaign.js';
+import { ruleChoices, rulePresets } from '../public/js/game/universalrulemenu.js';
 import { beginUniversalRules, restoreUniversalRules } from '../public/js/game/universalrules.js';
 import { creditCap } from '../public/js/game/galacticeconomy.js';
 import { changeController, stepPolitics } from '../public/js/game/galacticpolitics.js';
@@ -40,6 +41,18 @@ assert.deepEqual(
     45
   ),
   [[95, ['One', 'Two']]]
+);
+assert.deepEqual(
+  rulePresets(
+    [
+      { name: 'Base', values: { treasury: 45, politics: 7 } },
+      { name: 'A', values: { treasury: 45, politics: 90 } },
+      { name: 'B', values: { treasury: 45, politics: 90 } },
+      { name: 'Incomplete', values: { treasury: 66 } }
+    ],
+    { treasury: 45, politics: 7 }
+  ).map(p => [p.label, p.options]),
+  [['A / B', { politics: 90 }]]
 );
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'campaign-rules-'));
 try {

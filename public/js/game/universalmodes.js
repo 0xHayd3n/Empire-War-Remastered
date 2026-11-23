@@ -1,4 +1,5 @@
 // Navigation inside the live game. Only the host may resolve a known era ID to its local content origin.
+import { openChoiceSheet } from './universaldialog.js';
 const names = {
   conquest: 'Galactic Conquest',
   story: 'Story campaign',
@@ -14,6 +15,16 @@ const periods = {
   1397421866: 'Galactic Civil War',
   1770851727: 'Galactic Civil War',
   1125571106: 'New Republic'
+};
+const chronology = ['Old Republic', 'Clone Wars', 'Galactic Civil War', 'New Republic'];
+const briefing = {
+  stock: 'The Empire, Rebellion and Zann Consortium contest the galaxy in Forces of Corruption.',
+  3417277973: 'Return to the age of the Old Republic, from the Mandalorian Wars to the Jedi Civil War.',
+  1976399102: 'Follow the Republic and the Separatist crisis through the final years of the Republic.',
+  3387971722: 'Command the Republic or its rivals in Awakening’s take on the Clone Wars.',
+  1397421866: 'Fight for control of the galaxy in Awakening’s Galactic Civil War campaigns.',
+  1770851727: 'Explore the Galactic Civil War through Remake’s fleet and faction campaigns.',
+  1125571106: 'In the aftermath of Endor, the New Republic and Imperial successor states struggle for control.'
 };
 export const eraMode = mode => Object.hasOwn(names, mode);
 export function universalModeNavigation({ setup, current, host }) {
@@ -71,53 +82,83 @@ export function universalModeNavigation({ setup, current, host }) {
   };
   const pick = async (mode, back = localModes) => {
     if (!eraMode(mode)) return;
-    const d = open('SINGLE PLAYER · ' + names[mode].toUpperCase(), 'Choose your era', back),
-      status = d.querySelector('[role=status]');
-    status.textContent = 'Reading available eras…';
+    close();
+    let selected,
+      closed = false,
+      busy = false;
+    const sheet = await openChoiceSheet({
+      screen: 'eras',
+      heading: names[mode] + ' — Choose your era',
+      context: 'Select a time period, then a storyline.',
+      section: 'Time period',
+      back: () => {
+        if (!busy) {
+          finish();
+          back();
+        }
+      },
+      next: () => {
+        if (busy || !selected?.ready) return;
+        if (selected.id === current) {
+          finish();
+          run(mode, back);
+          return;
+        }
+        if (window.parent === window) {
+          sheet.info('Open the Universal game window to change eras.');
+          return;
+        }
+        busy = sheet.el.inert = true;
+        sheet.info('Loading ' + selected.name + '…');
+        addEventListener('message', onError);
+        window.parent.postMessage({ kind: 'universal-select', id: selected.id, mode }, host);
+      }
+    });
+    function finish() {
+      closed = true;
+      removeEventListener('message', onError);
+      sheet.close();
+    }
+    function onError(e) {
+      if (e.source !== window.parent || e.origin !== host || e.data?.kind !== 'universal-error') return;
+      removeEventListener('message', onError);
+      busy = sheet.el.inert = false;
+      sheet.info(e.data.error);
+      sheet.focus();
+    }
+    sheet.allow(false);
+    sheet.info('Reading available eras…');
     try {
       const r = await fetch('/api/universal/eras');
       if (!r.ok) throw Error('Era catalog is unavailable.');
       const rows = await r.json();
-      if (panel !== d) return;
-      status.textContent =
-        mode === 'conquest' ? 'Next: choose your faction, campaign and optional rules.' : `Choose the setting for ${names[mode]}.`;
-      for (const { id, name, ready } of rows) {
-        const b = button(
-          d.querySelector('.era-choices'),
-          name,
-          async () => {
-            if (id === current) {
-              close();
-              await run(mode, back);
-              return;
-            }
-            if (window.parent === window) {
-              status.textContent = 'Open the Universal game window to change eras.';
-              return;
-            }
-            const onError = e => {
-              if (e.source === window.parent && e.origin === host && e.data?.kind === 'universal-error') {
-                status.textContent = e.data.error;
-                for (const el of d.querySelectorAll('[data-ready]')) el.disabled = false;
-                d.querySelector('footer button').disabled = false;
-                removeEventListener('message', onError);
-              }
-            };
-            addEventListener('message', onError);
-            status.textContent = `Loading ${name}…`;
-            for (const el of d.querySelectorAll('button')) el.disabled = true;
-            window.parent.postMessage({ kind: 'universal-select', id, mode }, host);
-          },
-          !ready
-        );
-        b.dataset.era = id;
-        if (ready) b.dataset.ready = '';
-        const meta = document.createElement('span');
-        meta.textContent = ready ? periods[id] || '' : 'Not built locally';
-        b.prepend(meta);
-      }
+      if (closed) return;
+      sheet.sections(
+        chronology.filter(p => rows.some(r => periods[r.id] === p)).map(p => ({ key: p, label: p })),
+        periods[current],
+        ({ key: p }) => {
+          const stories = rows
+            .filter(r => periods[r.id] === p)
+            .map(r => ({ ...r, key: r.id, label: r.ready ? r.name : r.name + ' (not built)' }));
+          const first = stories.find(r => r.id === current) || stories.find(r => r.ready) || stories[0];
+          sheet.values('Storyline', stories, first.key, r => {
+            selected = r;
+            sheet.allow(r.ready);
+            sheet.info(
+              (briefing[r.id] || r.name) +
+                '\n' +
+                (r.ready
+                  ? mode === 'conquest'
+                    ? 'Continue to faction, campaign map and difficulty.'
+                    : 'Continue to ' + names[mode] + '.'
+                  : 'Not built locally. Choose another storyline or build this pack.')
+            );
+          });
+        }
+      );
+      sheet.focus();
     } catch (e) {
-      status.textContent = e.message;
+      if (!closed) sheet.info(e.message);
     }
   };
   const run = async (mode, back = () => home(mode === 'load' ? 'title' : 'modes')) => {

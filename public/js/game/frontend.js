@@ -21,7 +21,7 @@ export class FrontEnd {
     this.openLobbies = multiplayer;
     this.depth = 0;
     this.onKey = e => {
-      if (this.universal && document.querySelector('.era-panel[open], #universal-campaign')) return;
+      if (this.universal && document.querySelector('.era-panel[open], [data-universal-screen]')) return;
       const top = this.menus.stack[this.menus.stack.length - 1];
       if (e.code === 'Escape' && !this.menus.listening && this.menus.stack.length > 1 && top.veil.style.display !== 'none') {
         e.stopPropagation();

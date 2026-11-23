@@ -240,6 +240,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     }
     ui.allow(!!v);
     ui.el.dataset.campaign = v?.id || '';
+    ui.context.textContent = [p.name, p.facts[faction]?.label].filter(Boolean).join('  /  ');
     ui.title.textContent = (row?.label || p.name) + (v?.date ? '  /  ' + v.date : '');
     ui.summary.textContent =
       (row?.description || (row ? '' : 'No listed campaigns in this storyline.')).replace(/\\n/g, '\n') +

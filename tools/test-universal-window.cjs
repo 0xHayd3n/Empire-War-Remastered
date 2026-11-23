@@ -48,6 +48,13 @@ const assert = require('node:assert/strict'),
     const board = f.locator('[data-universal-screen="campaign"]'),
       field = k => board.locator(`[data-field="${k}"]`);
     await field('story').waitFor();
+    // Escape dismisses the drawer before leaving setup, and re-entry creates exactly one plate.
+    await board.getByRole('button', { name: 'Close configuration' }).click();
+    await page.keyboard.press('Escape');
+    await board.waitFor({ state: 'detached' });
+    await f.locator('[data-id="IDC_CUSTOM_CAMPAIGN_BUTTON"]').click();
+    await field('story').waitFor();
+    assert.equal(await board.count(), 1);
     const root = await board.evaluate(e => (e.marker = crypto.randomUUID()));
     let docs = 0,
       mounts = 0,
@@ -108,7 +115,43 @@ const assert = require('node:assert/strict'),
     assert.equal(docs, 0);
     assert.equal(mounts, 0);
     assert.equal(assets, 0);
-    if (process.env.SWR_TEST_SCREENSHOTS) await page.screenshot({ path: path.join(process.env.SWR_TEST_SCREENSHOTS, 'fall-atlas.png') });
+    const snap = async name => {
+      if (process.env.SWR_TEST_SCREENSHOTS) await page.screenshot({ path: path.join(process.env.SWR_TEST_SCREENSHOTS, name + '.png') });
+    };
+    const toggle = board.getByRole('button', { name: 'Configure' }),
+      drawer = board.locator('.uc-drawer'),
+      chart = board.getByRole('group', { name: 'Starting galaxy map' });
+    const fullBleed = () =>
+      chart.evaluate(e => {
+        const r = e.getBoundingClientRect();
+        return r.x === 0 && r.y === 0 && r.width === innerWidth && r.height === innerHeight;
+      });
+    assert(await fullBleed());
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
+    await field('story').scrollIntoViewIfNeeded();
+    await snap('fall-atlas');
+    await board.getByRole('button', { name: 'Close configuration' }).click();
+    await drawer.waitFor({ state: 'hidden' });
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+    assert(await fullBleed());
+    assert.equal(await board.getAttribute('data-campaign'), target);
+    await board.locator('.uc-owners > summary').click();
+    assert((await board.locator('.uc-map-key span').count()) > 1);
+    await snap('map-only');
+    await board.locator('.uc-owners > summary').click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert(await fullBleed());
+    await snap('compact-map');
+    await toggle.click();
+    assert.equal(await field('difficulty').inputValue(), 'hard');
+    await field('story').focus();
+    await page.keyboard.press('Escape');
+    await drawer.waitFor({ state: 'hidden' });
+    assert.equal(await toggle.evaluate(e => e === document.activeElement), true);
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await toggle.click();
+    assert.equal(await field('treasury').inputValue(), cap);
+    assert.equal(await board.getAttribute('data-campaign'), target);
     const mountUrl = `**/api/mount/${process.env.SWR_TEST_THR ? '1125571106' : '1976399102'}`;
     await page.route(mountUrl, r => r.fulfill({ status: 409, body: 'Test mount unavailable' }));
     await board.getByRole('button', { name: 'Start campaign' }).click();

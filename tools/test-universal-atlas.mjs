@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { mapFamilies, mapStart } from '../public/js/game/universalmaplist.js';
+import { yearStops, nearestStop } from '../public/js/game/universalyeartrack.js';
 import { eraTimeline, startWithin } from '../public/js/game/universaltimeline.js';
 import { launchPlan } from './universal-atlas.mjs';
 import { menuTable, thrawnSelections } from './universal-loader-table.mjs';
@@ -129,6 +130,16 @@ for (const family of mapFamilies(profile))
       assert.equal(setup.faction, s.row.faction);
     }
 // Exact starts survive era/period filtering, including maps with identical labels across packs.
+const uneven = yearStops(['3964 BBY', 'Scenario starts', '3959 BBY', '3957 BBY', '3962 BBY'].map(label => ({ label })));
+assert.deepEqual(
+  uneven.map(s => s.at),
+  [0, 2 / 7, 5 / 7, 1]
+);
+assert.equal(nearestStop(uneven, -3960).period.label, '3959 BBY');
+assert.deepEqual(
+  yearStops(['4 ABY', '12 ABY', '11.5 ABY', '20 - 19 BBY', 'Pre-Clone Wars'].map(label => ({ label }))).map(s => s.at),
+  [0, 7.5 / 8, 1]
+);
 const fall = { ...profile, id: '1976399102' },
   awakening = { ...profile, id: '3387971722', rows: [row('script', '', 'Red', [['loader', 'Original in-game selector']])] },
   old = { ...profile, id: '3417277973', rows: [row('base-b', 'A', 'Blue', [['b22', '22 BBY']])] };

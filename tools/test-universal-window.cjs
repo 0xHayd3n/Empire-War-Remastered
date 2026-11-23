@@ -58,7 +58,15 @@ const assert = require('node:assert/strict'),
       eras = board.getByRole('group', { name: 'Era', exact: true }),
       eraCard = name => eras.getByRole('button', { name, exact: true }),
       dates = board.getByRole('group', { name: 'Time period', exact: true }),
-      dateButton = label => dates.getByRole('button', { name: label, exact: true });
+      year = dates.getByRole('slider', { name: 'Starting year' }),
+      selectPeriod = async label => {
+        const tick = dates.locator(`[data-year="${label}"]`);
+        if (!(await tick.count())) return dates.getByRole('button', { name: label, exact: true }).click();
+        const { width, height } = await year.boundingBox();
+        const x = 8 + (width - 16) * (await tick.evaluate(e => parseFloat(e.style.left) / 100));
+        await year.click({ position: { x, y: height / 2 } });
+        assert.equal(await year.getAttribute('aria-valuetext'), label);
+      };
     await current.waitFor();
     // Escape leaves setup without a visible Back control.
     await page.keyboard.press('Escape');
@@ -74,7 +82,10 @@ const assert = require('node:assert/strict'),
       'Galactic Civil War',
       'New Republic'
     ]);
-    assert.equal(await eras.locator('img').count(), 4);
+    assert.equal(await eras.locator('img').count(), 5);
+    assert.match(await eraCard('Clone Wars').locator('img').getAttribute('src'), /clone-phase-iii\.svg$/);
+    assert.equal(await eraCard('Galactic Civil War').locator('img').count(), 2);
+    assert.equal(await year.count(), 0, 'undated era has no synthetic year axis');
     assert.equal(await eraCard('Galactic Civil War').getAttribute('aria-pressed'), 'true');
     assert.equal(await board.locator('.uc-map-list section').count(), 3);
     const root = await board.evaluate(e => (e.marker = crypto.randomUUID()));
@@ -100,7 +111,7 @@ const assert = require('node:assert/strict'),
         assert(await board.getByRole('button', { name: 'Start campaign' }).isDisabled());
       }
       const date = { 3417277973: '3964 BBY', 1976399102: '22 BBY', 1125571106: '4 ABY' }[id] || 'Scenario starts';
-      await dateButton(date).click();
+      await selectPeriod(date);
       await group(id).locator('.uc-map-choice').first().click();
       assert.equal(await board.getAttribute('data-profile'), id);
       assert.equal(await board.evaluate(e => e.marker), root);
@@ -134,50 +145,67 @@ const assert = require('node:assert/strict'),
     assert.match(await board.getAttribute('data-campaign'), /Rebel/i);
     await radio('faction', 'Empire').check();
     const fall = group('1976399102');
-    await dateButton('20 BBY').click();
+    await selectPeriod('20 BBY');
     await fall.getByRole('button', { name: /Known Galaxy - Medium/ }).click();
     assert.match(await board.getAttribute('data-campaign'), /Medium_Era_4_Empire/i);
-    assert.equal(await dateButton('20 BBY').getAttribute('aria-pressed'), 'true');
+    assert.equal(await year.getAttribute('aria-valuetext'), '20 BBY');
     await fall.getByRole('button', { name: /From the Ground Up/ }).click();
-    assert.equal(await dateButton('20 BBY').getAttribute('aria-pressed'), 'true');
-    await dateButton('21 BBY').click();
+    assert.equal(await year.getAttribute('aria-valuetext'), '20 BBY');
+    await selectPeriod('21 BBY');
     assert.equal(await board.getAttribute('data-campaign'), 'Sandbox_FTGU_Republic');
     await board.getByRole('button', { name: 'Reset settings' }).click();
-    assert.equal(await dateButton('19 BBY').getAttribute('aria-pressed'), 'true');
+    assert.equal(await year.getAttribute('aria-valuetext'), '19 BBY');
     assert.equal(await board.getAttribute('data-campaign'), 'Sandbox_FTGU_Republic');
     assert.equal(await fall.getByRole('button', { name: /Foerost Campaign/ }).count(), 0);
-    await dateButton('20 BBY').click();
+    await selectPeriod('20 BBY');
     await fall.getByRole('button', { name: /Foerost Campaign/ }).click();
     assert.match(await current.textContent(), /Foerost/);
     assert.equal(await group('3387971722').count(), 0);
-    await dateButton('21 BBY').click();
+    await selectPeriod('21 BBY');
     assert.equal(await current.count(), 0);
     assert(await board.getByRole('button', { name: 'Start campaign' }).isDisabled());
-    await dateButton('20 BBY').click();
+    await selectPeriod('20 BBY');
     await fall.getByRole('button', { name: /Known Galaxy - Small/ }).click();
-    assert.equal(await dateButton('20 BBY').getAttribute('aria-pressed'), 'true');
+    assert.equal(await year.getAttribute('aria-valuetext'), '20 BBY');
     await select('3417277973');
-    assert.equal(await dates.getByRole('button').count(), 5);
-    await dateButton('Scenario starts').click();
+    assert.equal(await dates.getByRole('button').count(), 1);
+    const stops = await dates.locator('[data-year]').evaluateAll(es => es.map(e => parseFloat(e.style.left) / 100));
+    assert(Math.abs(stops[1] - 2 / 7) < 1e-5);
+    assert(Math.abs(stops[2] - 5 / 7) < 1e-5);
+    await selectPeriod('Scenario starts');
     assert.equal(await current.count(), 0);
     await group('3417277973')
       .getByRole('button', { name: /Mandalorian Onslaught/ })
       .click();
     assert.match(await current.textContent(), /3964 - 3962 BBY/);
-    await dateButton('3959 BBY').click();
+    await year.focus();
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await year.getAttribute('aria-valuetext'), '3964 BBY');
+    assert.equal(await current.count(), 0);
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await year.getAttribute('aria-valuetext'), '3962 BBY');
+    const track = await year.boundingBox(),
+      pos = t => track.x + 8 + (track.width - 16) * t;
+    await page.mouse.move(pos(2 / 7), track.y + track.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(pos(0.64), track.y + track.height / 2, { steps: 8 });
+    await page.mouse.up();
+    assert.equal(await year.getAttribute('aria-valuetext'), '3959 BBY');
     assert.equal(await group('3417277973').locator('.uc-map-choice').count(), 1);
-    assert.equal(await dates.locator('button[aria-pressed="true"]').count(), 1);
+    assert.equal(await dates.locator('button[aria-pressed="true"]').count(), 0);
     await select('1397421866');
     if (process.env.SWR_TEST_ALL_ERAS) for (const id of ['1125571106', '3387971722', '1770851727', 'stock']) await select(id);
     await select('1976399102');
     await radio('faction', 'Empire').check();
     await fall.getByRole('button', { name: /Known Galaxy - Small/ }).click();
-    await dateButton('20 BBY').click();
+    await selectPeriod('20 BBY');
     if (process.env.SWR_TEST_THR) {
       await select('1125571106');
       await radio('faction', 'Empire').check();
       await group('1125571106').locator('[data-family="KnownSmall_Era_1_Rebel"]').click();
-      await dateButton('6 ABY').click();
+      await selectPeriod('11.5 ABY');
+      assert.equal(await year.inputValue(), '11.5');
+      await selectPeriod('6 ABY');
       const regimes = board.getByRole('group', { name: 'Starting variant' });
       await regimes.getByRole('button', { name: '6 ABY · Central Committee', exact: true }).click();
       assert.equal(await field('faction').getByRole('radio').count(), 1);

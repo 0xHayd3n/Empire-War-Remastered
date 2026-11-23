@@ -1,3 +1,4 @@
+import { calendarYear } from './universalyeartrack.js';
 import { chronology, periods as eraNames } from './universalmodes.js';
 import { mapFamilies, mapStart, techCalendar } from './universalmaplist.js';
 
@@ -9,23 +10,15 @@ export function periodOf(f, d) {
   if (techCalendar(f.p, d.choices[0].row) && d.label !== 'Campaign default') return d.label;
   return scenario;
 }
-const crests = {
-  'Old Republic': [['3417277973', 'Empire']],
-  'Clone Wars': [
-    ['1976399102', 'Rebel'],
-    ['3387971722', 'Rebel']
-  ],
-  'Galactic Civil War': [
-    ['stock', 'Empire'],
-    ['1397421866', 'Empire'],
-    ['1770851727', 'Empire']
-  ],
-  'New Republic': [['1125571106', 'Rebel']]
-};
-const time = label => {
-  const m = /^(\d+(?:\.\d+)?) (BBY|ABY)$/.exec(label);
-  return m ? Number(m[1]) * (m[2] === 'BBY' ? -1 : 1) : Infinity;
-};
+function eraArt(name, profiles, logo) {
+  const badge = (id, f) => profiles.get(id)?.facts[f]?.emblem;
+  if (name === 'Old Republic') return [logo || badge('3417277973', 'Empire')].filter(Boolean);
+  if (name === 'Clone Wars') return ['/art/clone-phase-iii.svg'];
+  if (name === 'New Republic') return [badge('1125571106', 'Rebel')].filter(Boolean);
+  const id = ['stock', '1397421866', '1770851727'].find(id => badge(id, 'Rebel') && badge(id, 'Empire'));
+  return id ? [badge(id, 'Rebel'), badge(id, 'Empire')] : [];
+}
+const time = label => calendarYear(label) ?? Infinity;
 export function eraTimeline(data) {
   const profiles = new Map(data.profiles.map(p => [p.id, p]));
   return chronology.map(name => {
@@ -53,7 +46,14 @@ export function eraTimeline(data) {
     const periods = [...by]
       .map(([label, maps]) => ({ label, maps }))
       .sort((a, b) => (a.label === scenario) - (b.label === scenario) || time(a.label) - time(b.label) || a.label.localeCompare(b.label));
-    return { name, periods, missing, first, emblem: crests[name].map(([id, f]) => profiles.get(id)?.facts[f]?.emblem).find(Boolean) };
+    return {
+      name,
+      periods,
+      missing,
+      first,
+      art: eraArt(name, profiles, data.swtorLogo),
+      wordmark: name === 'Old Republic' && !!data.swtorLogo
+    };
   });
 }
 // Only choose within the selected map and the filtered subset. Keep faction keys profile-local.

@@ -209,6 +209,26 @@ dialog.uc-atlas[open] {
   object-fit: contain;
   mix-blend-mode: screen;
 }
+.uc-era-art {
+  width: 100%;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+}
+.uc-era-art.wordmark img {
+  width: 95%;
+  height: 100%;
+  mix-blend-mode: normal;
+}
+.uc-era-art.opposed img {
+  width: 34%;
+  max-width: 30px;
+}
+.uc-era-card[data-era='Clone Wars'] img {
+  mix-blend-mode: normal;
+}
 .uc-era-mark {
   display: grid;
   place-items: center;
@@ -287,6 +307,90 @@ dialog.uc-atlas[open] {
 .uc-periods {
   flex-shrink: 0;
   padding: 1px 4px 4px;
+  container-type: inline-size;
+}
+.uc-year-value {
+  float: right;
+  font-variant-numeric: tabular-nums;
+  color: #f6d995;
+}
+.uc-year-scale {
+  position: relative;
+  width: 100%;
+  height: 40px;
+  flex: none;
+}
+.uc-year-ruler {
+  position: absolute;
+  inset: 0 8px;
+  pointer-events: none;
+}
+.uc-year-tick {
+  position: absolute;
+  top: 8px;
+  height: 14px;
+  width: 1px;
+  background: #bac3c7;
+}
+.uc-year-tick small {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font: 12px/1 var(--ui-font);
+  font-variant-numeric: tabular-nums;
+  color: #d5d8d8;
+}
+.uc-year-tick:first-child small {
+  left: -4px;
+  transform: none;
+}
+.uc-year-tick:last-child small {
+  left: auto;
+  right: -4px;
+  transform: none;
+}
+.uc-year-range {
+  appearance: none;
+  position: absolute;
+  inset: 0 0 auto;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.uc-year-range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(to right, #ddb668 var(--elapsed), #839298 var(--elapsed));
+}
+.uc-year-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6.5px;
+  border: 2px solid #ffe2a5;
+  border-radius: 50%;
+  background: #825e2c;
+  box-shadow: 0 0 6px #e0b05780;
+}
+.uc-year-range[data-dated='false']::-webkit-slider-thumb {
+  background: transparent;
+  border-style: dashed;
+  border-color: #b6c0c0;
+  box-shadow: none;
+}
+.uc-year-range:focus-visible {
+  outline: 2px solid #f0f3f2;
+  outline-offset: 1px;
+}
+@container (max-width:250px) {
+  .uc-year-scale.dense .uc-year-tick:not(:first-child, :last-child) small {
+    display: none;
+  }
 }
 .uc-roster .uc-periods button,
 .uc-roster .uc-branches button {
@@ -563,8 +667,17 @@ dialog.uc-atlas[open] {
     height: 20px;
     flex: none;
   }
+  .uc-roster .uc-era-card {
+    flex-direction: column;
+  }
+  .uc-era-art {
+    height: 24px;
+  }
+  .uc-era-art.opposed img {
+    max-width: 20px;
+  }
   .uc-periods {
-    max-height: 85px;
+    max-height: 114px;
     overflow-y: auto;
     scrollbar-width: thin;
   }

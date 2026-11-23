@@ -1,3 +1,4 @@
+import { yearTrack } from './universalyeartrack.js';
 const node = (tag, cls, text) => {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -25,15 +26,25 @@ export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickD
     branches = group('Starting variant', 'uc-branches');
   list.setAttribute('role', 'group');
   list.setAttribute('aria-label', 'Maps');
-  host.append(cards, node('h2', 'uc-nav-heading', 'Time period'), periods, node('h2', 'uc-nav-heading', 'Map'), list);
+  const heading = node('h2', 'uc-nav-heading', 'Time period'),
+    readout = node('span', 'uc-year-value'),
+    dial = yearTrack(periods, readout, pickPeriod);
+  heading.append(readout);
+  host.append(cards, heading, periods, node('h2', 'uc-nav-heading', 'Map'), list);
   for (const e of eras) {
     const b = button('', () => pickEra(e), 'uc-era-card');
     b.dataset.era = e.name;
-    if (e.emblem) {
-      const img = node('img');
-      img.src = e.emblem;
-      img.alt = '';
-      b.append(img);
+    if (e.art.length) {
+      const art = node('span', 'uc-era-art');
+      art.classList.toggle('wordmark', e.wordmark);
+      art.classList.toggle('opposed', e.art.length === 2);
+      for (const src of e.art) {
+        const img = node('img');
+        img.src = src;
+        img.alt = '';
+        art.append(img);
+      }
+      b.append(art);
     } else {
       const mark = node(
         'b',
@@ -70,7 +81,7 @@ export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickD
       if (era !== shownEra) {
         shownEra = era;
         [...cards.children].forEach((b, i) => press(b, eras[i] === era));
-        periods.replaceChildren(...era.periods.map(p => button(p.label, () => pickPeriod(p))));
+        dial.mount(era.periods);
       }
       if (period !== shownPeriod) {
         shownPeriod = period;
@@ -78,7 +89,7 @@ export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickD
         entries.clear();
         list.replaceChildren();
         let previous, section;
-        [...periods.children].forEach((b, i) => press(b, era.periods[i] === period));
+        dial.show(period);
         for (const f of period.maps.keys()) {
           if (previous !== f.p) {
             previous = f.p;

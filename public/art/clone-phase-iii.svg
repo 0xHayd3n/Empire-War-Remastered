@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <title>Phase III clone helmet concept</title>
+  <defs>
+    <linearGradient id="shell" x2=".82" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="#fff9e7"/><stop offset=".47" stop-color="#ecf1ec"/><stop offset=".78" stop-color="#a7b9c4"/><stop offset="1" stop-color="#718997"/></linearGradient>
+    <linearGradient id="visor" x2="0" y2="1"><stop stop-color="#426274"/><stop offset=".38" stop-color="#121e29"/><stop offset="1" stop-color="#090f15"/></linearGradient>
+    <g id="cheek"><path d="m18 48 7 6 13 5-5 11-9 6-8-8z" fill="#7c929f"/><path d="m22 51 14 7-3 4-10-4z" fill="#e3e9e8"/><path d="m22 61 9 3-3 3-7-3z" fill="#314956"/><circle cx="28" cy="74" r="7" fill="#394a56" stroke="#d9e1df" stroke-width="3"/><circle cx="28" cy="74" r="3" fill="#162630"/></g>
+  </defs>
+  <path d="M14 42C14 22 25 10 43 8l2-5h6l2 5c18 2 29 14 29 34l3 6-2 20-8 10-10 2-10 10H41l-10-10-10-2-8-10-2-20z" fill="url(#shell)" stroke="#243543" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="m44 8-3 24 7 5 7-5-4-24z" fill="#496b83"/><path d="m47 6-1 24 3 2 1-26z" fill="#e7edec"/>
+  <path d="M16 34q16-6 32 2 16-8 32-2l1 5q-15-4-32 5-17-9-34-5z" fill="#728894"/>
+  <path d="m15 40 10-1 23 6 23-6 10 1-5 10-19 6-5 8h-8l-5-8-19-6z" fill="url(#visor)" stroke="#d5dddf" stroke-width="1.4"/>
+  <use href="#cheek"/><use href="#cheek" transform="translate(96) scale(-1 1)"/>
+  <path d="m35 72 9-11h8l9 11-5 7-8-8-8 8z" fill="#d5dede"/><path d="m37 75 8-10h6l8 10-11-6z" fill="#374b59"/><path d="m38 82 10-7 10 7-5 6H43z" fill="#243846"/><path d="m44 81 8 0m-7 3h6" stroke="#98aeb6" stroke-width="1.5"/>
+</svg>

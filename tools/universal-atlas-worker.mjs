@@ -212,6 +212,11 @@ try {
       ...(known && id === '1976399102' && plot === 'CONQUESTS/CLONEWARSFTGU/STORY_PLOTS_SANDBOX_FTGU_CONTAINER.XML'
         ? { prewarFtgu: true }
         : {}),
+      // GCPlayerAgnosticFTGU reads local credits / 1000 + 1. This exact plot and its
+      // zero-credit faction default start Era 1 without changing any other player's treasury.
+      ...(known && id === '3417277973' && plot === 'CONQUESTS/FTGU/STORY_PLOTS_SANDBOX_FTGU_CONTAINER.XML' && base.credits === 0
+        ? { defaultFtguYear: '3996 BBY' }
+        : {}),
       label: label(c),
       description: db.t(c.str('Description_Text')),
       order: c.num('Sort_Order'),

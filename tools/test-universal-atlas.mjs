@@ -169,7 +169,14 @@ assert.equal(yearStops([{ label: 'Scenario starts' }]).length, 0);
 assert.equal(yearStops([{ label: '4 ABY', ftgu: true }])[0].year, 4);
 const fall = { ...profile, id: '1976399102' },
   awakening = { ...profile, id: '3387971722', rows: [row('script', '', 'Red', [['loader', 'Original in-game selector']])] },
-  old = { ...profile, id: '3417277973', rows: [row('base-b', 'A', 'Blue', [['b22', '22 BBY']])] };
+  old = {
+    ...profile,
+    id: '3417277973',
+    rows: [
+      row('base-b', 'A', 'Blue', [['b22', '22 BBY']]),
+      row('single-planet', 'F', 'Red', [['single-planet', '']], { defaultFtguYear: '3996 BBY' })
+    ]
+  };
 const profiles = [old, fall, awakening];
 const timeline = eraTimeline({
   profiles,
@@ -177,6 +184,12 @@ const timeline = eraTimeline({
 });
 const clone = timeline[1],
   inYear = y => clone.periods.find(p => p.label === y).maps;
+const [opener, , custom] = timeline[0].periods;
+assert.equal(opener.label, '3996 BBY');
+assert(opener.ftgu && !opener.scenario && custom.scenario);
+const [[revanFtgu, [dated]]] = opener.maps;
+assert.equal(mapStart(revanFtgu).date, dated);
+assert.equal(dated.choices[0].variant, custom.maps.get(revanFtgu)[0].choices[0].variant);
 assert.equal(timeline.length, 4);
 assert.equal(timeline[3].periods.length, 0);
 assert.match(timeline[3].missing[0], /Not built/);

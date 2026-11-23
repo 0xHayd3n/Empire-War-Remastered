@@ -10,6 +10,13 @@ export function techCalendar(p, r) {
 }
 function startsFor(p, r, prefix) {
   const first = r.variants[r.initial] || r.variants[0];
+  if (r.defaultFtguYear) {
+    const year = r.defaultFtguYear;
+    return [
+      { row: r, variant: first, label: year, year, ftgu: true, initial: true },
+      { row: r, variant: first, label: 'Configurable start', year: '', initial: false }
+    ];
+  }
   if (!techCalendar(p, r))
     return r.variants.map(v => {
       const label = v.date || prefix || 'Authored start';

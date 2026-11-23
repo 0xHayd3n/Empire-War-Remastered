@@ -182,7 +182,7 @@ dialog.uc-atlas[open] {
   flex: 1 0 55px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
@@ -190,7 +190,8 @@ dialog.uc-atlas[open] {
   color: #f2ede1;
   border: 1px solid color-mix(in srgb, var(--era-left), var(--era-right));
   border-radius: 4px;
-  background: linear-gradient(to top, #11151bd9, transparent 75%), linear-gradient(to right, var(--era-left), var(--era-right));
+  background: linear-gradient(to top, #11151bd9, transparent 75%),
+    linear-gradient(to right, var(--era-left) var(--left-stop, 0%), var(--era-right) var(--right-stop, 100%));
   font: 500 13px/1.12 var(--ui-font);
 }
 .uc-era-card[data-era='Old Republic'] {
@@ -200,22 +201,24 @@ dialog.uc-atlas[open] {
   --crest-right: #ff8997;
 }
 .uc-era-card[data-era='Clone Wars'] {
-  --era-left: #856925;
+  --left-stop: 40%;
+  --right-stop: 60%;
+  --era-left: #f6f6f5;
   --era-right: #205782;
-  --crest-left: #ffe39a;
+  --crest-left: #101010;
   --crest-right: #78c3ff;
+}
+.uc-era-card:is([data-era='Galactic Civil War'], [data-era='New Republic']) {
+  --era-right: #56585a;
+  --crest-right: #d8d8d8;
 }
 .uc-era-card[data-era='Galactic Civil War'] {
   --era-left: #98452d;
-  --era-right: #4e5d6c;
   --crest-left: #ff9770;
-  --crest-right: #d2dce5;
 }
 .uc-era-card[data-era='New Republic'] {
   --era-left: #896127;
-  --era-right: #314c60;
   --crest-left: #ffdb88;
-  --crest-right: #9dbccd;
 }
 .uc-era-crest {
   width: 40px;
@@ -297,7 +300,6 @@ dialog.uc-atlas[open] {
 .uc-periods {
   flex-shrink: 0;
   padding: 1px 4px 4px;
-  container-type: inline-size;
 }
 .uc-year-value {
   float: right;
@@ -378,10 +380,28 @@ dialog.uc-atlas[open] {
   outline: 2px solid #f0f3f2;
   outline-offset: 1px;
 }
-@container (max-width:250px) {
-  .uc-year-scale.dense .uc-year-tick:not(:first-child, :last-child) small {
-    display: none;
-  }
+.uc-year-scale.inactive,
+.uc-year-value.inactive {
+  filter: grayscale(1);
+  opacity: 0.56;
+}
+.uc-year-range:disabled {
+  cursor: default;
+}
+.uc-start-modes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  padding: 4px 0 0;
+  border-top: 1px solid #ffffff28;
+  color: #bdc4c8;
+}
+.uc-roster .uc-start-modes button[aria-pressed='true'] {
+  color: #fbe2ac;
+  border-color: #bc9859;
+  background: #39342b;
 }
 .uc-roster .uc-periods button,
 .uc-roster .uc-branches button {

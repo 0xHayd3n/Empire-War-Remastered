@@ -63,6 +63,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
   function finish() {
     closed = true;
     removeEventListener('message', error);
+    roster?.close();
     ui.close();
   }
   function error(e) {
@@ -115,6 +116,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     row = s.row;
     faction = row.faction;
     v = s.variant;
+    if (row.defaultFtguYear && date.year === row.defaultFtguYear) delete settings.credits;
     if (techCalendar(p, row)) {
       if (s.tech === undefined) delete settings.tech;
       else settings.tech = s.tech;
@@ -208,7 +210,9 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     if (!family) {
       ui.map.clear();
       previewProfile = previewMap = null;
-      ui.status.textContent = 'Choose a map to preview its starting galaxy.';
+      ui.status.textContent = period.scenario
+        ? 'Choose a scenario to preview its starting galaxy.'
+        : 'Choose a map to preview its starting galaxy.';
       return;
     }
     const techDate = techCalendar(p, row);
@@ -245,7 +249,8 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
       maxTech: 'Maximum tech',
       autoResolve: 'Auto-resolve'
     })) {
-      if (!row?.limits.custom || !row.slots.includes(k) || (techDate && k === 'tech')) {
+      const fixedCredits = k === 'credits' && row.defaultFtguYear && date.year === row.defaultFtguYear;
+      if (!row?.limits.custom || !row.slots.includes(k) || fixedCredits || (techDate && k === 'tech')) {
         ui.hide(k);
         continue;
       }

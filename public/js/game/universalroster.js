@@ -33,10 +33,11 @@ export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickD
   list.setAttribute('role', 'group');
   list.setAttribute('aria-label', 'Maps');
   const heading = node('h2', 'uc-nav-heading', 'Time period'),
+    mapHeading = node('h2', 'uc-nav-heading', 'Map'),
     readout = node('span', 'uc-year-value'),
     dial = yearTrack(periods, readout, pickPeriod);
   heading.append(readout);
-  host.append(cards, heading, periods, node('h2', 'uc-nav-heading', 'Map'), list);
+  host.append(cards, heading, periods, mapHeading, list);
   for (const e of eras) {
     const b = button('', () => pickEra(e), 'uc-era-card');
     b.dataset.era = e.name;
@@ -69,6 +70,7 @@ export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickD
     }
   };
   return {
+    close: dial.close,
     show(era, period, family, date) {
       if (era !== shownEra) {
         shownEra = era;
@@ -82,6 +84,8 @@ export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickD
         list.replaceChildren();
         let previous, section;
         dial.show(period);
+        mapHeading.textContent = period.scenario ? 'Scenarios' : 'Map';
+        list.setAttribute('aria-label', period.scenario ? 'Scenarios' : 'Maps');
         for (const f of period.maps.keys()) {
           if (previous !== f.p) {
             previous = f.p;

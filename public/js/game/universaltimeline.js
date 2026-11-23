@@ -29,7 +29,7 @@ export function eraTimeline(data) {
         first ??= family;
         for (const date of family.dates) {
           const key = periodOf(family, date);
-          if (!by.has(key)) by.set(key, { label: key, maps: new Map(), ftgu: false });
+          if (!by.has(key)) by.set(key, { label: key, maps: new Map(), ftgu: false, scenario: key === scenario });
           const period = by.get(key),
             entries = period.maps;
           if (date.ftgu) period.ftgu = true;

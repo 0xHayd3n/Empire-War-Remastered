@@ -61,11 +61,18 @@ const assert = require('node:assert/strict'),
       year = dates.getByRole('slider', { name: 'Starting year' }),
       selectPeriod = async label => {
         const tick = dates.locator(`[data-year="${label}"]`);
-        if (!(await tick.count())) return dates.getByRole('button', { name: label, exact: true }).click();
+        if (!(await tick.count())) {
+          if (label === 'Scenario starts' && !(await dates.getByRole('button').count())) return;
+          return dates.getByRole('button', { name: label, exact: true }).click();
+        }
+        if (await year.isDisabled()) await dates.getByRole('button', { name: 'By year' }).click();
         const { width, height } = await year.boundingBox();
         const x = 8 + (width - 16) * (await tick.evaluate(e => parseFloat(e.style.left) / 100));
         await year.click({ position: { x, y: height / 2 } });
-        assert.equal(await year.getAttribute('aria-valuetext'), label === '4 ABY' ? '4 ABY · FTGU available' : label);
+        assert.equal(
+          await year.getAttribute('aria-valuetext'),
+          ['4 ABY', '3996 BBY'].includes(label) ? `${label} · FTGU available` : label
+        );
       };
     await current.waitFor();
     // Escape leaves setup without a visible Back control.
@@ -84,7 +91,9 @@ const assert = require('node:assert/strict'),
     ]);
     const { decodePNG } = await import('../public/js/png.js');
     async function checkCrests() {
-      const palettes = new Set();
+      const palettes = new Set(),
+        rowTops = new Map(),
+        imperial = new Set();
       for (const card of await eras.getByRole('button').all()) {
         const crest = card.locator('svg.uc-era-crest');
         assert.equal(await crest.count(), 1);
@@ -93,6 +102,16 @@ const assert = require('node:assert/strict'),
         );
         palettes.add(palette.join('/'));
         const sides = await card.evaluate(e => ['--era-left', '--era-right'].map(k => getComputedStyle(e).getPropertyValue(k).trim()));
+        const y = (await card.boundingBox()).y,
+          crestY = (await crest.boundingBox()).y;
+        if (rowTops.has(y)) assert.equal(crestY, rowTops.get(y), 'Crests must share a baseline within each card row');
+        rowTops.set(y, crestY);
+        const name = await card.getAttribute('data-era');
+        if (name === 'New Republic' || name === 'Galactic Civil War') imperial.add([sides[1], palette[1]].join('/'));
+        if (name === 'Clone Wars') {
+          assert.equal(sides[0], '#f6f6f5');
+          assert.equal(palette[0], '#101010');
+        }
         const shot = await decodePNG(Uint8Array.from(await card.screenshot()).buffer);
         for (const [i, x] of [5, shot.width - 6].entries()) {
           const rgb = shot.data.subarray(4 * (6 * shot.width + x), 4 * (6 * shot.width + x) + 3);
@@ -125,6 +144,14 @@ const assert = require('node:assert/strict'),
         }
       }
       assert.equal(palettes.size, 4);
+      assert.equal(imperial.size, 1);
+      assert(
+        await dates.locator('.uc-year-tick small').evaluateAll(labels => {
+          const visible = labels.filter(e => getComputedStyle(e).visibility !== 'hidden').map(e => e.getBoundingClientRect());
+          return visible.every((r, i) => !i || r.left >= visible[i - 1].right);
+        }),
+        'Year labels must not overlap'
+      );
     }
     await checkCrests();
     assert.equal(await year.count(), 0, 'undated era has no synthetic year axis');
@@ -218,13 +245,18 @@ const assert = require('node:assert/strict'),
     await fall.getByRole('button', { name: /Known Galaxy - Small/ }).click();
     assert.equal(await year.getAttribute('aria-valuetext'), '20 BBY');
     await select('3417277973');
-    assert.equal(await dates.getByRole('button').count(), 1);
+    assert.equal(await dates.getByRole('button').count(), 2);
     assert.equal(await dates.locator('[data-year="3976 BBY"]').count(), 0);
     const stops = await dates.locator('[data-year]').evaluateAll(es => es.map(e => parseFloat(e.style.left) / 100));
-    assert(Math.abs(stops[1] - 2 / 7) < 1e-5);
-    assert(Math.abs(stops[2] - 5 / 7) < 1e-5);
+    assert.equal(stops.length, 5);
+    assert(stops.every((s, i) => Math.abs(s - [0, 32 / 39, 34 / 39, 37 / 39, 1][i]) < 1e-5));
     await selectPeriod('Scenario starts');
+    assert(await year.isDisabled());
+    assert.equal(await year.inputValue(), '-3964');
     assert.equal(await current.count(), 0);
+    assert(await board.getByRole('group', { name: 'Scenarios', exact: true }).isVisible());
+    if (process.env.SWR_TEST_SCREENSHOTS)
+      await dates.screenshot({ path: path.join(process.env.SWR_TEST_SCREENSHOTS, 'scenario-mode.png') });
     await group('3417277973')
       .getByRole('button', { name: /Mandalorian Onslaught/ })
       .click();
@@ -235,21 +267,39 @@ const assert = require('node:assert/strict'),
         .count(),
       1
     );
-    await year.focus();
-    await page.keyboard.press('ArrowRight');
+    await dates.getByRole('button', { name: 'By year' }).press('Space');
+    assert(await year.isEnabled());
     assert.equal(await year.getAttribute('aria-valuetext'), '3964 BBY');
+    await year.focus();
     assert.equal(await current.count(), 0);
     await page.keyboard.press('ArrowRight');
     assert.equal(await year.getAttribute('aria-valuetext'), '3962 BBY');
     const track = await year.boundingBox(),
       pos = t => track.x + 8 + (track.width - 16) * t;
-    await page.mouse.move(pos(2 / 7), track.y + track.height / 2);
+    await page.mouse.move(pos(34 / 39), track.y + track.height / 2);
     await page.mouse.down();
-    await page.mouse.move(pos(0.64), track.y + track.height / 2, { steps: 8 });
+    await page.mouse.move(pos(37 / 39), track.y + track.height / 2, { steps: 8 });
     await page.mouse.up();
     assert.equal(await year.getAttribute('aria-valuetext'), '3959 BBY');
     assert.equal(await group('3417277973').locator('.uc-map-choice').count(), 1);
-    assert.equal(await dates.locator('button[aria-pressed="true"]').count(), 0);
+    assert.equal(await dates.locator('button[aria-pressed="true"]').innerText(), 'By year');
+    const revan = group('3417277973'),
+      chooseFtgu = () => revan.getByRole('button', { name: /From the Ground Up/ }).click();
+    await selectPeriod('Scenario starts');
+    await chooseFtgu();
+    await field('credits').selectOption('3000');
+    await selectPeriod('3996 BBY');
+    await chooseFtgu();
+    assert.equal(await revan.locator('.uc-map-choice').count(), 1);
+    assert(await field('credits').isHidden());
+    assert.equal(await field('faction').getByRole('radio').count(), 3);
+    await selectPeriod('Scenario starts');
+    assert.equal(await field('credits').inputValue(), '');
+    await field('credits').selectOption('2000');
+    await dates.getByRole('button', { name: 'By year' }).click();
+    assert.equal(await year.inputValue(), '-3996');
+    await selectPeriod('Scenario starts');
+    assert.equal(await field('credits').inputValue(), '', 'Fixed date must discard custom era credits on the same FTGU row');
     await select('1397421866');
     if (process.env.SWR_TEST_ALL_ERAS) for (const id of ['1125571106', '3387971722', '1770851727', 'stock']) await select(id);
     await select('1976399102');
@@ -289,16 +339,33 @@ const assert = require('node:assert/strict'),
         await radio('faction', 'Rebel').check();
       }
     }
+    const revanLaunch = process.env.SWR_TEST_REVAN,
+      destination = revanLaunch ? '3417277973' : process.env.SWR_TEST_THR ? '1125571106' : '1976399102';
+    if (revanLaunch) {
+      await select('3417277973');
+      if (revanLaunch === 'scenario') {
+        await selectPeriod('Scenario starts');
+        await revan.getByRole('button', { name: /Mandalorian Onslaught/ }).click();
+      } else {
+        await selectPeriod('3996 BBY');
+        await chooseFtgu();
+      }
+      await radio('faction', 'Underworld').check();
+    }
     const target = await board.getAttribute('data-campaign');
     assert.match(
       target,
-      process.env.SWR_TEST_THR
-        ? opening
-          ? /^FTGU_Era_1_Empire$/i
-          : /KnownSmall_Era_2_Empire_CCoGM/i
-        : opening
-          ? /^Sandbox_FTGU_CIS$/i
-          : /Era_4_Empire/i
+      revanLaunch
+        ? revanLaunch === 'scenario'
+          ? /^Sandbox_MandalorianOnslaught_Mandalorian$/i
+          : /^Sandbox_FTGU_Mandalorian$/i
+        : process.env.SWR_TEST_THR
+          ? opening
+            ? /^FTGU_Era_1_Empire$/i
+            : /KnownSmall_Era_2_Empire_CCoGM/i
+          : opening
+            ? /^Sandbox_FTGU_CIS$/i
+            : /Era_4_Empire/i
     );
     const stars = await board.locator('[data-planet]').evaluateAll(es => es.map(e => [e.dataset.planet, e.dataset.owner]));
     assert(stars.length > 10 && new Set(stars.map(p => p[1])).size > 1);
@@ -355,7 +422,7 @@ const assert = require('node:assert/strict'),
     await page.setViewportSize({ width: 1366, height: 768 });
     assert.equal(await checkedValue('treasury'), cap);
     assert.equal(await board.getAttribute('data-campaign'), target);
-    const mountUrl = `**/api/mount/${process.env.SWR_TEST_THR ? '1125571106' : '1976399102'}`;
+    const mountUrl = `**/api/mount/${destination}`;
     await page.route(mountUrl, r => r.fulfill({ status: 409, body: 'Test mount unavailable' }));
     await board.getByRole('button', { name: 'Start campaign' }).click();
     await board.getByRole('status').filter({ hasText: 'Test mount unavailable' }).waitFor();
@@ -369,7 +436,11 @@ const assert = require('node:assert/strict'),
     ]);
     const runtime = page.frames().find(fr => fr.parentFrame() === page.mainFrame());
     await runtime.waitForFunction(() => !!window.game?.story && !!game.galaxy?.planets.length, null, { timeout: 150000 });
+    if (revanLaunch) await runtime.waitForFunction(() => game.story.values.has('GALACTIC_YEAR'), null, { timeout: 20000 });
     const actual = await runtime.evaluate(() => ({
+      era: game.story.values.get('CURRENT_ERA'),
+      year: game.story.values.get('GALACTIC_YEAR'),
+      creditOverride: game.setup.campaignSettings?.credits,
       target: game.setup.campaign,
       campaign: game.galaxy.campaign.name,
       planets: game.galaxy.planets.filter(p => !p.background).map(p => p.name),
@@ -379,10 +450,14 @@ const assert = require('node:assert/strict'),
       origin: location.origin,
       isolated: crossOriginIsolated
     }));
-    assert.equal(actual.origin, `http://127.0.0.1:${port + (process.env.SWR_TEST_THR ? 2 : 3)}`);
+    assert.equal(actual.origin, `http://127.0.0.1:${port + (revanLaunch ? 4 : process.env.SWR_TEST_THR ? 2 : 3)}`);
     assert.equal(actual.target, target);
     assert.equal(actual.campaign, target);
-    if (opening) assert.equal(actual.startingTech, process.env.SWR_TEST_THR ? 4 : 0);
+    if (revanLaunch) {
+      assert.equal(actual.year, revanLaunch === 'scenario' ? -3964 : -3996);
+      if (revanLaunch !== 'scenario') assert.equal(actual.era, 1);
+      assert.equal(actual.creditOverride, undefined);
+    } else if (opening) assert.equal(actual.startingTech, process.env.SWR_TEST_THR ? 4 : 0);
     assert.deepEqual(
       actual.planets,
       stars.map(p => p[0])
@@ -403,6 +478,8 @@ const assert = require('node:assert/strict'),
         nativeProfiles: [...checked],
         documentLoadsWhileBrowsing: 0,
         launchDocuments: docs,
+        era: actual.era,
+        year: actual.year,
         target,
         passed: true
       })

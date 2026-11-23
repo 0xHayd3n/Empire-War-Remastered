@@ -31,16 +31,33 @@ export function yearTrack(host, readout, pick) {
   let stops = [],
     range,
     current,
+    lastCalendar,
+    calendarButton,
+    scenarioButton,
+    labels,
     buttons = [];
   function select(period) {
     if (period !== current) pick(period);
   }
+  function button(label, action) {
+    const b = el('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.onclick = action;
+    return b;
+  }
   return {
+    close() {
+      labels?.disconnect();
+    },
     mount(periods) {
+      labels?.disconnect();
       host.replaceChildren();
       stops = yearStops(periods);
+      const scenario = periods.find(p => p.scenario);
+      lastCalendar = stops[0]?.period || periods.find(p => !p.scenario);
       buttons = [];
-      range = null;
+      range = calendarButton = scenarioButton = null;
       if (stops.length > 1 && stops[0].value < stops.at(-1).value) {
         const frame = el('div', 'uc-year-scale'),
           ruler = el('div', 'uc-year-ruler');
@@ -56,7 +73,20 @@ export function yearTrack(host, readout, pick) {
           tick.append(text);
           ruler.append(tick);
         }
-        frame.classList.toggle('dense', stops.length > 4);
+        // Preserve every tick and snap target. Omit only colliding interior captions when
+        // e.g. the 32-year gap to 3964 BBY compresses the remaining years at the right.
+        const captions = [...ruler.querySelectorAll('small')];
+        labels = new ResizeObserver(() => {
+          const rects = captions.map(c => c.getBoundingClientRect());
+          let right = rects[0].right;
+          captions.slice(1, -1).forEach((c, i) => {
+            const r = rects[i + 1],
+              fits = r.left >= right + 3 && r.right + 3 <= rects.at(-1).left;
+            c.style.visibility = fits ? '' : 'hidden';
+            if (fits) right = r.right;
+          });
+        });
+        labels.observe(ruler);
         range = el('input', 'uc-year-range');
         range.type = 'range';
         range.min = stops[0].value;
@@ -68,7 +98,7 @@ export function yearTrack(host, readout, pick) {
           range.value = s.value;
           select(s.period);
         };
-        // Clicking the resting endpoint when an undated scenario is active need not emit an input event.
+        // A click directly on the thumb need not emit an input event.
         range.onclick = () => select(nearestStop(stops, range.valueAsNumber).period);
         range.onkeydown = e => {
           const i = stops.findIndex(s => s.period === current),
@@ -93,33 +123,52 @@ export function yearTrack(host, readout, pick) {
         host.append(frame);
       }
       for (const p of periods) {
-        if (range && stops.some(s => s.period === p)) continue;
-        const b = el('button');
-        b.type = 'button';
-        b.textContent = p.label;
-        b.onclick = () => select(p);
+        if (p.scenario || (range && stops.some(s => s.period === p))) continue;
+        const b = button(p.label, () => select(p));
         buttons.push([p, b]);
         host.append(b);
+      }
+      if (scenario) {
+        const modes = el('div', 'uc-start-modes');
+        if (lastCalendar) {
+          calendarButton = button('By year', () => select(lastCalendar));
+          scenarioButton = button(scenario.label, () => select(scenario));
+          modes.setAttribute('role', 'group');
+          modes.setAttribute('aria-label', 'Browse starts');
+          modes.append(calendarButton, scenarioButton);
+        } else modes.textContent = 'Scenario starts · no year required';
+        host.append(modes);
       }
     },
     show(period) {
       current = period;
-      const s = stops.find(s => s.period === period);
-      readout.textContent = range && s ? period.label : '';
+      if (!period.scenario) lastCalendar = period;
+      const s = stops.find(s => s.period === (period.scenario ? lastCalendar : period));
+      readout.textContent = range && s ? s.period.label : '';
+      readout.classList.toggle('inactive', period.scenario);
+      calendarButton?.setAttribute('aria-pressed', String(!period.scenario));
+      scenarioButton?.setAttribute('aria-pressed', String(period.scenario));
       if (range) {
+        range.disabled = period.scenario;
+        range.parentElement.classList.toggle('inactive', period.scenario);
         range.value = s?.value ?? stops[0].value;
         range.dataset.onTrack = String(!!s);
         range.style.setProperty('--elapsed', `${100 * (s?.at ?? 0)}%`);
         range.setAttribute(
           'aria-valuetext',
-          s
-            ? period.ftgu && s.year !== null
-              ? `${period.label} · FTGU available`
-              : period.label
-            : `${period.label} · no calendar year selected`
+          period.scenario
+            ? 'Inactive for scenario starts'
+            : s
+              ? period.ftgu && s.year !== null
+                ? `${period.label} · FTGU available`
+                : period.label
+              : `${period.label} · no calendar year selected`
         );
       }
-      for (const [p, b] of buttons) b.setAttribute('aria-pressed', String(p === period));
+      for (const [p, b] of buttons) {
+        b.setAttribute('aria-pressed', String(p === period));
+        b.disabled = period.scenario;
+      }
     }
   };
 }

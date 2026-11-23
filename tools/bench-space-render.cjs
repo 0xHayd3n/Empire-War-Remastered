@@ -10,9 +10,13 @@ const root = path.resolve(value('--root', '.')),
   mod = value('--primary', ''),
   map = value('--map', 'KUAT');
 const frames = 48,
-  ticks = 240;
+  ticks = 240,
+  split = args.includes('--passes'),
+  size = /^(\d+)x(\d+)$/.exec(value('--size', split ? '1920x1080' : '800x450'));
+if (!size || size.slice(1).some(n => +n < 240 || +n > 3840)) throw Error('Expected --size WIDTHxHEIGHT (240..3840)');
+if (split && args.includes('--fleet-lod')) throw Error('Run --passes with full detail, without --fleet-lod');
 
-async function measure({ frames, ticks }) {
+async function measure({ frames, ticks, split }) {
   const g = window.game,
     w = g.world,
     r = g.renderer,
@@ -66,6 +70,26 @@ async function measure({ frames, ticks }) {
     )
       lod.withAlternates++;
   }
+  const ext = gl.getExtension('WEBGL_debug_renderer_info');
+  const metadata = {
+    hash,
+    map: g.setup.mapFile,
+    factions: g.setup.teamFactions,
+    shots,
+    lod,
+    framesPerMode: frames,
+    particles: r.fxParticles.total,
+    drawingBuffer: [gl.drawingBufferWidth, gl.drawingBufferHeight],
+    gpu: ext && gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)
+  };
+  const pose = k => {
+    const angle = (2 * Math.PI * k) / frames;
+    r.rig.x = 350 * Math.sin(angle);
+    r.rig.y = 250 * Math.cos(angle);
+    r.rig.dist = 3900 + 900 * Math.cos(angle);
+    r.rig.yaw = angle * 0.25;
+  };
+  if (split) return { ...metadata, ...(await window.measureFleetPasses({ r, w, fleet, frames, pose })) };
   const pilot = new URLSearchParams(location.search).get('fleetlod') === '1';
   const modes = pilot ? ['full', 'fullDetail'] : ['full', 'noHulls', 'noWeapons', 'noParticles'];
   const savedUpdate = r.fxParticles.update,
@@ -90,11 +114,7 @@ async function measure({ frames, ticks }) {
   };
   const pixel = new Uint8Array(4),
     sample = k => {
-      const angle = (2 * Math.PI * k) / frames;
-      r.rig.x = 350 * Math.sin(angle);
-      r.rig.y = 250 * Math.cos(angle);
-      r.rig.dist = 3900 + 900 * Math.cos(angle);
-      r.rig.yaw = angle * 0.25;
+      pose(k);
       device.info.reset();
       const t = performance.now();
       r.render(w, 0);
@@ -161,20 +181,7 @@ async function measure({ frames, ticks }) {
     if (!(far[1] > 0 && near[1] === 0 && near[0] > 0 && back[1] > 0)) throw Error('Authored mesh zoom transition failed');
     switchCheck = 'alternate / original / alternate';
   }
-  const ext = gl.getExtension('WEBGL_debug_renderer_info');
-  return {
-    hash,
-    switchCheck,
-    map: g.setup.mapFile,
-    factions: g.setup.teamFactions,
-    shots,
-    lod,
-    framesPerMode: frames,
-    particles: r.fxParticles.total,
-    drawingBuffer: [gl.drawingBufferWidth, gl.drawingBufferHeight],
-    gpu: ext && gl.getParameter(ext.UNMASKED_RENDERER_WEBGL),
-    results
-  };
+  return { ...metadata, switchCheck, results };
 }
 (async () => {
   const { readLibrary } = await import(pathToFileURL(path.join(root, 'tools/workshop-library.mjs')).href);
@@ -196,7 +203,8 @@ async function measure({ frames, ticks }) {
       });
     });
     browser = await chromium.launch({ channel: 'chrome', args: process.platform === 'win32' ? ['--use-angle=d3d11'] : [] });
-    const p = await browser.newPage({ viewport: { width: 800, height: 450 }, deviceScaleFactor: 1 });
+    const viewport = { width: +size[1], height: +size[2] };
+    const p = await browser.newPage({ viewport, deviceScaleFactor: 1 });
     const errors = [];
     p.on('pageerror', e => errors.push(e.message));
     await p.addInitScript(() => {
@@ -217,16 +225,21 @@ async function measure({ frames, ticks }) {
       });
     });
     const query = new URLSearchParams({ benchmark: '40', map, faction: value('--faction', 'Empire'), enemy: value('--enemy', 'Rebel') });
-    await p.goto(`${base}/play.html?${query}&webgl&nospaceworker&noscripts&nowarm${args.includes('--fleet-lod') ? '&fleetlod=1' : ''}`, {
-      waitUntil: 'domcontentloaded'
-    });
+    await p.goto(
+      `${base}/play.html?${query}&webgl&nospaceworker&noscripts&nowarm${split ? '&nocollectjobs' : ''}${args.includes('--fleet-lod') ? '&fleetlod=1' : ''}`,
+      {
+        waitUntil: 'domcontentloaded'
+      }
+    );
     await p
       .waitForFunction(() => !!window.game?.world?.units.length, null, { timeout: 180000 })
       .catch(async e => {
-        console.error((await p.locator('#loadText').textContent()).slice(-300), errors);
+        console.error(await p.evaluate(() => document.querySelector('#loadText')?.textContent?.slice(-300)), errors);
         throw e;
       });
-    const result = await p.evaluate(measure, { frames, ticks });
+    if (split) await p.addScriptTag({ path: path.join(__dirname, 'bench-fleet-passes.js') });
+    const result = await p.evaluate(measure, { frames, ticks, split });
+    if (split) assert.deepEqual(result.drawingBuffer, [viewport.width, viewport.height]);
     assert.deepEqual(errors, []);
     console.log(JSON.stringify({ primary: mod || 'stock', fleetLod: args.includes('--fleet-lod'), ...result }));
   } finally {

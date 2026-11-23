@@ -35,7 +35,7 @@ A second run alternated opt-in and full detail **at every camera pose in the sam
 | Fall of the Republic | −0.72% | 13.19 → 13.56 | Passed |
 | Remake, both Awakening mods, Revan’s Revenge | No change | See raw results | No eligible switch on this path |
 
-The zoom check inspects the actual instanced geometry pools. It does not certify visual quality across all resolutions, optics, units, or GPUs. Draw calls didn't fall in these comparisons. Next, separate CPU submission and shadow-pass cost for ship-heavy scenes at common play resolutions before proposing a default change.
+The zoom check inspects the actual instanced geometry pools. It does not certify visual quality across all resolutions, optics, units, or GPUs. Draw calls didn't fall in these comparisons. The [follow-up at 1080p and 720p](fleet-render-passes.md) separates ship submission from shadow-map work without turning off the shadows that ships receive.
 
 ## Reproduce
 

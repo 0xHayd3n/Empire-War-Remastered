@@ -20,7 +20,7 @@ Chrome 157, RTX 3070 (ANGLE/D3D11), full detail. Eight serial sessions: two trac
 
 The long Revan draw persisted without tracing. Its explicit queue waits occupied about 5.7 ms per draw and closely tracked the thread's off-CPU time; these are overlapping measurements, **not** 11.7 ms of overhead. The V8 profiler also sampled traversal, state/uniform preparation and WebGL calls, but cannot say how much on-CPU time each caused. Nor does the trace identify whether GPU execution or GPU-process scheduling freed the queue. Neither measurement is a recoverable FPS gain.
 
-**Next test:** break down the main-scene calls by instanced ship meshes, unbatched ship meshes and other objects. Test a batching change only if it preserves materials, transparency order, animation and the visible output; compare untraced frame intervals as well as draw counts against stock and Revan. Don't change shadow or effect settings on the basis of this trace.
+**Follow-up:** the [main-scene draw census](fleet-draw-census.md) identifies the dominant individual ship parts and checks their live material and bone state. Test a batching change only if it preserves materials, transparency order, animation and the visible output; compare untraced frame intervals as well as draw counts against stock and Revan. Don't change shadow or effect settings on the basis of this trace.
 
 ## How to reproduce
 

@@ -9,7 +9,7 @@ const q = (a, p) =>
     : null;
 const dist = a => ({ p50: q(a, 0.5), p95: q(a, 0.95) });
 
-async function observe(traced) {
+async function observe({ traced, census, labels }) {
   const g = window.game,
     r = g.renderer,
     dev = r.renderer,
@@ -44,6 +44,7 @@ async function observe(traced) {
   const oldRender = r.render,
     oldMain = dev.render,
     oldCollect = im.collect;
+  const counter = census ? window.makeFleetCensus({ game: g, model: await import('/js/model.js'), labels }) : null;
   const rows = [];
   let row, start, points, timer, done, fail;
   const finished = new Promise((ok, no) => {
@@ -55,6 +56,7 @@ async function observe(traced) {
       if (scene !== r.scene || !row) return oldMain.call(this, scene, ...args);
       const c = dev.info.render.calls,
         tr = dev.info.render.triangles;
+      counter?.begin();
       mark('fleetStart' + rows.length);
       const t = performance.now();
       try {
@@ -64,6 +66,7 @@ async function observe(traced) {
         mark('fleetEnd' + rows.length);
         row.calls = dev.info.render.calls - c;
         row.tris = dev.info.render.triangles - tr;
+        counter?.end(row.calls, row.tris);
       }
     };
     im.collect = function (...args) {
@@ -128,18 +131,21 @@ async function observe(traced) {
       end,
       moved,
       rows,
+      ...(counter && { drawCensus: counter.finish(rows.length) }),
       drawingBuffer: [gl.drawingBufferWidth, gl.drawingBufferHeight],
       gpu: ext && gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)
     };
   } finally {
     clearTimeout(timer);
+    counter?.restore();
     dev.render = oldMain;
     im.collect = oldCollect;
     r.render = oldRender;
   }
 }
 
-async function profileLive(page, traced) {
+async function profileLive(page, traced, census = false, labels = false) {
+  if (census) await page.addScriptTag({ content: `window.makeFleetCensus = ${require('./bench-draw-census.cjs').createCensus};` });
   await page.waitForFunction(() => window.game?.mirror?.ready && window.game.world.time >= 4 && window.game.renderer.instances, null, {
     timeout: 180000
   });
@@ -163,7 +169,7 @@ async function profileLive(page, traced) {
   }
   let data;
   try {
-    data = await page.evaluate(observe, traced);
+    data = await page.evaluate(observe, { traced, census, labels });
   } finally {
     if (traced) {
       const end = new Promise(ok => session.once('Tracing.tracingComplete', ok));

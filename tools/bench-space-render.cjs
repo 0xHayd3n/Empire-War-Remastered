@@ -16,6 +16,9 @@ const frames = 48,
   size = /^(\d+)x(\d+)$/.exec(value('--size', split || live ? '1920x1080' : '800x450'));
 if (live && (split || args.includes('--fleet-lod'))) throw Error('Use --live separately from frozen render modes');
 if (!live && args.includes('--untraced')) throw Error('--untraced is a control for --live');
+const census = args.includes('--draw-census'),
+  labels = args.includes('--local-labels');
+if ((census && !live) || (labels && !census)) throw Error('Use --live --draw-census [--local-labels]');
 if (!size || size.slice(1).some(n => +n < 240 || +n > 3840)) throw Error('Expected --size WIDTHxHEIGHT (240..3840)');
 if (split && args.includes('--fleet-lod')) throw Error('Run --passes with full detail, without --fleet-lod');
 
@@ -242,7 +245,7 @@ async function measure({ frames, ticks, split }) {
         throw e;
       });
     if (live) {
-      const result = await require('./bench-live-space.cjs').profileLive(p, !args.includes('--untraced'));
+      const result = await require('./bench-live-space.cjs').profileLive(p, !census && !args.includes('--untraced'), census, labels);
       assert.deepEqual(result.drawingBuffer, [viewport.width, viewport.height]);
       assert.deepEqual(errors, []);
       console.log(JSON.stringify({ primary: mod || 'stock', chrome: browser.version(), ...result }));

@@ -49,14 +49,21 @@ const assert = require('node:assert/strict'),
     }
     await f.locator('[data-id="IDC_CUSTOM_CAMPAIGN_BUTTON"]').click();
     const board = f.locator('[data-universal-screen="campaign"]'),
-      field = k => board.locator(`[data-field="${k}"]`);
-    await field('story').waitFor();
+      field = k => board.locator(`[data-field="${k}"]`),
+      group = id => board.locator(`.uc-roster section[data-profile="${id}"]`),
+      current = board.locator('.uc-map-choice[aria-pressed="true"]'),
+      dates = board.getByRole('group', { name: 'Starting date' }),
+      dateButton = label => dates.getByRole('button', { name: label, exact: true });
+    await current.waitFor();
     // Escape leaves setup without a visible Back control.
     await page.keyboard.press('Escape');
     await board.waitFor({ state: 'detached' });
     await f.locator('[data-id="IDC_CUSTOM_CAMPAIGN_BUTTON"]').click();
-    await field('story').waitFor();
+    await current.waitFor();
     assert.equal(await board.count(), 1);
+    assert.equal(await board.locator('[data-field="story"],[data-field="campaign"],[data-field="date"],[role="tab"]').count(), 0);
+    assert.equal(await board.locator('.uc-roster h2').count(), 7);
+    assert.equal(await board.locator('.uc-dates').count(), 1);
     const root = await board.evaluate(e => (e.marker = crypto.randomUUID()));
     let docs = 0,
       mounts = 0,
@@ -70,7 +77,7 @@ const assert = require('node:assert/strict'),
       checked = new Set();
     async function select(id) {
       const t = performance.now();
-      await field('story').selectOption(id);
+      await group(id).locator('.uc-map-choice').first().click();
       assert.equal(await board.getAttribute('data-profile'), id);
       assert.equal(await board.evaluate(e => e.marker), root);
       times.push(Math.round(performance.now() - t));
@@ -82,32 +89,38 @@ const assert = require('node:assert/strict'),
     }
     await select('1976399102');
     await field('faction').selectOption('Empire');
-    await field('campaign').selectOption('Sandbox_FTGU_Republic');
-    const ftguDate = await field('date')
-      .locator('option')
-      .evaluateAll(os => os.find(o => /21 BBY/.test(o.label))?.value);
-    assert(ftguDate !== undefined);
-    await field('date').selectOption(ftguDate);
+    const fall = group('1976399102');
+    await dateButton('20 BBY').click();
+    await fall.getByRole('button', { name: /Known Galaxy - Medium/ }).click();
+    assert.match(await board.getAttribute('data-campaign'), /Medium_Era_4_Empire/i);
+    assert.equal(await dateButton('20 BBY').getAttribute('aria-pressed'), 'true');
+    await fall.getByRole('button', { name: /From the Ground Up/ }).click();
+    assert.equal(await dateButton('20 BBY').getAttribute('aria-pressed'), 'true');
+    await dateButton('21 BBY').click();
+    assert.equal(await board.getAttribute('data-campaign'), 'Sandbox_FTGU_Republic');
     await board.getByRole('button', { name: 'Reset settings' }).click();
-    assert.equal(await field('date').inputValue(), '');
-    assert.equal(await field('campaign').inputValue(), 'Sandbox_FTGU_Republic');
+    assert.equal(await dateButton('19 BBY').getAttribute('aria-pressed'), 'true');
+    assert.equal(await board.getAttribute('data-campaign'), 'Sandbox_FTGU_Republic');
+    await fall.getByRole('button', { name: /Foerost Campaign/ }).click();
+    assert.equal(await dates.getByRole('button').count(), 0);
+    assert.match(await current.textContent(), /20 BBY/);
+    await fall.getByRole('button', { name: /Known Galaxy - Small/ }).click();
+    assert.equal(await dateButton('20 BBY').getAttribute('aria-pressed'), 'true');
     await select('3417277973');
-    assert.equal(await field('date').locator('option').count(), 4);
+    assert.equal(await dates.getByRole('button').count(), 4);
+    assert.equal(await dates.locator('button[aria-pressed="true"]').count(), 1);
     await select('1397421866');
     if (process.env.SWR_TEST_ALL_ERAS) for (const id of ['1125571106', '3387971722', '1770851727', 'stock']) await select(id);
     await select('1976399102');
     await field('faction').selectOption('Empire');
-    const row = await field('campaign')
-      .locator('option')
-      .evaluateAll(os => os.find(o => /Known Galaxy.*Small/i.test(o.label))?.value);
-    assert(row);
-    await field('campaign').selectOption(row);
-    await field('date').selectOption({ label: '20 BBY' });
+    await fall.getByRole('button', { name: /Known Galaxy - Small/ }).click();
+    await dateButton('20 BBY').click();
     if (process.env.SWR_TEST_THR) {
       await select('1125571106');
       await field('faction').selectOption('Empire');
-      await field('campaign').selectOption('KnownSmall_Era_1_Empire');
-      await field('date').selectOption({ label: '6 ABY · Central Committee' });
+      await group('1125571106').locator('[data-family="KnownSmall_Era_1_Rebel"]').click();
+      await dateButton('6 ABY · Central Committee').click();
+      assert.equal(await field('faction').locator('option').count(), 1);
     }
     const target = await board.getAttribute('data-campaign');
     assert.match(target, process.env.SWR_TEST_THR ? /KnownSmall_Era_2_Empire_CCoGM/i : /Era_4_Empire/i);
@@ -136,7 +149,7 @@ const assert = require('node:assert/strict'),
     await board.locator('[data-scene="native"],[data-scene="unavailable"]').waitFor();
     assert.equal(await board.locator('.uc-canvas').getAttribute('data-scene'), 'native');
     assert(Number(await board.locator('.uc-canvas').getAttribute('data-models')) > 10);
-    await field('story').scrollIntoViewIfNeeded();
+    await current.scrollIntoViewIfNeeded();
     await snap('fall-atlas');
     await page.setViewportSize({ width: 390, height: 844 });
     assert(await inline());

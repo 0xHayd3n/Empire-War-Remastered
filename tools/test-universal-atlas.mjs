@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { mapFamilies, mapStart } from '../public/js/game/universalmaplist.js';
 import { launchPlan } from './universal-atlas.mjs';
 import { menuTable, thrawnSelections } from './universal-loader-table.mjs';
 import { assertPrivateLibrary } from './universal-library.mjs';
@@ -55,11 +56,77 @@ const trans = {
   Era_XML_Nums: { '6ABY': 'Era_2' }
 };
 assert.deepEqual(thrawnSelections(trans, { KnownSmall: t.map }), [
-  [
-    ['KnownSmall_Era_2_EMPIRE', '6 ABY · Isard'],
-    ['KnownSmall_Era_2_EMPIRE_CCoGM', '6 ABY · Central Committee']
-  ]
+  {
+    map: 'KnownSmall',
+    targets: [
+      ['KnownSmall_Era_2_EMPIRE', '6 ABY · Isard'],
+      ['KnownSmall_Era_2_EMPIRE_CCoGM', '6 ABY · Central Committee']
+    ]
+  }
 ]);
+// Display families group faction-specific starts, but never supply the launch ID themselves.
+const row = (id, family, faction, dates, extra = {}) => ({
+  id,
+  family,
+  faction,
+  label: 'Same name',
+  limits: { custom: false },
+  slots: [],
+  initial: 0,
+  variants: dates.map(([id, date]) => ({ id, date, sites: [] })),
+  ...extra
+});
+const profile = {
+  id: 'pack',
+  facts: { Blue: { adj: 0 }, Red: { adj: 1 } },
+  yearLegend: '1. - 22 BBY: Early\n2. - 21 BBY: Later',
+  rows: [
+    row('base-b', 'A', 'Blue', [
+      ['b22', '22 BBY'],
+      ['b21', '21 BBY']
+    ]),
+    row('base-r', 'A', 'Red', [['r21', '21 BBY']]),
+    row(
+      'other',
+      'B',
+      'Blue',
+      [
+        ['end', '19 BBY'],
+        ['middle', '20 BBY']
+      ],
+      { initial: 1 }
+    ),
+    row('ftgu', 'C', 'Red', [['ftgu', '']], { base: { tech: 0 }, slots: ['tech'], limits: { custom: true, minTech: 1, maxTech: 2 } }),
+    row('branches', 'D', 'Blue', [
+      ['one', '6 ABY · Isard'],
+      ['two', '6 ABY · Central Committee']
+    ]),
+    row('fixed', '', 'Blue', [['fixed', '']], { label: '22 BBY: Siege' }),
+    row('range', '', 'Blue', [['range', '']], { label: '25 - 20 BBY: Siege' }),
+    row('irregular', 'bad', 'Blue', [['i', '']]),
+    row('irregular2', 'bad', 'Blue', [['j', '']])
+  ]
+};
+const [a, b, ftgu, branches, fixed, range, ...irregular] = mapFamilies(profile);
+assert.equal(a.members.length, 2);
+assert.notEqual(a.title, b.title);
+assert.equal(irregular.length, 2);
+assert.equal(range.dates[0].year, '');
+assert.equal(fixed.dates[0].year, '22 BBY');
+const twentyOne = a.dates.find(d => d.year === '21 BBY');
+assert.equal(mapStart(a, twentyOne, 'Red').choice.variant.id, 'r21');
+assert.equal(mapStart(b, twentyOne, 'Red').choice.variant.id, 'middle');
+assert.equal(mapStart(ftgu, twentyOne).choice.tech, 1);
+assert.equal(mapStart(ftgu).choice.tech, undefined);
+assert.equal(mapStart(a, mapStart(ftgu).date, 'Blue').choice.variant.id, 'b22');
+assert.equal(mapStart(branches, branches.dates[1]).choice.variant.id, 'two');
+for (const family of mapFamilies(profile))
+  for (const date of family.dates)
+    for (const s of date.choices) {
+      const { setup } = launchPlan({ profiles: [profile] }, { profile: 'pack', row: s.row.id, target: s.variant.id, difficulty: 'medium' });
+      assert.equal(setup.campaign, s.variant.id);
+      assert.equal(setup.faction, s.row.faction);
+    }
 assert.throws(() => assertPrivateLibrary(process.cwd(), { items: new Map() }), /private library/);
 console.log(
   'PASS: exact atlas targets, fixed starts, donor allowlist, literal-only selector tables, faction restriction, regime variants and private cache guard.'

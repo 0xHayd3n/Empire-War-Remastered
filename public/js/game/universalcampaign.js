@@ -2,6 +2,8 @@ import { activeLanguage } from '../language.js';
 import { ruleFields } from './universalrules.js';
 import { ruleChoices, rulePresets } from './universalrulemenu.js';
 import { periods, chronology } from './universalmodes.js';
+import { mapFamilies, mapStart, techCalendar } from './universalmaplist.js';
+import { campaignRoster } from './universalroster.js';
 import { atlasBoard } from './universalboard.js';
 export function campaignChoices(campaigns, factionOf) {
   return [...campaigns.values()].filter(
@@ -28,9 +30,14 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     row,
     v,
     faction,
+    family,
+    date,
+    roster,
     difficulty,
     options,
     settings,
+    previewProfile,
+    previewMap,
     busy = false,
     closed = false;
   const ui = await atlasBoard(
@@ -44,8 +51,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     () => {
       if (!busy && row) {
         defaults();
-        v = row.variants[row.initial] || row.variants[0];
-        render();
+        choose(family, mapStart(family, null, faction));
       }
     }
   );
@@ -90,18 +96,28 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     options = {};
     settings = {};
   }
-  function pickProfile(id) {
-    p = data.profiles.find(p => p.id === id);
-    faction = p?.rows[0]?.faction;
-    defaults();
-    pickMap(p?.rows[0]);
+  function choose(next, selection) {
+    const s = selection.choice;
+    if (next.p !== p) defaults();
+    if (s.row !== row) settings = {};
+    if (s.variant !== v) delete options.expedition;
+    family = next;
+    p = next.p;
+    date = selection.date;
+    row = s.row;
+    faction = row.faction;
+    v = s.variant;
+    if (techCalendar(p, row)) {
+      if (s.tech === undefined) delete settings.tech;
+      else settings.tech = s.tech;
+    }
+    render();
   }
   function pickMap(next) {
-    row = next;
-    v = row?.variants[row.initial] || row?.variants[0];
-    settings = {};
-    delete options.expedition;
-    render();
+    choose(next, mapStart(next, date, next.p === p ? faction : undefined));
+  }
+  function pickDate(next) {
+    choose(family, { date: next, choice: next.choices.find(s => s.row.faction === faction) || next.choices[0] });
   }
   function drawRules() {
     const donors = data.profiles.filter(p => p.donor).map(p => ({ name: p.name, values: p.donor.values })),
@@ -154,60 +170,16 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
         : '';
   }
   function render() {
-    const eras = [...data.eras].sort((a, b) => chronology.indexOf(periods[a.id]) - chronology.indexOf(periods[b.id]));
     ui.el.dataset.profile = p.id;
-    ui.field(
-      'story',
-      'Storyline / time period',
-      eras.map(e => ({
-        ...opt(e.id, `${periods[e.id]} · ${e.name}${!e.ready ? ' (not built)' : data.unavailable.includes(e.id) ? ' (unavailable)' : ''}`),
-        disabled: !e.ready || data.unavailable.includes(e.id)
-      })),
-      p.id,
-      pickProfile
-    );
-    const fs = [...new Set(p.rows.map(r => r.faction))],
-      rows = p.rows.filter(r => r.faction === faction);
+    roster.show(family, date);
+    const techDate = techCalendar(p, row);
     ui.field(
       'faction',
       'Faction',
-      fs.map(f => opt(f, p.facts[f].label)),
+      date.choices.map(s => opt(s.row.faction, p.facts[s.row.faction].label)),
       faction,
-      f => {
-        faction = f;
-        pickMap(p.rows.find(r => r.faction === f));
-      }
+      f => choose(family, { date, choice: date.choices.find(s => s.row.faction === f) })
     );
-    const labels = new Set(),
-      dup = new Set();
-    for (const r of rows) {
-      if (labels.has(r.label)) dup.add(r.label);
-      labels.add(r.label);
-    }
-    ui.field(
-      'campaign',
-      'Campaign',
-      rows.map(r => opt(r.id, dup.has(r.label) ? `${r.label} — ${r.id}` : r.label)),
-      row?.id,
-      id => pickMap(rows.find(r => r.id === id))
-    );
-    const techDate = row?.limits.custom && row.slots.includes('tech') && !!p.yearLegend;
-    if (techDate) {
-      const legends = new Map([...p.yearLegend.matchAll(/^(\d+)\.\s*-\s*(.+)$/gm)].map(m => [+m[1], m[2]])),
-        choices = [opt('', 'Campaign default')],
-        adj = p.facts[faction].adj;
-      for (let n = row.limits.minTech; n <= row.limits.maxTech && choices.length < 256; n++)
-        choices.push(opt(n - adj, legends.get(n) || String(n)));
-      ui.field('date', 'Starting date', choices, settings.tech ?? '', value => {
-        if (value === '') delete settings.tech;
-        else settings.tech = +value;
-      });
-    } else
-      ui.field('date', 'Starting date', row?.variants.map(v => opt(v.id, v.date || 'Authored start')) || [], v?.id, id => {
-        v = row.variants.find(v => v.id === id);
-        delete options.expedition;
-        render();
-      });
     ui.field(
       'difficulty',
       'Difficulty',
@@ -240,8 +212,12 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     }
     ui.allow(!!v);
     ui.el.dataset.campaign = v?.id || '';
-    if (v) ui.map.show(p, v);
-    else ui.map.clear();
+    if (p !== previewProfile || v?.map !== previewMap) {
+      if (v) ui.map.show(p, v);
+      else ui.map.clear();
+      previewProfile = p;
+      previewMap = v?.map;
+    }
     note();
   }
   try {
@@ -255,8 +231,23 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
       );
     data = await cached.get(language);
     if (closed) return true;
-    pickProfile(data.profiles.some(p => p.id === origin) ? origin : data.profiles[0].id);
-    ui.focus();
+    const groups = [...data.eras]
+      .sort((a, b) => chronology.indexOf(periods[a.id]) - chronology.indexOf(periods[b.id]))
+      .map(e => {
+        const profile = data.profiles.find(p => p.id === e.id);
+        return {
+          id: e.id,
+          heading: `${periods[e.id]} · ${e.name}`,
+          maps: profile ? mapFamilies(profile) : [],
+          empty: !e.ready ? 'Not built' : !profile ? 'Unavailable' : 'No listed campaigns'
+        };
+      });
+    roster = campaignRoster(ui.roster, groups, pickMap, pickDate);
+    const initial = groups.find(g => g.id === origin)?.maps[0] || groups.find(g => g.maps.length)?.maps[0];
+    if (initial) {
+      pickMap(initial);
+      roster.focus();
+    } else ui.status.textContent = 'No playable campaigns available.';
   } catch (e) {
     if (!closed) ui.status.textContent = 'Campaign atlas unavailable. Restart Universal from this checkout and reopen setup. ' + e.message;
   }

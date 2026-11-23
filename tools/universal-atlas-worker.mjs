@@ -207,6 +207,7 @@ try {
       initial = variants && id === '3417277973' ? Math.max(0, Math.min(3, Math.floor(base.credits / 1000) - 1)) : 0;
     rows.push({
       id: c.name,
+      family: c.str('Campaign_Set').trim().toUpperCase(),
       label: label(c),
       description: db.t(c.str('Description_Text')),
       order: c.num('Sort_Order'),
@@ -222,10 +223,11 @@ try {
   if (id === '1125571106' && pack.revision === '5b2ceff618f502cf23a6d052d18d2cc895720a36462f9b4d28c5094515f311c4') {
     const menu = data.campaigns.get('GCMENU_REBEL');
     if (menu?.str('Story_Name').toUpperCase().includes('STORY_PLOTS_GCMENU.XML')) {
-      const add = (c, variants, order, scripted = false) => {
+      const add = (c, variants, order, family, scripted = false) => {
         const faction = c.str('Starting_Active_Player');
         rows.push({
           id: c.name,
+          family,
           label: label(c),
           description: db.t(c.str('Description_Text')),
           faction,
@@ -239,9 +241,9 @@ try {
         });
       };
       // Keep the original menu reachable for warlord and custom starts with additional authored decisions.
-      add(menu, [variant(menu, 'Original in-game selector')], 10000, true);
+      add(menu, [variant(menu, 'Original in-game selector')], 10000, '', true);
       const table = n => menuTable(read(`Data/Scripts/Story/GCMenu${n}.lua`).toString());
-      for (const targets of thrawnSelections(table('Translator'), table('_FactionsbyMapEra'))) {
+      for (const { map, targets } of thrawnSelections(table('Translator'), table('_FactionsbyMapEra'))) {
         const choices = targets
           .map(([name, date]) => [data.campaigns.get(name.toUpperCase()), date])
           .filter(
@@ -256,7 +258,8 @@ try {
           add(
             choices[0][0],
             choices.map(([c, date]) => variant(c, date)),
-            -100 + choices[0][0].num('Sort_Order')
+            -100 + choices[0][0].num('Sort_Order'),
+            'selector:' + map
           );
       }
     }

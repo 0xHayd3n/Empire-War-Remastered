@@ -96,7 +96,7 @@ export function atlasStore({ home, library, eras }) {
   async function one(id, lang) {
     stamp ??= stockStamp(library.game);
     const rev = id === 'stock' ? 'stock' : JSON.parse(fs.readFileSync(path.join(home, 'profiles', id + '.json'))).revision;
-    const filename = path.join(directory, `${id}-${lang}-${digest('galaxy-scene-2:' + stamp + ':' + rev)}.gz`);
+    const filename = path.join(directory, `${id}-${lang}-${digest('galaxy-roster-1:' + stamp + ':' + rev)}.gz`);
     try {
       return JSON.parse(gunzipSync(fs.readFileSync(filename)));
     } catch {}

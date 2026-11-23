@@ -53,7 +53,7 @@ export function thrawnSelections(trans, availability) {
           targets.push([base, date + ' · Isard'], [base + '_CCoGM', date + ' · Central Committee']);
         } else targets.push([base, date]);
       }
-      if (targets.length) rows.push(targets);
+      if (targets.length) rows.push({ map, targets });
     }
   }
   return rows;

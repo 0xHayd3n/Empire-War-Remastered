@@ -5,7 +5,7 @@ export function atlasBoard(back, play, reset) {
   el.className = 'uc-atlas';
   el.dataset.universalScreen = 'campaign';
   el.setAttribute('aria-labelledby', 'uc-heading');
-  el.innerHTML = `<div class="uc-canvas"></div><aside class="uc-panel" aria-label="Campaign settings"><h1 id="uc-heading">Galactic Conquest</h1><div class="uc-fields"></div><footer><div role="status"></div><button type="button" class="uc-reset" aria-label="Reset settings">Reset</button><button type="button" class="uc-start" disabled>Start campaign</button></footer></aside>`;
+  el.innerHTML = `<div class="uc-canvas"></div><aside class="uc-panel" aria-label="Campaign settings"><h1 id="uc-heading">Galactic Conquest</h1><div class="uc-content"><div class="uc-roster" role="region" aria-label="Campaign maps"></div><div class="uc-fields"></div></div><footer><div role="status"></div><button type="button" class="uc-reset" aria-label="Reset settings">Reset</button><button type="button" class="uc-start" disabled>Start campaign</button></footer></aside>`;
   const panel = el.querySelector('.uc-fields'),
     start = el.querySelector('.uc-start'),
     fields = new Map();
@@ -21,7 +21,8 @@ export function atlasBoard(back, play, reset) {
   return {
     el,
     map,
-    panel,
+    panel: el.querySelector('.uc-content'),
+    roster: el.querySelector('.uc-roster'),
     status: el.querySelector('[role="status"]'),
     close() {
       map.dispose();
@@ -31,9 +32,6 @@ export function atlasBoard(back, play, reset) {
     allow(b) {
       start.disabled = !b;
       start.setAttribute('aria-disabled', String(!b));
-    },
-    focus() {
-      panel.querySelector('select')?.focus({ preventScroll: true });
     },
     hide(id) {
       if (fields.has(id)) fields.get(id).l.hidden = true;

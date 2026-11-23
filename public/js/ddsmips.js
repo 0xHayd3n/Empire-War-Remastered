@@ -10,35 +10,59 @@ export function mipsFit(width, height) {
   return true;
 }
 
-export function buildMips(src, width, height, kind) {
-  let rgba = decodeDXT(src, width, height, kind),
-    w = width,
-    h = height;
-  const out = [];
-  while (w > 1 || h > 1) {
-    const nw = Math.max(1, w >> 1),
-      nh = Math.max(1, h >> 1),
-      next = new Uint8Array(nw * nh * 4);
-    for (let y = 0; y < nh; y++) {
-      const y0 = Math.min(h - 1, y * 2),
-        y1 = Math.min(h - 1, y * 2 + 1);
-      for (let x = 0; x < nw; x++) {
-        const x0 = Math.min(w - 1, x * 2),
-          x1 = Math.min(w - 1, x * 2 + 1);
-        const a = (y0 * w + x0) * 4,
-          b = (y0 * w + x1) * 4,
-          c = (y1 * w + x0) * 4,
-          d = (y1 * w + x1) * 4,
-          o = (y * nw + x) * 4;
-        for (let i = 0; i < 4; i++) next[o + i] = (rgba[a + i] + rgba[b + i] + rgba[c + i] + rgba[d + i] + 2) >> 2;
-      }
+function downsample(rgba, w, h, next, offset = 0) {
+  const nw = Math.max(1, w >> 1),
+    nh = Math.max(1, h >> 1);
+  for (let y = 0; y < nh; y++) {
+    const row = y * 2 * w,
+      row1 = Math.min(h - 1, y * 2 + 1) * w;
+    for (let x = 0; x < nw; x++) {
+      const x0 = x * 2,
+        x1 = Math.min(w - 1, x0 + 1);
+      const a = (row + x0) * 4,
+        b = (row + x1) * 4,
+        c = (row1 + x0) * 4,
+        d = (row1 + x1) * 4;
+      for (let i = 0; i < 4; i++) next[offset++] = (rgba[a + i] + rgba[b + i] + rgba[c + i] + rgba[d + i] + 2) >> 2;
     }
+  }
+}
+
+// The GPU already has a compressed top level. Only its half-size RGBA result is
+// needed here. Decode whole rows of DXT blocks into one reusable 16-row strip.
+function firstMip(src, width, height, kind) {
+  const rows = 16,
+    blockRowBytes = Math.ceil(width / 4) * (kind === 1 ? 8 : 16);
+  const w = Math.max(1, width >> 1),
+    h = Math.max(1, height >> 1);
+  const next = new Uint8Array(w * h * 4),
+    strip = new Uint8Array(width * Math.min(rows, height) * 4);
+  for (let y = 0; y < h; y += rows / 2) {
+    const at = (y / 2) * blockRowBytes,
+      count = Math.min(height - 2 * y, rows);
+    decodeDXT(src.subarray(at, at + Math.ceil(count / 4) * blockRowBytes), width, count, kind, strip);
+    downsample(strip, width, count, next, y * w * 4);
+  }
+  return next;
+}
+
+export function buildMips(src, width, height, kind) {
+  if (width === 1 && height === 1) return [];
+  let w = Math.max(1, width >> 1),
+    h = Math.max(1, height >> 1);
+  let rgba = firstMip(src, width, height, kind);
+  const out = [];
+  for (;;) {
+    out.push({ data: encodeDXT(rgba, w, h, kind), width: w, height: h });
+    if (w === 1 && h === 1) return out;
+    const nw = Math.max(1, w >> 1),
+      nh = Math.max(1, h >> 1);
+    const next = new Uint8Array(nw * nh * 4);
+    downsample(rgba, w, h, next);
     rgba = next;
     w = nw;
     h = nh;
-    out.push({ data: encodeDXT(rgba, w, h, kind), width: w, height: h });
   }
-  return out;
 }
 
 const q5 = v => Math.round((v * 31) / 255),

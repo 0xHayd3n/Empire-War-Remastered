@@ -2,12 +2,14 @@
 
 0xHayd3n’s personal fork of RIRA’s [Empire at War: Browser Edition](https://github.com/Glenn332/Empire-At-War-Browser-Edition). This is the browser game, not a separate desktop reconstruction. [Playeaw.com](https://playeaw.com) runs the upstream edition, not this fork.
 
+**On the `universal` test branch:** [engine-wide remaster changes and comparison results](docs/universal.md). The first experiment reduces temporary memory while generating texture mipmaps. It works with just the stock game; none of the six Workshop mods is required.
+
 ## Play this fork
 
 You need Node.js 22+ and your own copy of *Empire at War – Gold Pack*. No native build is required.
 
 ```sh
-git clone https://github.com/0xHayd3n/Empire-War-Remastered.git
+git clone --branch universal https://github.com/0xHayd3n/Empire-War-Remastered.git
 cd Empire-War-Remastered
 npm run workshop
 ```

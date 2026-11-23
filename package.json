@@ -16,6 +16,7 @@
     "test:space-mirror": "node tools/test-space-mirror.mjs",
     "test:space-hooks": "node tools/test-space-hooks.mjs",
     "test:space-direct": "node tools/test-space-direct.mjs",
+    "test:universal": "node tools/test-universal-mips.mjs",
     "test:modules": "node tools/test-module-graph.mjs",
     "test:workshop": "node tools/test-workshop-order.mjs && node tools/test-workshop-library.mjs && node tools/test-workshop-view.mjs && node tools/test-workshop-battle-art.mjs && node tools/test-briefing-photo-display.mjs",
     "test:submods": "node tools/test-submod-stack.mjs",

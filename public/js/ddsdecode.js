@@ -1,5 +1,4 @@
-export function decodeDXT(src, width, height, kind) {
-  const out = new Uint8Array(width * height * 4);
+export function decodeDXT(src, width, height, kind, out = new Uint8Array(width * height * 4)) {
   const dxt1 = kind === 1,
     dxt5 = kind === 5;
   const col = new Uint8Array(16),

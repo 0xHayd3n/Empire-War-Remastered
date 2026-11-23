@@ -1,3 +1,4 @@
+import { topFrame } from '../platform.js';
 import { db } from '../gamedata.js';
 import { openDialog } from './dialogs.js';
 import { stageStart, toMainMenu } from './transit.js';
@@ -33,7 +34,7 @@ export async function openRetryDialog(game) {
 }
 
 export function retryMission(game) {
-  if (window.parent !== window && window.parent.game?.linkedMission?.frame?.contentWindow === window) {
+  if (!topFrame() && window.parent.game?.linkedMission?.frame?.contentWindow === window) {
     reloadPage();
     return;
   }

@@ -1,0 +1,57 @@
+.era-panel {
+  color-scheme: dark;
+  box-sizing: border-box;
+  width: min(720px, 94vw);
+  max-height: 90vh;
+  overflow: auto;
+  margin: auto;
+  padding: clamp(18px, 4vw, 36px);
+  background: #14222ef5;
+  color: #ebf2f6;
+  border: 1px solid #65838f;
+  border-radius: 8px;
+  font:
+    16px/1.45 system-ui,
+    sans-serif;
+}
+.era-panel::backdrop {
+  background: #080e16d9;
+}
+.era-panel small,
+.era-panel .era-choices span {
+  display: block;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #aac9d2;
+}
+.era-panel h1 {
+  font-size: clamp(24px, 5vw, 38px);
+  margin: 0.25em 0;
+}
+.era-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr));
+  gap: 10px;
+}
+.era-panel button {
+  font: inherit;
+  cursor: pointer;
+  color: inherit;
+  background: #263b49;
+  border: 1px solid #678190;
+  border-radius: 5px;
+  padding: 10px;
+  text-align: left;
+}
+.era-panel button:focus-visible,
+.era-panel button:hover {
+  background: #355060;
+}
+.era-panel button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.era-panel footer {
+  margin-top: 18px;
+}

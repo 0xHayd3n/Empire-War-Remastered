@@ -47,7 +47,7 @@ lets you play offline afterwards. The start page walks you through both options.
 
 ### Universal library: one game, separate overhauls
 
-On `universal`, run `npm run universal:build` once with your Steam parents installed, then `npm run universal` or double-click **Universal Library.cmd**. The [local campaign library](http://127.0.0.1:8590/) offers stock and six isolated profiles that share byte-identical files. From a profile’s game menu choose **New campaign** to start Galactic Conquest with the authored rules or [opt-in campaign paths and settings](docs/universal-library.md#start-a-campaign-and-choose-its-path). It doesn't merge campaigns or modify Workshop installs. See [build, disk usage and switching profiles](docs/universal-library.md).
+On `universal`, run `npm run universal:build` once with your Steam parents installed, then `npm run universal` or double-click **Universal Library.cmd**. The [Universal game](http://127.0.0.1:8590/) opens directly to the title menu. Choose **Single Player → Galactic Conquest → era → faction and campaign**. Before starting, keep that campaign’s rules or choose [treasury, political-control and objective presets](docs/universal-library.md#start-a-campaign-and-choose-its-path). Skirmish and Instant Battle also offer the era choice inside the game. It doesn't merge campaigns or modify Workshop installs. See [build, disk usage and switching profiles](docs/universal-library.md).
 
 ### Play an installed Steam Workshop stack
 

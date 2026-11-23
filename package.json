@@ -8,6 +8,7 @@
     "universal": "node server.mjs --universal --open",
     "universal:build": "node tools/build-universal-packs.mjs",
     "test:universal-library": "node tools/test-universal-library.mjs",
+    "test:universal-window": "node tools/test-universal-window.cjs",
     "vendor": "node tools/vendor.mjs",
     "build:prod": "node tools/build.mjs",
     "wasm": "asc wasm/pathsearch.ts -o public/js/game/pathsearch.wasm -O3 --runtime stub --noAssert --initialMemory 32 && asc wasm/landpose.ts -o public/js/game/landpose.wasm -O3 --runtime stub --noAssert --initialMemory 2 --enable simd",

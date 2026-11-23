@@ -118,16 +118,18 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (session.library && (p === '/' || p === '/index.html')) {
-      res.writeHead(302, { Location: session.library + '/', 'Cache-Control': 'no-store' }); return res.end();
+      res.writeHead(302, { Location: '/play.html', 'Cache-Control': 'no-store' }); return res.end();
     }
+    if (session.eras && p === '/api/universal/eras') return send(res, 200, JSON.stringify(session.eras()), MIME['.json'], { 'Cache-Control':'no-store' });
     if (session.campaignRules && p === '/api/universal/rules') {
       return send(res, 200, JSON.stringify(session.catalog ||= session.campaignRules()), MIME['.json'], { 'Cache-Control':'no-store' });
     }
     if (session.library && p === '/play.html') {
+      // A frame navigation on loopback is cross-origin. Only this document is embeddable, by the trusted ancestors below; assets stay same-origin.
+      res.setHeader('Cross-Origin-Resource-Policy','cross-origin');
+      res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${session.library}`);
       const html = fs.readFileSync(path.join(PUBLIC, 'play.html'), 'utf8')
-        .replace('</head>', `<meta name="swr-universal" content="local">${session.pack ? `<meta name="swr-pack-revision" content="${session.pack.mounted.workshop}:${session.pack.revision}">` : ''}</head>`)
-        .replace('</body>',
-        `<div class="universal-menu"><a href="play.html?universal-campaign">New campaign</a><a class="universal-return" href="${session.library}/">Campaign library</a></div><style>.universal-menu{display:none}body:has(#frontOverlay,#lobby:not(.hidden),[data-id="IDC_STAGING_MAP_LIST"]) .universal-menu{display:flex;gap:12px;position:fixed;top:8px;right:12px;z-index:200;font:14px system-ui;background:#182431;padding:6px 12px;border-radius:4px}.universal-menu a{color:white}</style></body>`);
+        .replace('</head>', `<meta name="swr-universal" content="${session.library}"><link rel="stylesheet" href="universal-modes.css">${session.pack ? `<meta name="swr-pack-revision" content="${session.pack.mounted.workshop}:${session.pack.revision}">` : ''}</head>`);
       return send(res, 200, html, MIME['.html'], { 'Cache-Control':'no-store', 'Document-Policy':'js-profiling' });
     }
     if (p === '/api/battle-photo') {

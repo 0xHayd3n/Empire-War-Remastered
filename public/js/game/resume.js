@@ -1,3 +1,4 @@
+import { topFrame } from '../platform.js';
 import { snapshot, snapshotNow, putSave, getSave, deleteSave } from './savegame.js';
 
 const ID = 'resume',
@@ -29,7 +30,7 @@ function saveable(g) {
     !s.benchmark &&
     !s.net &&
     !s.linkedTactical &&
-    window.parent === window
+    topFrame()
   );
 }
 

@@ -37,7 +37,7 @@ export async function openUniversalCampaign({ start, back, profileId }) {
   const campaigns = campaignChoices(data.campaigns, n => db.faction(n));
   const root = document.createElement('main');
   root.id = 'universal-campaign';
-  root.innerHTML = `<form><header><small>UNIVERSAL · SINGLE PLAYER</small><h1>New campaign</h1><p id="uc-profile"></p></header><section><label>Faction<select id="uc-faction"></select></label><label>Campaign<select id="uc-campaign"></select></label><label>Difficulty<select id="uc-difficulty"><option value="easy">Easy</option><option selected value="medium">Medium</option><option value="hard">Hard</option></select></label></section><fieldset><legend>Campaign path</legend><label>Objective<select id="uc-path"></select></label><p id="uc-sites" aria-live="polite"></p></fieldset><fieldset id="uc-rules"><legend>Optional rules from your library</legend><p>Keep the campaign defaults, or borrow one setting at a time. Changes apply to this campaign only.</p></fieldset><p id="uc-status" role="status"></p><footer><button type="button" id="uc-back">Back to game menu</button><button id="uc-start">Start campaign</button></footer></form>`;
+  root.innerHTML = `<form><header><small>UNIVERSAL · SINGLE PLAYER</small><h1>Galactic Conquest</h1><p id="uc-profile"></p></header><section><label>Faction<select id="uc-faction"></select></label><label>Campaign<select id="uc-campaign"></select></label><label>Difficulty<select id="uc-difficulty"><option value="easy">Easy</option><option selected value="medium">Medium</option><option value="hard">Hard</option></select></label></section><fieldset><legend>Campaign path</legend><label>Objective<select id="uc-path"></select></label><p id="uc-sites" aria-live="polite"></p></fieldset><fieldset id="uc-rules"><legend>Campaign rule presets</legend><p>Keep the campaign defaults, or borrow one setting at a time. Changes apply to this campaign only.</p></fieldset><p id="uc-status" role="status"></p><footer><button type="button" id="uc-back">Back to eras</button><button id="uc-start">Start campaign</button></footer></form>`;
   const style = document.createElement('link');
   style.rel = 'stylesheet';
   style.href = 'universal-campaign.css';
@@ -91,6 +91,34 @@ export async function openUniversalCampaign({ start, back, profileId }) {
   faction.onchange = refreshCampaigns;
   campaign.onchange = refreshPath;
   refreshCampaigns();
+  const presetLine = document.createElement('label'),
+    preset = document.createElement('select');
+  presetLine.textContent = 'Economy and politics preset';
+  preset.id = 'uc-preset';
+  presetLine.append(preset);
+  el('rules').append(presetLine);
+  opt(preset, 'Use this campaign’s settings', '');
+  const fields = Object.keys(ruleFields),
+    groups = new Map();
+  for (const donor of catalog.donors) {
+    if (!fields.every(field => validValue(field, donor.values[field]))) continue;
+    const values = fields.map(field =>
+      donor.values[field] === db.constants.num(ruleFields[field].tag, ruleFields[field].fallback) ? '' : String(donor.values[field])
+    );
+    if (!values.some(Boolean)) continue;
+    const key = JSON.stringify(values);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(donor.name);
+  }
+  for (const [key, labels] of groups) opt(preset, labels.join(' / '), key);
+  opt(preset, 'Custom mix', 'custom');
+  preset.lastElementChild.disabled = true;
+  preset.onchange = () => {
+    const vals = preset.value ? JSON.parse(preset.value) : [];
+    fields.forEach((field, i) => {
+      el(field).value = vals[i] || '';
+    });
+  };
   for (const [field, { tag, unit, label: text, fallback }] of Object.entries(ruleFields)) {
     const line = document.createElement('label'),
       sel = document.createElement('select');
@@ -103,13 +131,27 @@ export async function openUniversalCampaign({ start, back, profileId }) {
     for (const [val, sources] of ruleChoices(catalog.donors, field, native))
       opt(sel, `${val.toLocaleString()} ${unit} — ${sources.join(' / ')}`, String(val));
     sel.disabled = sel.options.length < 2;
+    sel.onchange = () => {
+      const vals = fields.map(k => el(k).value),
+        key = JSON.stringify(vals);
+      preset.value = !vals.some(Boolean) ? '' : groups.has(key) ? key : 'custom';
+    };
   }
   el('status').textContent = !campaigns.length
     ? 'This profile has no listed, playable single-player conquest campaign.'
     : catalog.unavailable.length
       ? 'Could not read: ' + catalog.unavailable.join(', ') + '. Authored play is still available.'
       : '';
+  const escape = e => {
+    if (e.code === 'Escape') {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      el('back').click();
+    }
+  };
+  addEventListener('keydown', escape, true);
   const close = () => {
+    removeEventListener('keydown', escape, true);
     root.remove();
     style.remove();
   };

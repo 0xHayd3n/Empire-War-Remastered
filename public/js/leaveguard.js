@@ -1,3 +1,4 @@
+import { topFrame } from './platform.js';
 const inGame = () => {
   const g = window.game;
   return !!g && !g.setup?.attract && !g.setup?.benchmark;
@@ -14,7 +15,7 @@ export function reloadPage() {
 }
 
 export function guardLeaving() {
-  if (window.top !== window) return;
+  if (!topFrame()) return;
   addEventListener('beforeunload', e => {
     if (window.swrLeaving || !inGame()) return;
     e.preventDefault();

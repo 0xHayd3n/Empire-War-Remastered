@@ -10,7 +10,8 @@ import { loadDialogs } from './dialogs.js';
 const PANEL = { cls: 'front', stretch: true };
 
 export class FrontEnd {
-  constructor(game, { skirmish, instant, leave, start, multiplayer }) {
+  constructor(game, { skirmish, instant, leave, start, multiplayer, universal }) {
+    this.universal = universal;
     this.game = game;
     this.menus = game.menus;
     this.skirmish = skirmish;
@@ -20,6 +21,7 @@ export class FrontEnd {
     this.openLobbies = multiplayer;
     this.depth = 0;
     this.onKey = e => {
+      if (this.universal && document.querySelector('.era-panel[open], #universal-campaign')) return;
       const top = this.menus.stack[this.menus.stack.length - 1];
       if (e.code === 'Escape' && !this.menus.listening && this.menus.stack.length > 1 && top.veil.style.display !== 'none') {
         e.stopPropagation();
@@ -86,10 +88,20 @@ export class FrontEnd {
     dlg.on('IDC_MAIN_MENU_TUTORIAL', () => this.campaign(dlg, true));
     dlg.on('IDC_MAIN_MENU_MULTIPLAYER', () => this.multiplayer());
     dlg.on('IDC_MAIN_MENU_SINGLE_PLAYER_GAMES', () => this.single());
-    dlg.on('IDC_LOAD_GAME_MAIN', () => this.menus.load());
+    dlg.on('IDC_LOAD_GAME_MAIN', () => this.universal ? this.pickEra('load', dlg) : this.menus.load());
     dlg.on('IDC_OPTIONS', () => this.options());
     dlg.on('IDC_MAIN_MENU_EXIT2', () => this.leave());
     return true;
+  }
+
+  pickEra(mode, dlg) {
+    const overlay = document.getElementById('frontOverlay');
+    dlg.veil.style.display = 'none';
+    if (overlay) overlay.style.display = 'none';
+    return this.universal.pick(mode, () => {
+      dlg.veil.style.display = '';
+      if (overlay) overlay.style.display = '';
+    });
   }
 
   async single() {
@@ -101,14 +113,15 @@ export class FrontEnd {
       slot ? { extra: [{ kind: 'PUSHBUTTON', text: '', id: 'IDC_INSTANT_BATTLE_BUTTON', fontOf: 'IDC_SKIRMISH_GAMES_BUTTON', ...slot, style: '' }] } : {}
     );
     if (!dlg) return;
-    dlg.on('IDC_NEW_CAMPAIGN_BUTTON', () => this.newCampaign(dlg));
-    dlg.on('IDC_CUSTOM_CAMPAIGN_BUTTON', () => this.campaign(dlg));
+    dlg.on('IDC_NEW_CAMPAIGN_BUTTON', () => this.universal ? this.pickEra('story', dlg) : this.newCampaign(dlg));
+    dlg.on('IDC_CUSTOM_CAMPAIGN_BUTTON', () => this.universal ? this.pickEra('conquest', dlg) : this.campaign(dlg));
     const show = on => {
       dlg.veil.style.display = on ? '' : 'none';
       const o = document.getElementById('frontOverlay');
       if (o) o.style.display = on ? '' : 'none';
     };
     dlg.on('IDC_SKIRMISH_GAMES_BUTTON', async () => {
+      if (this.universal) return this.pickEra('skirmish', dlg);
       show(false);
       const ok = await this.skirmish(() => show(true)).catch(() => false);
       if (!ok) show(true);
@@ -151,7 +164,7 @@ export class FrontEnd {
         copy.style.top = parseFloat(top) - pad + 'px';
       }
       dlg.setText('IDC_INSTANT_BATTLE_BUTTON', 'Instant Battle');
-      dlg.on('IDC_INSTANT_BATTLE_BUTTON', () => this.runInstant(show));
+      dlg.on('IDC_INSTANT_BATTLE_BUTTON', () => this.universal ? this.pickEra('instant', dlg) : this.runInstant(show));
     } else if (this.instant) this.instantEntry(dlg, show);
   }
 
@@ -187,7 +200,7 @@ export class FrontEnd {
         if (c && e) e.style.top = c.y - gap + 'px';
       }
     }
-    this.menus.extra(dlg, 'IDC_SKIRMISH_GAMES_BUTTON', 'Instant Battle', skirmish.x, y, skirmish.w, () => this.runInstant(show));
+    this.menus.extra(dlg, 'IDC_SKIRMISH_GAMES_BUTTON', 'Instant Battle', skirmish.x, y, skirmish.w, () => this.universal ? this.pickEra('instant', dlg) : this.runInstant(show));
   }
 
   async multiplayer() {

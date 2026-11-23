@@ -1,3 +1,4 @@
+import { gameRootWindow, topFrame } from '../platform.js';
 import { leaveTo } from '../leaveguard.js';
 
 const DB = 'swr-transit',
@@ -56,7 +57,7 @@ let inPlace = null;
 export function setInPlace(hooks) {
   inPlace = hooks;
 }
-const canInPlace = () => inPlace && window.parent === window && !(window.game?.setup?.net || window.game?.net);
+const canInPlace = () => inPlace && topFrame() && !(window.game?.setup?.net || window.game?.net);
 
 function carried(setup) {
   const snap = setup && setup.restore,
@@ -82,7 +83,7 @@ export function toMainMenu() {
     inPlace.menu();
     return;
   }
-  const top = window.top || window;
+  const top = gameRootWindow() || window;
   leaveTo(top.location.pathname, top);
 }
 

@@ -2,7 +2,7 @@ import { tacticalIntro } from './game/tacticalintro.js';
 import { TacticalMarker } from './game/tacticalobjects.js';
 import { initCursorLock } from './cursorlock.js';
 import { discordSetting, setDiscord, initDiscord } from './discordpresence.js';
-import { inApp } from './platform.js';
+import { inApp, topFrame } from './platform.js';
 import { colorizes } from './game/teamcolor.js';
 import { setTacticalRules } from './game/tacticalrules.js';
 import { linkedParent, authoredMapOwner, ensureMissionPlayers } from './game/linktactical.js';
@@ -2623,7 +2623,7 @@ async function boot() {
           .start()
           .catch(e => {
             console.error(e);
-            if (setup.linkedTactical && window.parent !== window) window.parent.game?.abortLinkedTactical(e.message);
+            if (setup.linkedTactical && !topFrame()) window.parent.game?.abortLinkedTactical(e.message);
             else showMessage('Failed to start: ' + e.message);
           });
   const leaveFor = mode => {
@@ -3391,7 +3391,28 @@ async function boot() {
       launch(setup);
     }
   };
+  const universalHost = document.querySelector('meta[name="swr-universal"]')?.content;
+  const profileId = document.querySelector('meta[name="swr-pack-revision"]')?.content.split(':')[0];
+  let universal;
+  if (universalHost && topFrame()) {
+    const { universalModeNavigation } = await import('./game/universalmodes.js');
+    universal = exits.universal = universalModeNavigation({current:profileId || 'stock', host:universalHost, setup:async (mode,back) => {
+      if (mode === 'skirmish') return lobby(back);
+      if (mode === 'instant') return instant(back);
+      if (mode === 'load') return universal.saves(await listSaves(),loadSave,back);
+      const start = setup => { audio.unlock(); exits.start(setup); };
+      if (mode === 'story') {
+        const {openMainCampaignMenu, mainCampaign} = await import('./game/storycampaignmenu.js');
+        const {loadCampaignData} = await import('./game/galaxy.js');
+        if (!mainCampaign((await loadCampaignData()).campaigns)) return false;
+        return openMainCampaignMenu({start,cancel:back,audio});
+      }
+      const { openUniversalCampaign } = await import('./game/universalcampaign.js');
+      return openUniversalCampaign({ profileId, back, start });
+    }});
+  }
   const mainMenu = async () => {
+    if (universal && profileId && window.parent !== window) { universal.home(); return; }
     if (!params.has('nomenu')) {
       const demo = db.constants.list('Demo_Attract_Maps')[0]?.replace(/\.rec$/i, '.ted');
       const front =
@@ -3401,13 +3422,21 @@ async function boot() {
               return false;
             })
           : false;
-      if (front) return;
+      if (front) {
+        if (universal && params.get('universal-mode') === 'modes') {
+          params.delete('universal-mode');
+          history.replaceState(null, '', location.pathname);
+          await window.game.front.single();
+        }
+        return;
+      }
       if (window.game) {
         leaveTo(location.pathname + '?nomenu');
         return;
       }
     }
     hideSplash();
+    if (universal) { universal.localModes(); return; }
     const staged = await openLobby({
       maps: [...maps, ...dynamicMaps()],
       landMaps,
@@ -3442,7 +3471,7 @@ async function boot() {
     load: id => setTimeout(() => loadSave(id))
   });
   notePage();
-  const linked = window.parent !== window && window.parent.game?.linkedMission;
+  const linked = !topFrame() && window.parent.game?.linkedMission;
   if (params.has('linked-tactical') && linked?.frame.contentWindow === window) {
     await launch(linked.setup);
     return;
@@ -3458,7 +3487,7 @@ async function boot() {
     await launch(mpParent.mpBattles.current.setup);
     return;
   }
-  if (window.parent === window) watchForResume(() => window.game);
+  if (topFrame()) watchForResume(() => window.game);
   let pending = null;
   try {
     pending = sessionStorage.getItem('swr-load');
@@ -3530,22 +3559,18 @@ async function boot() {
     launch(staged0);
     return;
   }
-  if (params.has('universal-campaign') && document.querySelector('meta[name="swr-universal"]') && window.parent === window) {
+  const requested = params.get('universal-mode') || (params.has('universal-campaign') ? 'conquest' : '');
+  if (universal && requested && universal.supports(requested)) {
     hideSplash();
     history.replaceState(null, '', location.pathname);
-    const { openUniversalCampaign } = await import('./game/universalcampaign.js');
-    await openUniversalCampaign({
-      profileId: document.querySelector('meta[name="swr-pack-revision"]')?.content.split(':')[0],
-      back: () => leaveTo(location.pathname),
-      start: setup => { audio.unlock(); exits.start(setup); }
-    });
+    await universal.run(requested);
     return;
   }
   showSplash('menu');
   await mainMenu();
 }
 
-async function startFrontEnd(mapFile, { lobby, instant, multiplayer, load, start }) {
+async function startFrontEnd(mapFile, { lobby, instant, multiplayer, load, start, universal }) {
   if (!(await loadMap(mapFile).catch(() => null))) return false;
   const land = (await loadMapHeader(mapFile).catch(() => null))?.kind === 1;
   const attractSetup = {
@@ -3572,6 +3597,7 @@ async function startFrontEnd(mapFile, { lobby, instant, multiplayer, load, start
   };
   addEventListener('pointerdown', unlock, true);
   const front = (game.front = new FrontEnd(game, {
+    universal,
     skirmish: cancel => lobby(cancel),
     instant: cancel => instant(cancel),
     multiplayer,

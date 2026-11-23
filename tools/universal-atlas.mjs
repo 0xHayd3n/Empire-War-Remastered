@@ -14,7 +14,7 @@ function stockStamp(game) {
     h = createHash('sha256');
   try {
     for (const [k, e] of v.index) {
-      if (!/^DATA\\(?:XML\\|TEXT\\|RESOURCES\\GUIDIALOG\\)/.test(k)) continue;
+      if (!/^DATA\\(?:XML\\|TEXT\\|RESOURCES\\GUIDIALOG\\|ART\\TEXTURES\\(?:MT_COMMANDBAR\.|I_))/.test(k)) continue;
       const file = e.file || e.meg;
       if (!stats.has(file)) {
         const s = fs.statSync(file);
@@ -96,7 +96,7 @@ export function atlasStore({ home, library, eras }) {
   async function one(id, lang) {
     stamp ??= stockStamp(library.game);
     const rev = id === 'stock' ? 'stock' : JSON.parse(fs.readFileSync(path.join(home, 'profiles', id + '.json'))).revision;
-    const filename = path.join(directory, `${id}-${lang}-${digest('galaxy-roster-1:' + stamp + ':' + rev)}.gz`);
+    const filename = path.join(directory, `${id}-${lang}-${digest('galaxy-cards-2:' + stamp + ':' + rev)}.gz`);
     try {
       return JSON.parse(gunzipSync(fs.readFileSync(filename)));
     } catch {}

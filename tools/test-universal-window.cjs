@@ -50,6 +50,9 @@ const assert = require('node:assert/strict'),
     await f.locator('[data-id="IDC_CUSTOM_CAMPAIGN_BUTTON"]').click();
     const board = f.locator('[data-universal-screen="campaign"]'),
       field = k => board.locator(`[data-field="${k}"]`),
+      radio = (k, v) => field(k).locator(`input[type=radio][value="${v}"]`),
+      checkedValue = k => field(k).locator('input:checked').inputValue(),
+      slider = k => field(k).getByRole('slider'),
       group = id => board.locator(`.uc-roster section[data-profile="${id}"]`),
       current = board.locator('.uc-map-choice[aria-pressed="true"]'),
       dates = board.getByRole('group', { name: 'Starting date' }),
@@ -84,11 +87,31 @@ const assert = require('node:assert/strict'),
       if (process.env.SWR_TEST_ALL_ERAS && !checked.has(id)) {
         await board.locator('[data-scene="native"],[data-scene="unavailable"]').waitFor();
         assert.equal(await board.locator('.uc-canvas').getAttribute('data-scene'), 'native', id + ' preview');
+        assert(
+          await field('faction')
+            .locator('.uc-face')
+            .evaluateAll(
+              es => es.length > 0 && es.every(e => ['img.uc-crest', 'img.uc-portrait'].every(k => e.querySelector(k)?.naturalWidth > 0))
+            ),
+          id + ' faction pictures'
+        );
+        const keyOwners = await board.locator('.uc-key > span').evaluateAll(es =>
+          es.map(e => {
+            if (!e.querySelector('img.uc-crest,b.uc-monogram')) throw Error('no owner badge');
+            return e.dataset.owner;
+          })
+        );
+        assert.deepEqual(
+          keyOwners.sort(),
+          [...new Set(await board.locator('[data-planet]').evaluateAll(es => es.map(e => e.dataset.owner)))].sort()
+        );
         checked.add(id);
       }
     }
     await select('1976399102');
-    await field('faction').selectOption('Empire');
+    await radio('faction', 'Rebel').check();
+    assert.match(await board.getAttribute('data-campaign'), /Rebel/i);
+    await radio('faction', 'Empire').check();
     const fall = group('1976399102');
     await dateButton('20 BBY').click();
     await fall.getByRole('button', { name: /Known Galaxy - Medium/ }).click();
@@ -112,26 +135,39 @@ const assert = require('node:assert/strict'),
     await select('1397421866');
     if (process.env.SWR_TEST_ALL_ERAS) for (const id of ['1125571106', '3387971722', '1770851727', 'stock']) await select(id);
     await select('1976399102');
-    await field('faction').selectOption('Empire');
+    await radio('faction', 'Empire').check();
     await fall.getByRole('button', { name: /Known Galaxy - Small/ }).click();
     await dateButton('20 BBY').click();
     if (process.env.SWR_TEST_THR) {
       await select('1125571106');
-      await field('faction').selectOption('Empire');
+      await radio('faction', 'Empire').check();
       await group('1125571106').locator('[data-family="KnownSmall_Era_1_Rebel"]').click();
       await dateButton('6 ABY · Central Committee').click();
-      assert.equal(await field('faction').locator('option').count(), 1);
+      assert.equal(await field('faction').getByRole('radio').count(), 1);
     }
     const target = await board.getAttribute('data-campaign');
     assert.match(target, process.env.SWR_TEST_THR ? /KnownSmall_Era_2_Empire_CCoGM/i : /Era_4_Empire/i);
     const stars = await board.locator('[data-planet]').evaluateAll(es => es.map(e => [e.dataset.planet, e.dataset.owner]));
     assert(stars.length > 10 && new Set(stars.map(p => p[1])).size > 1);
     assert.equal(await board.getByRole('button', { name: /Zoom|Fit|Configure|Back/i }).count(), 0);
-    await field('difficulty').selectOption('hard');
+    assert.equal(await field('difficulty').getByRole('radio').count(), 3);
+    assert.equal(await slider('preset').getAttribute('aria-valuetext'), 'Campaign defaults');
+    await slider('preset').focus();
+    await page.keyboard.press('ArrowRight');
+    assert.notEqual(await slider('preset').getAttribute('aria-valuetext'), 'Campaign defaults');
+    await page.keyboard.press('Home');
+    assert.equal(await checkedValue('treasury'), '');
+    await slider('politics').focus();
+    const nativePolitics = await slider('politics').getAttribute('aria-valuetext');
+    await page.keyboard.press('End');
+    if ((await slider('politics').getAttribute('aria-valuetext')) === nativePolitics) await page.keyboard.press('Home');
+    const politics = Number.parseInt((await slider('politics').getAttribute('aria-valuetext')).replaceAll(',', ''));
+    assert(Number.isFinite(politics));
+    await radio('difficulty', 'hard').check();
     const cap = await field('treasury')
-      .locator('option')
+      .locator('input')
       .evaluateAll(os => os.find(o => o.value !== '')?.value);
-    await field('treasury').selectOption(cap);
+    await radio('treasury', cap).check();
     assert.equal(docs, 0);
     assert.equal(mounts, 0);
     assert.equal(assets, 0);
@@ -150,12 +186,18 @@ const assert = require('node:assert/strict'),
     assert.equal(await board.locator('.uc-canvas').getAttribute('data-scene'), 'native');
     assert(Number(await board.locator('.uc-canvas').getAttribute('data-models')) > 10);
     await current.scrollIntoViewIfNeeded();
-    await snap('fall-atlas');
+    await field('faction').scrollIntoViewIfNeeded();
+    await snap('faction-cards');
+    await field('politics').scrollIntoViewIfNeeded();
+    await snap('rule-controls');
     await page.setViewportSize({ width: 390, height: 844 });
     assert(await inline());
-    assert.equal(await field('difficulty').inputValue(), 'hard');
+    assert.equal(await checkedValue('difficulty'), 'hard');
+    await field('faction').scrollIntoViewIfNeeded();
+    assert(await board.locator('.uc-fields').evaluate(e => e.scrollWidth === e.clientWidth));
+    await snap('cards-narrow');
     await page.setViewportSize({ width: 1366, height: 768 });
-    assert.equal(await field('treasury').inputValue(), cap);
+    assert.equal(await checkedValue('treasury'), cap);
     assert.equal(await board.getAttribute('data-campaign'), target);
     const mountUrl = `**/api/mount/${process.env.SWR_TEST_THR ? '1125571106' : '1976399102'}`;
     await page.route(mountUrl, r => r.fulfill({ status: 409, body: 'Test mount unavailable' }));
@@ -189,6 +231,7 @@ const assert = require('node:assert/strict'),
     );
     assert.equal(actual.difficulty, 'hard');
     assert.equal(actual.rules.treasury, +cap);
+    assert.equal(actual.rules.politics, politics);
     assert(actual.isolated);
     assert.equal(docs, 1);
     assert.equal(mounts, 1);

@@ -1,3 +1,4 @@
+import { settingsControls } from './universalcontrols.js';
 import { strategicPreview } from './universalpreview.js';
 
 export function atlasBoard(back, play, reset) {
@@ -21,6 +22,7 @@ export function atlasBoard(back, play, reset) {
   return {
     el,
     map,
+    ...settingsControls(panel),
     panel: el.querySelector('.uc-content'),
     roster: el.querySelector('.uc-roster'),
     status: el.querySelector('[role="status"]'),

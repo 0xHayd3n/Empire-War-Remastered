@@ -1,3 +1,4 @@
+import { crest } from './universalcontrols.js';
 import { overviewView } from './universalviewcamera.js';
 
 // Only paint a still of the chosen preset. For a quick selection change the new names/owners
@@ -186,7 +187,9 @@ export function strategicPreview(host) {
       for (const [o, n] of [...counts].sort((a, b) => b[1] - a[1])) {
         const chip = document.createElement('span');
         chip.style.setProperty('--owner', p.facts[o]?.color || '#bbb');
-        chip.textContent = (p.facts[o]?.label || o || 'Unclaimed') + ' · ' + n;
+        const name = p.facts[o]?.label || o || 'Unclaimed';
+        chip.dataset.owner = o || '';
+        chip.append(crest(p.facts[o], name, true), name + ' · ' + n);
         key.append(chip);
       }
       layout();

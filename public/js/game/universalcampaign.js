@@ -36,6 +36,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     difficulty,
     options,
     settings,
+    customMix,
     previewProfile,
     previewMap,
     busy = false,
@@ -94,6 +95,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
   function defaults() {
     difficulty = 'medium';
     options = {};
+    customMix = null;
     settings = {};
   }
   function choose(next, selection) {
@@ -123,10 +125,17 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     const donors = data.profiles.filter(p => p.donor).map(p => ({ name: p.name, values: p.donor.values })),
       ps = [{ key: '', label: 'Campaign defaults', options: {} }, ...rulePresets(donors, p.defaults)],
       match = ps.find(e => Object.keys(ruleFields).every(k => e.options[k] === options[k]));
-    ui.field(
+    if (!match)
+      customMix = Object.fromEntries(
+        Object.keys(ruleFields)
+          .filter(k => options[k] !== undefined)
+          .map(k => [k, options[k]])
+      );
+    if (customMix) ps.push({ key: 'custom', label: 'Custom mix', options: customMix });
+    ui.slider(
       'preset',
       'Economy & politics',
-      ps.map(e => opt(e.key, e.label)).concat(match ? [] : [opt('custom', 'Custom mix')]),
+      ps.map(e => opt(e.key, e.label)),
       match?.key ?? 'custom',
       value => {
         const a = ps.find(e => e.key === value);
@@ -138,13 +147,13 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
       }
     );
     for (const [k, r] of Object.entries(ruleFields)) {
-      ui.field(
+      const choices = [[p.defaults[k], null], ...ruleChoices(donors, k, p.defaults[k])]
+        .sort(([a], [b]) => a - b)
+        .map(([n, names]) => opt(names ? n : '', `${n.toLocaleString()} ${r.unit} — ${names ? names.join(' / ') : 'Campaign default'}`));
+      (k === 'treasury' ? ui.radios : ui.slider)(
         k,
         k === 'treasury' ? 'Treasury / planet' : 'Political control / point',
-        [
-          opt('', `Default · ${p.defaults[k].toLocaleString()} ${r.unit}`),
-          ...ruleChoices(donors, k, p.defaults[k]).map(([n, names]) => opt(n, `${n.toLocaleString()} ${r.unit} — ${names.join(' / ')}`))
-        ],
+        choices,
         options[k] ?? '',
         value => {
           if (value === '') delete options[k];
@@ -156,7 +165,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     const paths = [opt('', 'Authored objectives')];
     if (p.id !== '3417277973' && v?.sites.length && data.profiles.some(p => p.donor?.hasSearch))
       paths.push(opt('expedition', 'Star Map Expedition'));
-    ui.field('path', 'Objective', paths, options.expedition ? 'expedition' : '', value => {
+    ui.radios('path', 'Objective', paths, options.expedition ? 'expedition' : '', value => {
       if (value) options.expedition = true;
       else delete options.expedition;
       note();
@@ -173,14 +182,15 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     ui.el.dataset.profile = p.id;
     roster.show(family, date);
     const techDate = techCalendar(p, row);
-    ui.field(
+    ui.radios(
       'faction',
       'Faction',
-      date.choices.map(s => opt(s.row.faction, p.facts[s.row.faction].label)),
+      date.choices.map(s => ({ value: s.row.faction, label: p.facts[s.row.faction].label || s.row.faction, fact: p.facts[s.row.faction] })),
       faction,
-      f => choose(family, { date, choice: date.choices.find(s => s.row.faction === f) })
+      f => choose(family, { date, choice: date.choices.find(s => s.row.faction === f) }),
+      true
     );
-    ui.field(
+    ui.radios(
       'difficulty',
       'Difficulty',
       ['easy', 'medium', 'hard'].map((n, i) => opt(n, p.levels[i] || n)),

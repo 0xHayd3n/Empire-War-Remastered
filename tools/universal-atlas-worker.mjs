@@ -12,6 +12,7 @@ import { ruleFields, expeditionSites } from '../public/js/game/universalrules.js
 import { parseRC } from '../public/js/game/dialogs.js';
 import { routeSettings, routeStyle } from '../public/js/game/galacticroutes.js';
 import { galacticLight } from '../public/js/game/galacticlighting.js';
+import { catalogFactionArt } from './universal-faction-art.mjs';
 import { menuTable, thrawnSelections } from './universal-loader-table.mjs';
 import { campaignChoices } from '../public/js/game/universalcampaign.js';
 const { game, home, folder, id, language } = workerData,
@@ -265,6 +266,7 @@ try {
     }
   }
   rows.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
+  catalogFactionArt(archive, db, id, facts, rows, maps);
   parentPort.postMessage({
     id,
     revision: pack?.revision || 'stock',

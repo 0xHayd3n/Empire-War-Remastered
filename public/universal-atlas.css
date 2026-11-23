@@ -205,7 +205,7 @@ dialog.uc-atlas[open] {
   --right-stop: 60%;
   --era-left: #f6f6f5;
   --era-right: #205782;
-  --crest-left: #101010;
+  --crest-left: #a52032;
   --crest-right: #78c3ff;
 }
 .uc-era-card:is([data-era='Galactic Civil War'], [data-era='New Republic']) {

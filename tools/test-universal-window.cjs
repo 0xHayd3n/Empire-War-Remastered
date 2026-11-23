@@ -110,7 +110,7 @@ const assert = require('node:assert/strict'),
         if (name === 'New Republic' || name === 'Galactic Civil War') imperial.add([sides[1], palette[1]].join('/'));
         if (name === 'Clone Wars') {
           assert.equal(sides[0], '#f6f6f5');
-          assert.equal(palette[0], '#101010');
+          assert.equal(palette[0], '#a52032');
         }
         const shot = await decodePNG(Uint8Array.from(await card.screenshot()).buffer);
         for (const [i, x] of [5, shot.width - 6].entries()) {

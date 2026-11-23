@@ -12,7 +12,10 @@ const root = path.resolve(value('--root', '.')),
 const frames = 48,
   ticks = 240,
   split = args.includes('--passes'),
-  size = /^(\d+)x(\d+)$/.exec(value('--size', split ? '1920x1080' : '800x450'));
+  live = args.includes('--live'),
+  size = /^(\d+)x(\d+)$/.exec(value('--size', split || live ? '1920x1080' : '800x450'));
+if (live && (split || args.includes('--fleet-lod'))) throw Error('Use --live separately from frozen render modes');
+if (!live && args.includes('--untraced')) throw Error('--untraced is a control for --live');
 if (!size || size.slice(1).some(n => +n < 240 || +n > 3840)) throw Error('Expected --size WIDTHxHEIGHT (240..3840)');
 if (split && args.includes('--fleet-lod')) throw Error('Run --passes with full detail, without --fleet-lod');
 
@@ -207,26 +210,27 @@ async function measure({ frames, ticks, split }) {
     const p = await browser.newPage({ viewport, deviceScaleFactor: 1 });
     const errors = [];
     p.on('pageerror', e => errors.push(e.message));
-    await p.addInitScript(() => {
-      let x;
-      window.resetBenchRandom = () => (x = 1234);
-      window.resetBenchRandom();
-      Math.random = () => (x = (Math.imul(x, 1664525) + 1013904223) >>> 0) / 4294967296;
-      let game;
-      Object.defineProperty(window, 'game', {
-        configurable: true,
-        get() {
-          return game;
-        },
-        set(v) {
-          game = v;
-          if (v?.setup?.benchmark) v.modeSuspended = true;
-        }
+    if (!live)
+      await p.addInitScript(() => {
+        let x;
+        window.resetBenchRandom = () => (x = 1234);
+        window.resetBenchRandom();
+        Math.random = () => (x = (Math.imul(x, 1664525) + 1013904223) >>> 0) / 4294967296;
+        let game;
+        Object.defineProperty(window, 'game', {
+          configurable: true,
+          get() {
+            return game;
+          },
+          set(v) {
+            game = v;
+            if (v?.setup?.benchmark) v.modeSuspended = true;
+          }
+        });
       });
-    });
     const query = new URLSearchParams({ benchmark: '40', map, faction: value('--faction', 'Empire'), enemy: value('--enemy', 'Rebel') });
     await p.goto(
-      `${base}/play.html?${query}&webgl&nospaceworker&noscripts&nowarm${split ? '&nocollectjobs' : ''}${args.includes('--fleet-lod') ? '&fleetlod=1' : ''}`,
+      `${base}/play.html?${query}&webgl${live ? '' : '&nospaceworker&noscripts&nowarm'}${split ? '&nocollectjobs' : ''}${args.includes('--fleet-lod') ? '&fleetlod=1' : ''}`,
       {
         waitUntil: 'domcontentloaded'
       }
@@ -237,6 +241,13 @@ async function measure({ frames, ticks, split }) {
         console.error(await p.evaluate(() => document.querySelector('#loadText')?.textContent?.slice(-300)), errors);
         throw e;
       });
+    if (live) {
+      const result = await require('./bench-live-space.cjs').profileLive(p, !args.includes('--untraced'));
+      assert.deepEqual(result.drawingBuffer, [viewport.width, viewport.height]);
+      assert.deepEqual(errors, []);
+      console.log(JSON.stringify({ primary: mod || 'stock', chrome: browser.version(), ...result }));
+      return;
+    }
     if (split) await p.addScriptTag({ path: path.join(__dirname, 'bench-fleet-passes.js') });
     const result = await p.evaluate(measure, { frames, ticks, split });
     if (split) assert.deepEqual(result.drawingBuffer, [viewport.width, viewport.height]);

@@ -36,7 +36,7 @@ Ships don't account for every shadow triangle. In the Remake scene, mobile caste
 
 - The same ordering held on `main` for stock, Awakening of the Rebellion and Remake at 1080p, and on `universal` at 720p for stock and Awakening of the Rebellion. Every run matched its fleet fingerprint from the original benchmark. These are checks on the attribution, not a claim that one branch is faster.
 - In a fresh stock 1080p run, mobile collection plus submission cost **1.05 ms** on the browser thread versus **1.11 ms** initially (paired medians). In Revan’s Revenge the **9.43 ms** main-submission delta repeated at **9.45 ms**, but hiding ships reduced synchronized wall time by only **4.10 / 3.86 ms** in those runs. That long return time is real; it is **not** nine milliseconds of proven CPU computation or recoverable frame time. Driver stalls or backpressure remain possible.
-- Prioritize tracing main-scene submission in a **moving** Revan battle against stock, with normal collection workers, before changing batching. Use a browser CPU/driver trace to distinguish scene traversal and uploads from waiting on GPU work. There's no support here for reducing shadow resolution globally or caching shadows across live camera/ship movement.
+- The [moving-battle trace](fleet-render-live.md) followed up with normal collection workers: the Revan main draw shows both more page-thread CPU work and repeated waits for graphics command-buffer space. There's no support here for reducing shadow resolution globally or caching shadows across live camera/ship movement.
 
 ## Reproduce
 

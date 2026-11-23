@@ -1,4 +1,5 @@
 import { db } from '../gamedata.js';
+import { periodChoices, showSplash } from '../splash.js';
 import { openDialog } from './dialogs.js';
 
 export class GalacticNeutralizePopup {
@@ -15,7 +16,13 @@ export class GalacticNeutralizePopup {
     this.opened = true;
     this.game.keys?.clear();
     this.game.drag = null;
-    const dialog = await openDialog('IDD_NEUTRALIZE_HERO_DIALOG', { nativeFonts: true, nativeLists: true });
+    const finish = (this.finishBriefing = periodChoices(rows) ? showSplash('era', 'Choose the starting era') : null);
+    let dialog;
+    try {
+      dialog = await openDialog('IDD_NEUTRALIZE_HERO_DIALOG', { nativeFonts: true, nativeLists: true });
+    } catch (error) {
+      console.warn('Could not open the campaign choice panel', error);
+    } finally { finish?.(); }
     if (generation !== this.generation || !this.opened) {
       dialog?.close();
       return;
@@ -65,6 +72,8 @@ export class GalacticNeutralizePopup {
 
   close() {
     ++this.generation;
+    this.finishBriefing?.();
+    this.finishBriefing = null;
     this.opened = false;
     this.dialog?.close();
     this.dialog = null;

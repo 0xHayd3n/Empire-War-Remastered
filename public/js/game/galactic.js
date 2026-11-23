@@ -17,7 +17,7 @@ import {
 } from '../nativefont.js';
 import { onLanguageChange } from '../language.js';
 import { dialogFontPixels, uiTextHeight } from './dialogtext.js';
-import { showSplash, hideSplash } from '../splash.js';
+import { showSplash, campaignDestination } from '../splash.js';
 
 import * as THREE from 'three';
 import { BenchOverlay } from '../benchoverlay.js';
@@ -235,7 +235,8 @@ export class GalacticGame {
     const P = this.progress,
       C = db.constants;
     $('lobby').classList.add('hidden');
-    showSplash();
+    const initial = campaignDestination(this.setup.campaign);
+    let finishSplash = showSplash(this.setup.restore ? 'save' : initial.kind, initial.title);
     P('Reading the campaigns', 0);
     const data = (this.data = await loadCampaignData());
     await loadBlackMarket();
@@ -254,6 +255,8 @@ export class GalacticGame {
         ) || camp;
     }
     if (!camp) throw new Error('this game data has no campaign');
+    const destination = campaignDestination(camp.name, db.t(camp.str('Text_ID')));
+    finishSplash = showSplash(this.setup.restore ? 'save' : destination.kind, destination.title);
     const g = (this.galaxy = startingGalaxy(data, camp));
     if (this.setup.restore) applyGalaxy(g, this.setup.restore);
     else if (this.setup.campaignSettings) applyCampaignSettings(g, this.setup.campaignSettings, camp.str('Starting_Active_Player'));
@@ -452,7 +455,7 @@ export class GalacticGame {
     }
     await this.scriptUI?.ready();
 
-    hideSplash();
+    finishSplash();
     if (this.setup.restore && !this.setup.result && !this.setup.net) this.setUserPaused?.(true);
     this.bindInput();
     this.fit();

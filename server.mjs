@@ -4,14 +4,18 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openGame } from './tools/megfs.mjs';
 import { NativeFonts } from './tools/native-fonts.mjs';
+import { artRoot, photoStore, stackKey } from './tools/workshop-battle-art.mjs';
 import zlib from 'node:zlib';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const GAME = process.env.SWR_GAME || path.resolve(HERE, '..', 'Star Wars Empire at War');
 const portArg = process.argv.indexOf('--port');
-const PORT = Number((portArg > 0 && process.argv[portArg + 1]) || process.env.PORT || 8377);
+const workshopMode = process.argv.includes('--workshop');
+const PORT = Number((portArg > 0 && process.argv[portArg + 1]) || process.env.PORT || (workshopMode ? 8478 : 8377));
+const STATIC = !!process.env.SWR_STATIC || process.argv.includes('--static');
+if (STATIC && workshopMode) throw new Error('Workshop launch needs a local game, not --static.');
+const assetCache = workshopMode ? 'no-store' : 'max-age=86400';
 const PUBLIC = path.join(HERE, 'public');
-const MODS = process.argv
+const defaultMods = process.argv
   .flatMap((a, i) => (a === '--mod' && process.argv[i + 1] ? [process.argv[i + 1]] : []))
   .concat((process.env.SWR_MOD || '').split(';').filter(Boolean));
 
@@ -35,18 +39,6 @@ function mountedMod(root) {
   };
 }
 
-let game = null;
-const STATIC = !!process.env.SWR_STATIC || process.argv.includes('--static');
-if (fs.existsSync(GAME) && !STATIC) {
-  const t0 = Date.now();
-  game = openGame(GAME, MODS);
-  console.log(
-    `indexed ${game.index.size} game files in ${Date.now() - t0} ms from ${GAME}${MODS.length ? ' with ' + MODS.join(', ') : ''}`
-  );
-} else {
-  console.log('no game install mounted: serving static files only (assets come from the imported archive)');
-}
-
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -63,6 +55,8 @@ const MIME = {
   '.gz': 'application/gzip',
   '.wasm': 'application/wasm',
   '.ico': 'image/x-icon',
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
   '.webmanifest': 'application/manifest+json'
 };
 const mime = p => MIME[path.extname(p).toLowerCase()] || 'application/octet-stream';
@@ -89,7 +83,14 @@ function serveStatic(req, res, rel) {
   });
 }
 
-const games = { foc: game && { game, fonts: new NativeFonts(game) }, eaw: null };
+async function startGame(GAME, MODS) {
+  const t0 = performance.now();
+  const game = !STATIC && fs.existsSync(GAME) ? openGame(GAME, MODS) : null;
+  const indexMs = Math.round(performance.now() - t0);
+  if (game) console.log(`Indexed ${game.index.size} game files in ${indexMs} ms`);
+  else console.log('No game install mounted: serving static files only');
+  const photos = game && workshopMode && artRoot() && fs.existsSync(artRoot()) ? photoStore(artRoot(), stackKey(game, MODS), game) : null;
+  const games = { foc: game && { game, fonts: new NativeFonts(game) }, eaw: null };
 function gameFor(url) {
   if (!game || url.searchParams.get('game') !== 'eaw') return games.foc;
   if (!games.eaw) {
@@ -99,8 +100,7 @@ function gameFor(url) {
   }
   return games.eaw;
 }
-http
-  .createServer(async (req, res) => {
+const server = http.createServer(async (req, res) => {
     if (!STATIC) {
       res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
       res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
@@ -115,6 +115,12 @@ http
       return send(res, 400, 'bad path');
     }
 
+    if (p === '/api/battle-photo') {
+      res.setHeader('Cache-Control', 'no-store');
+      const q = url.searchParams;
+      const photo = req.method === 'GET' && !q.has('game') && await photos?.(q.get('map'), q.get('kind'), q.get('planet') || '');
+      return photo ? send(res, 200, photo.bytes, 'image/jpeg', { 'X-Map-SHA256': photo.mapSHA }) : send(res, 204, '');
+    }
     if (p.startsWith('/asset/')) {
       const which = gameFor(url),
         nativeFonts = which && which.fonts;
@@ -124,7 +130,7 @@ http
         try {
           const bytes = await nativeFonts.asset(p.slice(7));
           if (bytes)
-            return send(res, 200, zlib.gzipSync(bytes), MIME['.json'], { 'Content-Encoding': 'gzip', 'Cache-Control': 'max-age=86400' });
+            return send(res, 200, zlib.gzipSync(bytes), MIME['.json'], { 'Content-Encoding': 'gzip', 'Cache-Control': assetCache });
         } catch (error) {
           console.warn('font raster:', error.message);
         }
@@ -139,10 +145,10 @@ http
         return send(res, 206, assets.readPart(key, a, b - a + 1), mime(key), {
           'Content-Range': `bytes ${a}-${b}/${size}`,
           'Accept-Ranges': 'bytes',
-          'Cache-Control': 'max-age=86400'
+          'Cache-Control': assetCache
         });
       }
-      return send(res, 200, assets.read(key), mime(key), { 'Accept-Ranges': 'bytes', 'Cache-Control': 'max-age=86400' });
+      return send(res, 200, assets.read(key), mime(key), { 'Accept-Ranges': 'bytes', 'Cache-Control': assetCache });
     }
     if (p === '/api/find') {
       if (!game) return send(res, 404, 'no game mounted');
@@ -170,5 +176,27 @@ http
       return send(res, 200, JSON.stringify(root ? readModInfo(root) : null), MIME['.json']);
     }
     serveStatic(req, res, p === '/' ? 'index.html' : p.slice(1));
-  })
-  .listen(PORT, '127.0.0.1', () => console.log(`http://localhost:${PORT}/`));
+  });
+  function release() {
+    for (const layer of Object.values(games)) {
+      layer?.fonts.close();
+      layer?.game.close();
+    }
+  }
+  try {
+    await new Promise((ok, fail) => server.once('error', fail).listen(PORT, '127.0.0.1', ok));
+  } catch (e) { release(); throw e; }
+  const url = `http://127.0.0.1:${server.address().port}`;
+  console.log(`Game server: ${url}/`);
+  return { url: url + '/play.html', indexMs, async close() {
+    const stopped = new Promise(resolve => server.close(resolve));
+    server.closeAllConnections();
+    await stopped;
+    release();
+  } };
+}
+
+if (workshopMode) {
+  const { serveWorkshop } = await import('./tools/workshop-launcher.mjs');
+  serveWorkshop(Number(process.env.SWR_LAUNCHER_PORT ?? 8490), process.argv.includes('--open'), startGame);
+} else await startGame(process.env.SWR_GAME || path.resolve(HERE, '..', 'Star Wars Empire at War'), defaultMods);

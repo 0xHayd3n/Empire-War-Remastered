@@ -1,5 +1,6 @@
 import { db } from '../gamedata.js';
 import { MenuArtwork } from './menuartwork.js';
+import { whileLoading } from '../splash.js';
 import { openCampaignMenu } from './campaignmenu.js';
 import { openMainCampaignMenu, suggestTutorial, tutorialSuggested, markTutorialSuggested } from './storycampaignmenu.js';
 import { TacticalMovies } from './tacticalmovies.js';
@@ -39,6 +40,7 @@ export class FrontEnd {
     return this.main();
   }
   dispose() {
+    this.campaignRequest?.abort();
     this.artwork?.dispose();
     this.overlay?.remove();
     removeEventListener('keydown', this.onKey, true);
@@ -229,47 +231,56 @@ export class FrontEnd {
       if (answer === 'yes') return this.campaign(parent, true);
       if (answer !== 'no' && answer !== null) return;
     }
-    const overlay = document.getElementById('frontOverlay');
-    const show = on => {
-      parent.veil.style.display = on ? '' : 'none';
-      if (overlay) overlay.style.display = on ? '' : 'none';
-    };
-    show(false);
-    const ok = await openMainCampaignMenu({
-      audio: this.game.audio,
-      cancel: () => show(true),
-      start: setup => {
-        this.game.audio.unlock();
-        this.start(setup);
-      }
-    }).catch(e => {
-      console.warn('Campaign menu', e);
-      return false;
-    });
-    if (!ok) show(true);
+    return this.campaign(parent, false, true);
   }
 
-  async campaign(parent, tutorial = false) {
+  async campaign(parent, tutorial = false, story = false) {
+    this.campaignRequest?.abort();
+    const request = (this.campaignRequest = new AbortController());
+    const { signal } = request;
+    const title = story ? 'Story campaigns' : tutorial ? 'Training missions' : 'Galactic Conquest';
+    const build = story ? openMainCampaignMenu : openCampaignMenu;
+    const trigger = parent.ctl(story ? 'IDC_NEW_CAMPAIGN_BUTTON' : tutorial ? 'IDC_MAIN_MENU_TUTORIAL' : 'IDC_CUSTOM_CAMPAIGN_BUTTON');
     const overlay = document.getElementById('frontOverlay');
     const show = on => {
       parent.veil.style.display = on ? '' : 'none';
       if (overlay) overlay.style.display = on || tutorial ? '' : 'none';
     };
     show(false);
-    const ok = await openCampaignMenu({
-      tutorial,
+    const restore = () => {
+      if (signal.aborted) return;
+      show(true);
+      if (trigger) { trigger.tabIndex = 0; trigger.focus({ preventScroll: true }); }
+    };
+    const ok = await whileLoading('conquest', title, () => build({
+      signal, tutorial,
       isTutorialComplete: c => tutorialFinished(c.name),
       audio: this.game.audio,
-      cancel: () => show(true),
+      cancel: restore,
       start: setup => {
         this.game.audio.unlock();
         this.start(setup);
       }
-    }).catch(e => {
+    })).catch(e => {
       console.warn('Campaign menu', e);
       return false;
     });
-    if (!ok) show(true);
+    if (signal.aborted) return;
+    if (!ok) {
+      // Recovery must not depend on the unavailable game dialog resources.
+      const dialog = document.getElementById('briefFailure');
+      dialog.querySelector('p').textContent = `Could not open ${title}.`;
+      dialog.returnValue = '';
+      const close = () => { if (dialog.open) dialog.close(); };
+      signal.addEventListener('abort', close, { once: true });
+      dialog.addEventListener('close', () => {
+        signal.removeEventListener('abort', close);
+        if (signal.aborted) return;
+        restore();
+        if (dialog.returnValue === 'retry') this.campaign(parent, tutorial, story);
+      }, { once: true });
+      dialog.showModal();
+    }
   }
 }
 

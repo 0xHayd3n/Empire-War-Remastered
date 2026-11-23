@@ -1,4 +1,5 @@
 import { db } from '../gamedata.js';
+import { periodChoices, showSplash } from '../splash.js';
 import { setComponentText } from './componenttext.js';
 import { snapNativeText } from '../nativefont.js';
 
@@ -47,8 +48,15 @@ export class NeutralizeShell {
     this.rows = shown;
     this.choose = choose;
     this.cancel = cancel;
-    ui.visibility(SHELL, true);
-    await ui.ready();
+    const finish = (this.finishBriefing = periodChoices(shown) ? showSplash('era', 'Choose the starting era') : null);
+    try {
+      ui.visibility(SHELL, true);
+      await ui.ready();
+    } catch (error) {
+      if (generation === this.generation) this.close();
+      console.warn('Could not open the campaign choice panel', error);
+      return false;
+    } finally { finish?.(); }
     const shell = ui.shells.get(SHELL);
     if (generation !== this.generation || !this.opened) return true;
     if (!shell) {
@@ -143,6 +151,8 @@ export class NeutralizeShell {
 
   close() {
     this.generation++;
+    this.finishBriefing?.();
+    this.finishBriefing = null;
     if (!this.opened) return;
     this.opened = false;
     this.rows = null;

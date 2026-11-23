@@ -82,9 +82,9 @@ export function openGame(gameDir, mods = [], { language = 0, expansion = true } 
       if (e.isDirectory()) indexLoose(root, rel, entries);
       else if (!/\.meg$/i.test(e.name)) {
         const file = path.join(root, rel),
-          size = fs.statSync(file).size,
+          stat = fs.statSync(file),
           key = rel.replace(/\//g, '\\').toUpperCase();
-        entries.set(key, size ? { file, size } : null);
+        entries.set(key, stat.size ? { file, size: stat.size, mtimeMs: stat.mtimeMs } : null);
       }
     }
     return entries;

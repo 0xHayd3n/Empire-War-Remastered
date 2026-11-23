@@ -1,0 +1,54 @@
+/* In-engine transition plate. Independent of WebGL, native UI fonts and the game archives. */
+#briefFailure { color:#fff5df; background:#111d2b; border:1px solid #82979e; padding:1.5em; max-width:calc(100vw - 4em); }
+#briefFailure::backdrop { background:#040a12cf; }
+#briefFailure p { margin:0 0 1em; }
+#loading[data-failed='true'] { z-index:151; }
+#loading:not([data-failed='true']) #briefRetry, #loading[data-failed='true'] .bar { display:none; }
+#briefRetry { display:inline-block; margin-top:1em; color:var(--bone); }
+#splash { --plate: url('art/briefings.svg#orbit'); --signal: #efbd87; display:grid; align-content:end; background:#070e19; color:#fff5df; isolation:isolate; font-family:var(--ui-font); }
+#splash[data-scene='conquest'],#splash[data-scene='galaxy'] { --plate:url('art/briefings.svg#chart'); --signal:#97d5cf; }
+#splash[data-scene='era'],#splash[data-scene='save'] { --plate:url('art/briefings.svg#chronicle'); }
+#splash[data-scene='staging'] { --plate:url('art/briefings.svg#fleet'); --signal:#a5cbe3; }
+#splash[data-scene='land'],#splash[data-scene='space'] { --plate:none; }
+#splash[data-scene='network'] { --plate:url('art/briefings.svg#relay'); --signal:#93d6d5; }
+#splash::before { inset:0; width:auto; height:auto; transform:none; border-radius:0; box-shadow:none; background:var(--plate) center / cover no-repeat; }
+#splash::after { background:linear-gradient(0deg,#040810f5 0%,#04081099 32%,transparent 65%),linear-gradient(90deg,#080f1a77,transparent 65%); }
+.brief-copy { position:relative; z-index:1; padding:0 clamp(22px,7vw,124px) clamp(25px,8vh,96px); max-width:100%; box-sizing:border-box; }
+#briefSection { color:var(--signal); font:650 clamp(10px,1.1vw,14px)/1.5 var(--ui-font); text-transform:uppercase; letter-spacing:.25em; }
+#briefTitle { margin:.15em 0 .24em; max-width:26ch; font:500 clamp(31px,5.1vw,82px)/1.04 var(--ui-font); letter-spacing:-.035em; overflow-wrap:anywhere; text-shadow:0 2px 15px #03070f; }
+#briefStage { margin:0 0 14px; color:#d6e0e4; font-size:clamp(12px,1.3vw,17px); }
+#briefMeter { display:block; appearance:none; width:min(380px,90%); height:4px; border:none; border-radius:0; background:#ffffff30; color:var(--signal); }
+#briefMeter::-webkit-progress-bar { background:#ffffff30; } #briefMeter::-webkit-progress-value { background:var(--signal); } #briefMeter::-moz-progress-bar { background:var(--signal); }
+#briefMeter:indeterminate { background:linear-gradient(90deg,transparent,var(--signal),transparent) 0 center/40% 100% no-repeat,#ffffff30; animation:brief-scan 2.4s ease-in-out infinite alternate; } #briefMeter:indeterminate::-webkit-progress-bar { background:transparent; }
+@keyframes brief-scan { to { background-position:100% center; } }
+@media(prefers-reduced-motion:reduce) { #briefMeter:indeterminate { animation:none; background-position:50% center; } }
+@media(max-aspect-ratio:3/4) { #splash::before { background-position:68% center; } }
+@font-face {
+  font-family: 'Aurebesh AF Canon';
+  src: url('fonts/aurebesh-af/AurebeshAF-Canon.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+}
+/* One edge-to-edge composition; the loading readout overlays rather than letterboxes the art. */
+.battle-plate { --inset: max(20px, 2.2vw, env(safe-area-inset-left)); position:fixed; inset:0; z-index:60; overflow:hidden; isolation:isolate; color:#fff; font-family:var(--ui-font); text-align:left; }
+.battle-scene,.battle-scene img,.battle-plate::after { position:absolute; inset:0; width:100%; height:100%; }
+.battle-scene { z-index:-2; background:#101821; }
+.battle-scene img { display:block; object-fit:cover; object-position:center; }
+.battle-plate::after { content:''; z-index:-1; pointer-events:none; background:linear-gradient(90deg,#03060bd4, #03060b9e 22%, transparent 63%),linear-gradient(0deg,#03060b85,transparent 48%); }
+.battle-copy { position:absolute; left:var(--inset); bottom:clamp(84px,15%,178px); width:min(440px,calc(100% - 2 * var(--inset))); max-height:65%; overflow:auto; scrollbar-width:thin; text-shadow:0 2px 5px #000; overflow-wrap:anywhere; }
+.battle-aurebesh { display:block; margin:0 0 .44em; color:#f5f8ff; font:400 clamp(16px,1.65vw,29px)/1.22 'Aurebesh AF Canon',sans-serif; letter-spacing:.09em; }
+.battle-copy h2 { color:white; font:600 clamp(32px,4.5vw,78px)/1.02 var(--ui-font); margin:0; text-transform:uppercase; }
+.battle-subtitle { margin:4px 0 0; font:400 clamp(15px,1.4vw,23px)/1.25 var(--ui-font); text-transform:uppercase; letter-spacing:.04em; }
+.battle-subtitle::after { content:''; display:block; margin:12px 0; width:39px; height:3px; background:linear-gradient(to right,#fff 0 8%,transparent 8% 15%,#fff 15% 30%,transparent 30% 37%,#fff 37%); }
+.battle-description { margin:0; max-height:24dvh; overflow:auto; scrollbar-width:thin; white-space:pre-line; font:350 clamp(14px,1.05vw,18px)/1.4 var(--ui-font); }
+.battle-peers { position:absolute; top:max(12px,3%); right:var(--inset); width:min(220px,65%); max-height:23%; overflow:auto; padding:8px 12px; background:#060a10ae; color:white; }
+.battle-photo-note { display:block; margin-top:8px; color:#ccd3da; font-size:13px; }
+.battle-peers label { display:block; overflow-wrap:anywhere; margin-bottom:6px; }
+.battle-plate .battle-peers progress { width:100%; }
+.battle-plate footer { position:absolute; left:var(--inset); bottom:max(18px,4%,env(safe-area-inset-bottom)); text-shadow:0 2px 5px #000; }
+.battle-plate progress { display:block; appearance:none; width:min(210px,55vw); height:3px; border:0; background:#ffffff42; color:white; }
+.battle-plate progress::-webkit-progress-bar { background:#ffffff42; } .battle-plate progress::-webkit-progress-value { background:white; } .battle-plate progress::-moz-progress-bar { background:white; }
+.loading-caption { display:inline-flex; gap:8px; align-items:center; margin-top:6px; font-size:12px; }
+.loading-caption i { width:10px;height:10px;border:2px solid #ffffff66;border-top-color:#fff;border-radius:100%;animation:battle-turn 1s linear infinite; }
+@keyframes battle-turn { to {transform:rotate(360deg)} } @media(prefers-reduced-motion:reduce){.loading-caption i{animation:none}}
+@media(max-width:600px) { .battle-plate::after { background:linear-gradient(0deg,#03060be8,#03060bb0 44%,transparent 85%); } }

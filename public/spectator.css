@@ -10,9 +10,9 @@
   --panel-hi: rgba(18, 24, 30, 0.92);
   --line: rgba(195, 171, 2, 0.42);
   --tc: #c3ab02;
-  --fine: 'Segoe UI', Arial, sans-serif;
+  --fine: var(--ui-font);
   color: var(--ink);
-  font-family: 'EmpireAtWar-Medium', 'Eurostile', 'Segoe UI', Arial, sans-serif;
+  font-family: var(--ui-font);
   user-select: none;
 }
 #spectatorTop *,

@@ -178,6 +178,11 @@ self.addEventListener('fetch', event => {
   }
   const url = new URL(req.url);
   if (url.origin !== location.origin || !url.pathname.startsWith(SCOPE)) return;
+  // No shell/pack fallback for a photograph bound to the server's exact mount.
+  if (url.pathname.slice(SCOPE.length) === 'api/battle-photo') {
+    event.respondWith(loadPack().then(p => p ? new Response(null, {status:204}) : network(req)));
+    return;
+  }
   const wants = req.mode === 'navigate' || ISOLATED.has(req.destination);
   if (hasPack === false) {
     if (wants)

@@ -3,6 +3,7 @@ const DB = 'swr-mods',
 import { languageName } from './localizedmedia.js';
 import { languageId } from './language.js';
 import { expansion } from './edition.js';
+import { matchWorkshopOrder, workshopLayers } from './workshoporder.js';
 import { localFolder, localMods, inApp } from './localfolder.js';
 const up = s => s.toUpperCase();
 
@@ -38,10 +39,57 @@ const answer = (p, ms) => Promise.race([Promise.resolve(p).catch(() => 'denied')
 const canRead = h => answer(h.queryPermission({ mode: 'read' }), 4000);
 const modDir = async () => (await navigator.storage.getDirectory()).getDirectoryHandle('mods', { create: true });
 
+const orderedMods = rows => rows.filter(m => !m.game).sort((a, b) => (a.order ?? a.id) - (b.order ?? b.id) || a.id - b.id);
 export async function listMods() {
-  return ((await tx('readonly', s => s.getAll())) || [])
-    .filter(m => !m.game)
-    .sort((a, b) => (a.order ?? a.id) - (b.order ?? b.id) || a.id - b.id);
+  return orderedMods(await tx('readonly', s => s.getAll()));
+}
+
+export async function applyWorkshopOrder(ids, root, progress) {
+  const staged = new Map();
+  if (root) {
+    if (root.name !== '32470') throw new Error('Choose the 32470 folder inside steamapps/workshop/content.');
+    const matches = matchWorkshopOrder(ids, await listMods());
+    const dirs = [];
+    for (const [i, id] of ids.entries()) {
+      if (matches[i]) continue;
+      try {
+        dirs.push(await root.getDirectoryHandle(id));
+      } catch (e) {
+        if (e.name !== 'NotFoundError') throw e;
+        throw new Error(`Workshop item ${id} is not in that library. Install it with Steam, or add its folder from the other library.`);
+      }
+    }
+    for (const dir of dirs) staged.set(dir.name, await modFolderRecord(dir, t => progress(`${dir.name}: ${t}`)));
+  }
+  // Do file I/O before entering IndexedDB. Re-resolve against the current list inside one write transaction:
+  // a bad ID, scan failure or quota error must not leave half a stack active.
+  const d = await db();
+  try {
+    await new Promise((resolve, reject) => {
+      const t = d.transaction(STORE, 'readwrite'),
+        store = t.objectStore(STORE),
+        q = store.getAll();
+      let error;
+      q.onsuccess = () => {
+        try {
+          const mods = orderedMods(q.result);
+          matchWorkshopOrder(ids, mods).forEach((hit, i) => {
+            if (hit) staged.delete(ids[i]);
+          });
+          for (const { mod, on, order } of workshopLayers(ids, [...mods, ...staged.values()])) {
+            if (mod.order !== order || mod.on !== on) store.put({ ...mod, order, on });
+          }
+        } catch (e) {
+          error = e;
+          t.abort();
+        }
+      };
+      t.oncomplete = resolve;
+      t.onabort = () => reject(error || t.error);
+    });
+  } finally {
+    d.close();
+  }
 }
 
 export async function moveMod(id, by) {
@@ -543,10 +591,11 @@ export async function addModCompat(progress) {
   return tree && addModFolder(tree, progress, { compat: true });
 }
 
-export async function addModFolder(handle, progress, { compat = false } = {}) {
+async function modFolderRecord(handle, progress, compat = false) {
   const found = await scan(handle, progress);
   const name = (await infoName(handle)) || (await workshopNames([handle.name]))[handle.name];
-  const mod = {
+  return {
+    ...(/^\d+$/.test(handle.name) ? { workshopFolder: handle.name } : {}),
     name: name || handle.name,
     named: !!name,
     on: true,
@@ -554,6 +603,10 @@ export async function addModFolder(handle, progress, { compat = false } = {}) {
     scanned: Date.now(),
     ...found
   };
+}
+
+export async function addModFolder(handle, progress, { compat = false } = {}) {
+  const mod = await modFolderRecord(handle, progress, compat);
   mod.id = await tx('readwrite', s => s.add(mod));
   return mod;
 }
@@ -588,6 +641,7 @@ export async function addModArchive(file, progress = () => {}) {
       info = (await infoName(root)) || (await workshopNames([folder || '']))[folder];
     const mod = {
       name: info || folder || file.name.replace(/\.(tar(\.gz)?|tgz|gz)$/i, ''),
+      ...(/^\d+$/.test(folder) ? { workshopFolder: folder } : {}),
       named: !!info,
       on: true,
       archive: { file: name, size: tar.size, entries },

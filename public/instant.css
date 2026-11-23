@@ -15,7 +15,7 @@
   box-sizing: border-box;
   background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.78));
   color: var(--ink);
-  font-family: 'EmpireAtWar-Medium', 'Eurostile', 'Segoe UI', Arial, sans-serif;
+  font-family: var(--ui-font);
   font-size: 13px;
   pointer-events: auto;
   user-select: none;
@@ -79,9 +79,9 @@
 }
 #instantBattle h1 {
   margin: 0;
-  font-family: 'EmpireAtWar-Bold', 'EmpireAtWar-Medium', 'Eurostile', 'Segoe UI', Arial, sans-serif;
+  font-family: var(--ui-font);
   font-size: 30px;
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: 3px;
   text-transform: uppercase;
   color: var(--gold-hi);
@@ -752,7 +752,7 @@
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--gold) rgba(0, 0, 0, 0.35);
-  font-family: 'Segoe UI', Arial, sans-serif;
+  font-family: var(--ui-font);
   font-size: 12px;
   line-height: 1.35;
   color: var(--ink);
@@ -770,7 +770,7 @@
 #instantBattle .ib-chatin {
   width: 100%;
   text-align: left;
-  font-family: 'Segoe UI', Arial, sans-serif;
+  font-family: var(--ui-font);
 }
 .dyn-seed {
   display: flex;

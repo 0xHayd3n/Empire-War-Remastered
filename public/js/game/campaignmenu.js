@@ -44,8 +44,9 @@ export function campaignMenuVariant(campaigns, set, faction) {
   );
 }
 
-export async function openCampaignMenu({ start, cancel = null, audio = null, tutorial = false, isTutorialComplete = () => false }) {
+export async function openCampaignMenu({ start, cancel = null, audio = null, tutorial = false, isTutorialComplete = () => false, signal }) {
   const data = await loadCampaignData();
+  if (signal?.aborted) return false;
   const dlg = await openDialog(tutorial ? 'IDD_SELECT_TUTORIAL_DIALOG' : 'IDD_CUSTOM_CAMPAIGN_STAGING_DIALOG', {
     modal: false,
     nativeImages: true,
@@ -53,6 +54,7 @@ export async function openCampaignMenu({ start, cancel = null, audio = null, tut
     nativeFonts: true
   });
   if (!dlg) return false;
+  if (signal?.aborted) { dlg.close(); return false; }
   const rows = campaignMenuRows(data.campaigns, id => db.t(id), { tutorial });
   if (tutorial) for (const row of rows) row.icon = isTutorialComplete(row.campaign) ? 'checked_box.tga' : 'i_dialogue_blank.tga';
   const sets = new Set(rows.map(r => key(r.key))),
@@ -69,6 +71,7 @@ export async function openCampaignMenu({ start, cancel = null, audio = null, tut
   const close = () => {
     if (closed) return;
     closed = true;
+    signal?.removeEventListener('abort', close);
     removeEventListener('keydown', onKey, true);
     dlg.close();
   };
@@ -83,6 +86,7 @@ export async function openCampaignMenu({ start, cancel = null, audio = null, tut
       back();
     }
   };
+  signal?.addEventListener('abort', close, { once: true });
   const variant = () => selection && (tutorial ? selection.campaign : campaignMenuVariant(data.campaigns, selection.key, faction));
   const refresh = () => {
     const c = variant(),
@@ -138,7 +142,8 @@ export async function openCampaignMenu({ start, cancel = null, audio = null, tut
     refresh();
   }
   const image = dlg.ctl('IDC_IMAGE') && (await loadTextureCanvas('Galactic_Back.tga').catch(() => null));
-  if (image && !closed) dlg.setImage('IDC_IMAGE', image.toDataURL());
+  if (closed) return false;
+  if (image) dlg.setImage('IDC_IMAGE', image.toDataURL());
   dlg.on('IDC_CANCEL_BUTTON', back);
   dlg.on('IDC_PLAY_BUTTON', play);
   dlg.on('IDC_SELECT_OPTIONS', async () => {

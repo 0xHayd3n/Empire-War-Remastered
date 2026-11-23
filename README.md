@@ -1,23 +1,23 @@
-<p align="center">
-  <img src="https://playeaw.com/icons/share.jpg" alt="Star Wars: Empire at War - Browser Edition" width="800">
-</p>
+# Empire War Remastered
 
-<p align="center">
-  <b><a href="https://playeaw.com">Play now at playeaw.com</a></b>
-  &nbsp;·&nbsp;
-  <a href="https://github.com/Glenn332/Empire-At-War-Browser-Edition/releases/latest/download/EmpireAtWarBrowserEdition-setup.exe">Windows app</a>
-  &nbsp;·&nbsp;
-  <a href="https://github.com/Glenn332/Empire-At-War-Browser-Edition/blob/main/progression.md">Progress</a>
-  &nbsp;·&nbsp;
-  <a href="https://discord.gg/tAaZEVFmn">Discord</a>
-</p>
+0xHayd3n’s personal fork of RIRA’s [Empire at War: Browser Edition](https://github.com/Glenn332/Empire-At-War-Browser-Edition). This is the browser game, not a separate desktop reconstruction. [Playeaw.com](https://playeaw.com) runs the upstream edition, not this fork.
 
-<p align="center">
-  <a href="https://ko-fi.com/Z4S429CUIG"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi"></a>
-  <a href="https://discord.gg/tAaZEVFmn"><img src="public/icons/discord-button.svg" alt="Join our Discord"></a>
-</p>
+## Play this fork
 
-# Empire at War: Browser Edition
+You need Node.js 22+ and your own copy of *Empire at War – Gold Pack*. No native build is required.
+
+```sh
+git clone https://github.com/0xHayd3n/Empire-War-Remastered.git
+cd Empire-War-Remastered
+npm run workshop
+```
+
+- **With Steam mods:** choose a collection in the [local Workshop launcher](http://127.0.0.1:8490/) and select **Launch**. On Windows you can also double-click `Workshop Launcher.cmd`. Once a collection is running, **Model viewer** opens models from that same mounted stack.
+- **Without a collection:** run `npm start`, open [the start page](http://127.0.0.1:8377/), and choose the installed game folder or import its archive. Then select **Launch**. To try the new spawn menu and combat HUD, [start Battlefront on Endor](http://127.0.0.1:8377/play.html?autostart&mode=land&shooter&map=ENDOR&faction=Empire&enemy=Rebel&deployUI=2005).
+
+Included from upstream pull requests: [#5 – fork mod compatibility](https://github.com/Glenn332/Empire-At-War-Browser-Edition/pull/5), [#6 – deployment and spawn selection](https://github.com/Glenn332/Empire-At-War-Browser-Edition/pull/6), and [#7 – in-game HUD, infantry and vehicle views](https://github.com/Glenn332/Empire-At-War-Browser-Edition/pull/7). These changes are on this fork’s `main`; they don’t depend on upstream accepting those PRs.
+
+## About the browser engine
 
 *Star Wars: Empire at War* came out in 2006, and *Forces of Corruption* followed it. Nearly twenty years on, people
 still play them, and the modding community keeps them alive with huge total-conversion mods. The original engine has
@@ -26,12 +26,6 @@ bring a modern PC to its knees.
 
 This project brings the game back on a new engine that runs in your browser. It reads your own copy of the game, so
 you get the same units, maps, models, sounds, scripts and AI, and it is built to keep big battles running smoothly.
-
-## Where to play
-
-- **In the browser:** go to [playeaw.com](https://playeaw.com). Use Chrome, Edge, Brave or Firefox on a computer.
-- **As a Windows app:** [download the installer](https://github.com/Glenn332/Empire-At-War-Browser-Edition/releases/latest/download/EmpireAtWarBrowserEdition-setup.exe).
-  The app finds your Steam install and your Workshop mods by itself, and it updates itself.
 
 You need your own copy of *Star Wars: Empire at War - Gold Pack* (the base game and *Forces of Corruption*), for
 example from Steam. Nothing of the game is hosted or shipped here. On first start, you point the game at your
@@ -48,6 +42,28 @@ lets you play offline afterwards. The start page walks you through both options.
 - **Multiplayer:** internet and LAN games through the original lobby screens, including saving a multiplayer game.
 - **Mods:** Steam Workshop and local mods load the way the original loads them, and you can stack several in your
   own order. Fixes are made in the engine, never for one particular mod.
+
+### Play an installed Steam Workshop stack
+
+**On your PC:** install mods through Steam, then double-click **Workshop Launcher.cmd** in the checkout (Node.js required). The local
+launcher opens in your browser. It finds the game and Workshop items in Steam's libraries, reads any saved Mod Collection Launcher v1
+FoC profiles from `%LOCALAPPDATA%/ModCollectionLauncher/profiles`, and displays collection cards using artwork from the installed mods.
+The local selector at `http://127.0.0.1:8490/` fills the viewport, cropping scene edges when the screen and image differ in shape. Hover or focus a logo tile to highlight it; select a tile or use the carousel arrows to switch collections. **Launch** is a separate action. **Enabled mods** shows launch priority. Music requests audible playback on arrival. If the browser blocks first-visit autoplay, a click, tap, or keypress starts it. It follows the selected collection, pauses in a hidden tab, and can be muted from the browser tab. Reduced motion leaves the art still. Collection artwork is read from `%LOCALAPPDATA%/EaWBrowserWorkshop/collection-art` (or set `SWR_COLLECTION_ART` to your desktop launcher's Assets directory); `<Workshop ID>.png` overrides a scene and `<Workshop ID>-wordmark.png` overrides a transparent logo. A collection without a logo shows its name. Preview tracks come from `%LOCALAPPDATA%/ModCollectionLauncher/music`, including `<Workshop ID>.mp3` overrides. If a desktop theme is missing, the selector uses available installed media; it does not download songs or bundle the artwork. Browser UI text uses [Oswald](https://open-foundry.com/fonts/oswald), served locally with its [SIL Open Font License](public/fonts/oswald/OFL.txt); original game-rendered text is preserved. **Launch** and the outline play triangle in **Library tools** start the same browser game. **All installed mods** shows the full searchable inventory, including members of saved collections. **Refresh** rescans Steam and the saved profiles while no session is running. If names are missing, **Look up Steam titles**
+requests them from Steam only when clicked. In a battle or on the galaxy map, press **F2** to view frame times.
+The library stays available while playing. Save and leave the game, then use **End session** in the library before switching collections.
+To browse the loading artwork without leaving your game, open `briefings.html` on the **game** server in another tab (normally `http://127.0.0.1:8478/briefings.html` during a Workshop session). The gallery shows transition contexts, not a catalog of map photographs. Local Workshop tactical battles can show reviewed 1920×1080-or-better photographs of the exact installed land or space map. Space and land battles share a briefing: the location, battle type, and one authored world description on the left in white Oswald, with live loading progress below. Above the readable title, the same place name appears in [Aurebesh AF Canon](https://www.fontspace.com/aurebesh-af-font-f49637) by AurekFonts (public domain, served locally). If the mounted data has no world description, the paragraph is omitted rather than filled with tactical advice or another planet's history. Without a verified photograph the briefing is text-only. It never guesses from shared loading screens, filenames, planet icons, galleries or minimaps. The battle opens automatically at simulation readiness, without waiting for art or input. Multiplayer uses the same briefing, with player loading progress shown separately; peer readiness still controls entry. No mod artwork is bundled.
+Neither Steam nor the old launcher's profiles are modified. Close the local server to stop the launcher.
+Alternatively run `node server.mjs --workshop` and open the printed address. For a nonstandard Steam installation set `STEAM_PATH` to the
+Steam client folder containing `steamapps/libraryfolders.vdf`. This local mode does not need an npm install or a native build.
+
+**On the hosted website:** a website cannot inspect your Steam libraries automatically. On the start page, open **Mods → Use Steam Workshop launch options** and paste the author's
+`STEAMMOD=…` entries, submod first if that's the published order. **Use this order** enables just those items from the mod list. The first
+entry has the highest priority; the list shows overlays from bottom to top. You can save the selection as a mod profile or start a game.
+
+The Windows app discovers installed items. In a browser with directory-picker support, **Choose 32470 folder and apply…** lets you select
+`steamapps/workshop/content/32470` in your Steam library and read just the missing numbered folders. In other browsers add each numbered
+item folder first. If an item is missing or appears twice, the existing selection is left alone. The page does not subscribe, download,
+execute a Steam command or change the installed files.
 
 [progression.md](progression.md) shows exactly what is finished, what is partial and what is still missing.
 
@@ -202,8 +218,9 @@ Other commands:
 |---|---|
 | `npm run wasm` | rebuild the WebAssembly modules from `wasm/` |
 | `npm run build:prod` | build the site into `dist/` |
-| `npm run deploy:prod` | build and publish the site and the multiplayer lobby (`lobby/`) to Cloudflare |
-| `npm run app` | build the Windows app (`src-tauri/`, Tauri) |
+| `npm run workshop` | start the local browser launcher and discover installed Steam collections |
+| `npm run test:workshop` / `npm run test:submods` | check Workshop behavior and loose mod precedence |
+| `npm run test:deploy` / `npm run test:battlefront` | check spawn selection, HUD, controls and cameras |
 
 `npm run test:deploy` checks deployment logic without retail data. With `SWR_GAME` set, run
 `node tools/test-deploy-disc-catalog.mjs` (add `--base` for the original game) to check the stock skirmish maps.

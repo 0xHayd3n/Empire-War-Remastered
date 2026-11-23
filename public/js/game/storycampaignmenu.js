@@ -44,10 +44,12 @@ export function mainCampaign(campaigns, name = MAIN_CAMPAIGNS().A) {
   return null;
 }
 
-export async function openMainCampaignMenu({ start, cancel = null, audio = null }) {
+export async function openMainCampaignMenu({ start, cancel = null, audio = null, signal }) {
   const data = await loadCampaignData();
+  if (signal?.aborted) return false;
   const dlg = await openDialog('IDD_MAIN_CAMPAIGN_DIALOG', { modal: false, anchor: 9, nativeImages: true, nativeFonts: true });
   if (!dlg) return false;
+  if (signal?.aborted) { dlg.close(); return false; }
   const names = MAIN_CAMPAIGNS();
   let difficulty = 'medium',
     closed = false,
@@ -55,6 +57,7 @@ export async function openMainCampaignMenu({ start, cancel = null, audio = null 
   const close = () => {
     if (closed) return;
     closed = true;
+    signal?.removeEventListener('abort', close);
     removeEventListener('keydown', onKey, true);
     dlg.close();
   };
@@ -71,6 +74,7 @@ export async function openMainCampaignMenu({ start, cancel = null, audio = null 
     }
   };
   dlg.show('IDC_DIALOG_CLOSE_BUTTON', false);
+  signal?.addEventListener('abort', close, { once: true });
   dlg.show('IDC_LOAD_FACTION_A_PROGRESS', false);
   dlg.show('IDC_LOAD_FACTION_B_PROGRESS', false);
   const ids = ['IDC_RADIO_EASY', 'IDC_RADIO_MEDIUM', 'IDC_RADIO_HARD'];

@@ -1001,7 +1001,12 @@ export class LandWorld {
       emitter: ''
     };
     const T = this.terrain;
+    const width = T.width ?? n, height = T.height ?? n;
     for (let i = 0; i < n * n; i++) {
+      if (i >= height * n || i % n >= width) {
+        this.kind[i] = TERRAIN.IMPASSABLE;
+        continue;
+      }
       const L = T.layers[T.layerIndex[i]],
         ground = L && L.texture;
       const k = ground ? (p ? p[i] : TERRAIN.CLEAR) : TERRAIN.IMPASSABLE;

@@ -1,0 +1,10 @@
+/* Oswald by the Oswald Project Authors. License: fonts/oswald/OFL.txt. */
+@font-face {
+  font-family: Oswald;
+  src: url('fonts/oswald/Oswald.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 200 700;
+  font-display: swap;
+}
+:root { --ui-font: Oswald, 'Arial Narrow', sans-serif; }
+body, button, input, select, textarea { font-family: var(--ui-font); }

@@ -3,13 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <script src="js/consolelog.js"></script>
-    <title>Empire at War: Browser Edition</title>
+    <title>Empire War Remastered</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <link rel="icon" href="favicon.ico" sizes="48x48" />
     <link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192" />
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
     <link rel="manifest" href="manifest.webmanifest" />
-    <meta name="apple-mobile-web-app-title" content="EaW BE" />
+    <meta name="apple-mobile-web-app-title" content="EW Remastered" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -19,25 +19,19 @@
       content="Play Star Wars: Empire at War and Forces of Corruption in your browser: space and land skirmish, galactic conquest and online multiplayer, running on your own copy of the game. Nothing to install."
     />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Empire at War: Browser Edition" />
-    <meta property="og:title" content="Empire at War: Browser Edition" />
+    <meta property="og:site_name" content="Empire War Remastered" />
+    <meta property="og:title" content="Empire War Remastered" />
     <meta
       property="og:description"
       content="Play Star Wars: Empire at War and Forces of Corruption in your browser: space and land skirmish, galactic conquest and online multiplayer, running on your own copy of the game. Nothing to install."
     />
-    <meta property="og:url" content="https://playeaw.com/" />
-    <meta property="og:image" content="https://playeaw.com/icons/share.jpg" />
+    <meta property="og:image" content="icons/share.jpg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Empire at War: Browser Edition, the Imperial and Rebel emblems side by side" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="color-scheme" content="dark" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      crossorigin
-      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;1,400&display=swap"
-    />
+    <link rel="stylesheet" href="typography.css" />
     <style>
       :root {
         --bg: #010307;
@@ -51,8 +45,8 @@
         --imp-2: rgba(232, 51, 58, 0.55);
         --imp-3: rgba(232, 51, 58, 0.11);
         --well: rgba(230, 223, 204, 0.035);
-        --disp: 'Chakra Petch', 'Bahnschrift SemiCondensed', 'Bahnschrift', 'Arial Narrow', sans-serif;
-        --mono: 'IBM Plex Mono', 'Cascadia Mono', Consolas, Menlo, monospace;
+        --disp: var(--ui-font);
+        --mono: var(--ui-font);
         --rail: 136px;
       }
       * {
@@ -202,11 +196,7 @@
         background: #000;
         box-shadow: 0 0 0 1px var(--line-hi);
         color: #fff;
-        font:
-          700 14px/36px Quicksand,
-          Helvetica,
-          'Century Gothic',
-          sans-serif;
+        font: 700 14px/36px var(--ui-font);
         letter-spacing: 0;
         text-transform: none;
         text-decoration: none;
@@ -1088,12 +1078,12 @@
     <main>
       <header>
         <div class="kicker">Star Wars</div>
-        <h1>Empire at War</h1>
+        <h1>Empire War Remastered</h1>
         <div class="sub"><span id="subName">Forces of Corruption</span> · in the browser</div>
         <div class="credit">
-          Created by RIRA
-          <div id="kofi"><a class="ask" href="https://ko-fi.com/Z4S429CUIG" target="_blank" rel="noopener">Support me on Ko-fi</a></div>
-          <a class="repo" href="https://github.com/Glenn332/Empire-At-War-Browser-Edition" target="_blank" rel="noopener">
+          Browser engine by RIRA · Fork by 0xHayd3n
+          <div id="kofi"><a class="ask" href="https://ko-fi.com/Z4S429CUIG" target="_blank" rel="noopener">Support RIRA on Ko-fi</a></div>
+          <a class="repo" href="https://github.com/0xHayd3n/Empire-War-Remastered" target="_blank" rel="noopener">
             <svg viewBox="0 0 16 16" aria-hidden="true">
               <path
                 d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
@@ -1129,6 +1119,7 @@
           <div class="what">Game data</div>
           <div id="current" class="state">Checking…</div>
           <div id="storeNote" class="store"></div>
+          <a id="modelViewer" class="ask hidden" href="viewer.html">Open model viewer</a>
         </div>
         <a id="play" class="launch hidden" href="play.html">Launch</a>
       </section>
@@ -1212,7 +1203,28 @@
         <div id="appSources" class="hidden"></div>
         <p class="modadd"><button id="addMod">Add a mod folder…</button><button id="addModArchive">Import a mod archive…</button></p>
         <input id="modFile" type="file" accept=".tar,.gz,.tgz,application/x-tar,application/gzip" hidden />
-        <p id="modStatus" class="status"></p>
+        <details id="workshopOrder" class="profiles">
+          <summary>Use Steam Workshop launch options</summary>
+          <p class="note" id="workshopHelp">
+            Paste the STEAMMOD entries from the mod author. Only those mods will be enabled; the first entry wins when files overlap.
+            Use installed items from your list, or add their numbered folders first. Steam handles subscriptions and downloads.
+          </p>
+          <form id="applyWorkshop" class="saveas">
+            <input
+              id="steamOptions"
+              required
+              maxlength="4096"
+              placeholder="STEAMMOD=123 STEAMMOD=456"
+              aria-label="Steam Workshop launch options"
+              aria-describedby="workshopHelp"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button type="submit">Use this order</button>
+          </form>
+          <button id="workshopFolder" class="small hidden" type="submit" form="applyWorkshop">Choose 32470 folder and apply…</button>
+        </details>
+        <p id="modStatus" class="status" role="status"></p>
         <div id="profiles" class="profiles hidden">
           <h3>Mod profiles</h3>
           <div id="profileList"></div>
@@ -1391,9 +1403,11 @@
         deleteProfile,
         profileInUse,
         syncLocalMods,
+        applyWorkshopOrder,
         dismissedLocal,
         restoreLocal
       } from './js/mods.js';
+      import { parseWorkshopOrder } from './js/workshoporder.js';
       import { inApp, appSetup, appPickFolder } from './js/localfolder.js';
       import { desktopStrip } from './js/appupdate.js';
 
@@ -2078,6 +2092,7 @@
               ? `Browser storage ${mb(est.usage || 0)} used of ${mb(est.quota)}`
               : '';
         $('play').classList.toggle('hidden', !ok);
+        $('modelViewer').classList.toggle('hidden', !ok);
         showInstall(own);
         showStored(info);
       }
@@ -2478,6 +2493,8 @@
         el.replaceChildren();
         $('addMod').classList.toggle('hidden', !foldersSupported());
         $('addModArchive').classList.toggle('hidden', !archivesSupported());
+        $('workshopOrder').classList.toggle('hidden', !foldersSupported() && !archivesSupported());
+        $('workshopFolder').classList.toggle('hidden', app || !modsSupported());
         if (!foldersSupported() && !archivesSupported()) {
           $('modStatus').className = 'status bad';
           $('modStatus').innerHTML =
@@ -2691,6 +2708,31 @@
           el.append(row);
         }
       }
+      $('applyWorkshop').onsubmit = async e => {
+        e.preventDefault();
+        if (busy) return;
+        busy = true;
+        try {
+          const ids = parseWorkshopOrder($('steamOptions').value);
+          let root = null;
+          if (e.submitter === $('workshopFolder')) {
+            try {
+              root = await window.showDirectoryPicker({ id: 'eaw-workshop', mode: 'read' });
+            } catch (err) {
+              if (err.name !== 'AbortError') throw err;
+              modStatus('Workshop selection cancelled. No changes made.');
+              return;
+            }
+          }
+          await applyWorkshopOrder(ids, root, t => modStatus('Reading Workshop items: ' + t));
+          modStatus(`Workshop order applied (${ids.length}). Start a game, or save this selection as a profile.`, 'ok');
+        } catch (err) {
+          modStatus(err.message || 'The Workshop order could not be applied.', 'bad');
+        } finally {
+          busy = false;
+          showMods();
+        }
+      };
       $('saveProfile').onsubmit = async e => {
         e.preventDefault();
         const name = $('profileName').value.trim();

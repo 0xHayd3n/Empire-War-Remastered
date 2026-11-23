@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Loading screen gallery · Empire at War</title>
+<link rel="stylesheet" href="typography.css"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="briefing.css"><style>
+nav{position:fixed;z-index:160;inset:16px 16px auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font:14px/1.4 var(--ui-font);color:#fff}nav label,nav a{background:#101a25ed;color:inherit;border:1px solid #62707d;border-radius:6px;padding:7px 10px}nav select{font:inherit;background:#101a25;color:#fff;border:0}#briefMeter{visibility:hidden}
+</style></head><body><nav><label>Art preview <select aria-label="Loading screen"><option value="boot">Game startup</option><option value="menu">Command deck</option><option value="conquest">Galactic Conquest</option><option value="era">Starting era</option><option value="galaxy">Galactic map</option><option value="space">Space battle</option><option value="land">Land battle</option><option value="staging">Battle setup</option><option value="save">Saved game</option><option value="network">Multiplayer</option></select></label><a href="play.html">Open game</a></nav>
+<script type="module">
+import { showSplash, splashProgress } from './js/splash.js';
+const template = new DOMParser().parseFromString(await (await fetch('play.html')).text(), 'text/html').getElementById('splash');
+document.body.append(template);
+const select = document.querySelector('select');
+function paint(){showSplash(select.value); splashProgress('Artwork preview · no game is loading');}
+select.addEventListener('change',paint);paint();
+</script></body></html>

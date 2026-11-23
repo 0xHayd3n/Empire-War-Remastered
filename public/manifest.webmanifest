@@ -1,6 +1,6 @@
 {
-  "name": "Empire at War: Browser Edition",
-  "short_name": "EaW BE",
+  "name": "Empire War Remastered",
+  "short_name": "EW Remastered",
   "description": "Empire at War in the browser, running on your own copy of the game data",
   "id": "./",
   "start_url": "./",

@@ -221,8 +221,8 @@ function arrayTexture(chains) {
 
 export function heightAt(t, x, y) {
   const n = t.size,
-    gx = Math.min(n - 1.001, Math.max(0, x / CELL)),
-    gy = Math.min(n - 1.001, Math.max(0, y / CELL));
+    gx = Math.min((t.width ?? n) - 1.001, Math.max(0, x / CELL)),
+    gy = Math.min((t.height ?? n) - 1.001, Math.max(0, y / CELL));
   const ix = gx | 0,
     iy = gy | 0,
     fx = gx - ix,
@@ -294,15 +294,15 @@ function quadLayers(t, slot, quad) {
 }
 
 export async function buildTerrain(t) {
-  const n = t.size,
+  const n = t.size, width = t.width ?? n, height = t.height ?? n,
     h = t.heights;
   const normals = new Float32Array(n * n * 3);
-  for (let y = 0; y < n; y++)
-    for (let x = 0; x < n; x++) {
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) {
       const l = h[y * n + Math.max(0, x - 1)],
-        r = h[y * n + Math.min(n - 1, x + 1)],
+        r = h[y * n + Math.min(width - 1, x + 1)],
         d = h[Math.max(0, y - 1) * n + x],
-        u = h[Math.min(n - 1, y + 1) * n + x];
+        u = h[Math.min(height - 1, y + 1) * n + x];
       const nx = (l - r) / (2 * CELL),
         ny = (d - u) / (2 * CELL),
         len = Math.hypot(nx, ny, 1),
@@ -316,7 +316,7 @@ export async function buildTerrain(t) {
     .sort((a, b) => a - b);
   const bare = i => !!t.layers[t.layerIndex[i]]?.hole;
   const slot = new Map(used.map((i, k) => [i, k]));
-  const tris = (n - 1) * (n - 1) * 2;
+  const tris = (width - 1) * (height - 1) * 2;
   const pos = new Float32Array(tris * 9),
     nor = new Float32Array(tris * 9),
     lay = new Float32Array(tris * 12),
@@ -345,13 +345,13 @@ export async function buildTerrain(t) {
       v++;
     });
   };
-  for (let y = 0; y < n - 1; y++)
-    for (let x = 0; x < n - 1; x++) {
+  for (let y = 0; y < height - 1; y++)
+    for (let x = 0; x < width - 1; x++) {
       const a = y * n + x,
         b = a + 1,
         c = a + n,
         d = c + 1;
-      const q = (y * (n - 1) + x) * 2;
+      const q = (y * (width - 1) + x) * 2;
       if ([a, b, c, d].every(bare)) continue;
       triAt[q] = v;
       put([a, b, d], [a, b, c, d]);
@@ -434,7 +434,7 @@ export async function buildTerrain(t) {
 export function paveTerrain(t, cells, layer) {
   const P = t.paint;
   if (!P || !P.slot.has(layer)) return;
-  const n = t.size,
+  const n = t.size, width = t.width ?? n, height = t.height ?? n,
     lay = P.geo.getAttribute('layers'),
     quads = new Set();
   for (const i of cells) {
@@ -444,11 +444,11 @@ export function paveTerrain(t, cells, layer) {
       y = (i / n) | 0;
     for (let dy = -1; dy <= 0; dy++)
       for (let dx = -1; dx <= 0; dx++)
-        if (x + dx >= 0 && y + dy >= 0 && x + dx < n - 1 && y + dy < n - 1) quads.add((y + dy) * (n - 1) + x + dx);
+        if (x + dx >= 0 && y + dy >= 0 && x + dx < width - 1 && y + dy < height - 1) quads.add((y + dy) * (width - 1) + x + dx);
   }
   for (const q of quads) {
-    const x = q % (n - 1),
-      y = (q / (n - 1)) | 0,
+    const x = q % (width - 1),
+      y = (q / (width - 1)) | 0,
       a = y * n + x,
       L = quadLayers(t, P.slot, [a, a + 1, a + n, a + n + 1]);
     for (let k = 0; k < 2; k++) {
@@ -601,8 +601,8 @@ export function buildWater(t) {
     side = (n - 1) * CELL;
   const pos = [],
     depth = [];
-  for (let y = 0; y < n - 1; y++)
-    for (let x = 0; x < n - 1; x++) {
+  for (let y = 0; y < (t.height ?? n) - 1; y++)
+    for (let x = 0; x < (t.width ?? n) - 1; x++) {
       const a = y * n + x,
         ids = [a, a + 1, a + n + 1, a, a + n + 1, a + n];
       if (!ids.some(i => h[i] < level)) continue;

@@ -3,13 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <script src="js/consolelog.js"></script>
-    <title>Empire at War: Browser Edition</title>
+    <title>Empire War Remastered</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <link rel="icon" href="favicon.ico" sizes="48x48" />
     <link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192" />
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
     <link rel="manifest" href="manifest.webmanifest" />
-    <meta name="apple-mobile-web-app-title" content="EaW BE" />
+    <meta name="apple-mobile-web-app-title" content="EW Remastered" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -19,25 +19,20 @@
       content="Play Star Wars: Empire at War and Forces of Corruption in your browser: space and land skirmish, galactic conquest and online multiplayer, running on your own copy of the game. Nothing to install."
     />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Empire at War: Browser Edition" />
-    <meta property="og:title" content="Empire at War: Browser Edition" />
+    <meta property="og:site_name" content="Empire War Remastered" />
+    <meta property="og:title" content="Empire War Remastered" />
     <meta
       property="og:description"
       content="Play Star Wars: Empire at War and Forces of Corruption in your browser: space and land skirmish, galactic conquest and online multiplayer, running on your own copy of the game. Nothing to install."
     />
-    <meta property="og:url" content="https://playeaw.com/" />
-    <meta property="og:image" content="https://playeaw.com/icons/share.jpg" />
+    <meta property="og:image" content="icons/share.jpg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Empire at War: Browser Edition, the Imperial and Rebel emblems side by side" />
     <meta name="twitter:card" content="summary_large_image" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      crossorigin
-      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Mono:wght@400&display=swap"
-    />
+    <link rel="stylesheet" href="typography.css" />
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="briefing.css" />
     <link rel="stylesheet" href="instant.css" />
     <link rel="stylesheet" href="spectator.css" />
     <link rel="stylesheet" href="battlefront-deploy.css" />
@@ -80,7 +75,8 @@
               .then(() => location.reload());
           else {
             document.getElementById('splash')?.classList.add('hidden');
-            document.getElementById('loading')?.classList.remove('hidden');
+            const panel = document.getElementById('loading');
+            if (panel) { panel.dataset.failed = 'true'; panel.classList.remove('hidden'); }
             const t = document.getElementById('loadText');
             if (t) t.textContent = 'The game files did not load. Reload the page to try again.';
           }
@@ -103,13 +99,28 @@
   <body>
     <div id="view"></div>
 
-    <div id="splash"><span>Loading...</span></div>
+    <div id="splash" data-scene="boot">
+      <div class="brief-copy">
+        <div id="briefSection">System link</div>
+        <h1 id="briefTitle">Empire at War</h1>
+        <p id="briefStage" role="status">Opening game files</p>
+        <progress id="briefMeter" max="1" aria-label="Current loading stage"></progress>
+      </div>
+    </div>
 
+    <dialog id="briefFailure" aria-labelledby="briefFailureReason">
+      <form method="dialog">
+        <p id="briefFailureReason"></p>
+        <button value="retry" autofocus>Retry</button>
+        <button value="back">Back to menu</button>
+      </form>
+    </dialog>
     <div id="loading" class="screen">
       <div class="panel">
         <h1>Empire at War</h1>
         <div id="loadText">Starting…</div>
         <div class="bar"><div id="loadBar"></div></div>
+        <a id="briefRetry" href="play.html">Return to main menu</a>
         <a id="needData" class="hidden" href="./" style="display: block; margin-top: 16px; color: #4fb3ff">Import your game data →</a>
       </div>
     </div>

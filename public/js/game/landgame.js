@@ -148,7 +148,7 @@ import { ticker } from '../net.js';
 import { openDialog } from './dialogs.js';
 
 import { showLoadScreen, endLoadScreen } from './loadscreen.js';
-import { showSplash, hideSplash } from '../splash.js';
+import { showSplash, battleDestination } from '../splash.js';
 import { pressed, held, bothButtonsRotate, keysOf, keyName } from './keybinds.js';
 import { edgeCursor, panAxis } from './edge-scroll.js';
 import { beaconType } from './beacons.js';
@@ -645,13 +645,16 @@ export class LandGame {
     const P = this.progress,
       setup = this.setup;
     $('lobby').classList.add('hidden');
-    if (!setup.attract) showSplash();
-    else document.body.classList.add('attract', 'hud-hidden');
+    const finishSplash = !setup.attract && showSplash(setup.restore ? 'save' : 'land', battleDestination(setup));
+    if (setup.attract) document.body.classList.add('attract', 'hud-hidden');
     P('Loading map', 0);
     const map = (this.map = await loadMap(setup.mapFile));
     ensureMissionPlayers(setup, map);
     startEnvironment(map, setup);
-    if (!setup.attract && (await showLoadScreen({ setup, map, land: true }))) hideSplash();
+    if (finishSplash) {
+      showLoadScreen({ setup, map, land: true });
+      finishSplash();
+    }
     this.teams = this.players.map(p => p.team);
     this.factions = this.players.map(p => setup.teamFactions[p.team]);
     if (setup.linkedTactical) {
@@ -1285,7 +1288,7 @@ export class LandGame {
     if (this.scripts && !setup.net && this.netRole !== 'client' && !q.has('nowarm') && !this.savedScripts)
       await this.scripts.host.settle().catch(e => console.warn('scripts settle', e));
     if (!q.has('nowarm')) await this.warmFrames().catch(e => console.warn('warm frames', e));
-    if (!setup.attract) hideSplash();
+    if (finishSplash) finishSplash();
     $('loading').classList.add('hidden');
     await endLoadScreen({ direct: setup.benchmark || setup.restore || setup.direct || setup.net || setup.shooterNet, unlock: () => this.audio.unlock?.() });
     this.bench?.restart();

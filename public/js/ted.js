@@ -300,20 +300,19 @@ export function parseTED(buffer) {
     activeEnv = -1;
   const envs = [];
   visit(0, buffer.byteLength, 0);
-  if (map.terrain && passability && passability.end - passability.start >= map.terrain.size ** 2 * 4) {
-    const n = map.terrain.size,
-      raw = new Uint32Array(buffer.slice(passability.start, passability.start + n * n * 4)),
-      grid = new Uint32Array(n * n);
-    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) grid[y * n + x] = raw[x * n + y];
+  if (map.terrain && passability && passability.end - passability.start >= map.terrain.width * map.terrain.height * 4) {
+    const { width, height, size: stride } = map.terrain,
+      raw = new Uint32Array(buffer.slice(passability.start, passability.start + width * height * 4)),
+      grid = new Uint32Array(stride * stride);
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) grid[y * stride + x] = raw[x * height + y];
     map.terrain.passability = grid;
   }
   if (map.terrain && envs[activeEnv]) map.environment = envs[activeEnv];
   map.environments = envs;
   map.activeEnvironment = envs.indexOf(map.environment);
   if (map.terrain) {
-    const side = (map.terrain.size - 1) * 20;
     map.min = [0, 0];
-    map.max = [side, side];
+    map.max = [(map.terrain.width - 1) * 20, (map.terrain.height - 1) * 20];
     map.playMin = landMin || map.min;
     map.playMax = landMax || map.max;
   }
@@ -387,7 +386,11 @@ function parseTerrain(r, c) {
     if (k.type === 0 && !k.container) {
       const head = new Map();
       for (const m of r.minis(k)) head.set(m.type, m);
-      if (head.has(0)) t.size = r.dv.getUint32(head.get(0).start, true);
+      if (head.get(0)?.size !== 4 || (head.has(1) && head.get(1).size !== 4)) return null;
+      t.width = r.u32(head.get(0).start);
+      t.height = head.has(1) ? r.u32(head.get(1).start) : t.width;
+      // Navigation and fog use a square backing store. Only authored cells belong to the mesh.
+      t.size = Math.max(t.width, t.height);
       const str = id => (head.has(id) ? r.str(head.get(id).start, head.get(id).start + head.get(id).size) : '');
       const f = (id, d) => (head.has(id) && head.get(id).size === 4 ? r.f32(head.get(id).start) : d);
       const mode = head.has(22) ? r.dv.getUint32(head.get(22).start, true) : 0,
@@ -439,13 +442,16 @@ function parseTerrain(r, c) {
     }
   }
   if (t.water) t.water.ripples = ripples;
-  const n = t.size;
-  if (!grid || !n || grid.end - grid.start < n * n * 4) return null;
+  const { size: n, width, height } = t, count = width * height;
+  if (!grid || !n || width < 2 || height < 2 || grid.end - grid.start < count * 4) return null;
+  // Do not expand a malformed, extremely thin rectangle into an unbounded square allocation.
+  if (n * n > Math.max(1024 * 1024, 4 * count)) return null;
   t.heights = new Float32Array(n * n);
   t.layerIndex = new Uint8Array(n * n);
   t.shade = new Uint8Array(n * n);
-  for (let i = 0; i < n * n; i++) {
-    const p = grid.start + i * 4;
+  if (width !== height) t.layerIndex.fill(255);
+  for (let src = 0; src < count; src++) {
+    const p = grid.start + src * 4, i = width === n ? src : Math.floor(src / width) * n + src % width;
     t.heights[i] = (r.dv.getInt16(p, true) * 25) / 512;
     t.layerIndex[i] = r.dv.getUint8(p + 2);
     t.shade[i] = r.dv.getUint8(p + 3);
@@ -512,12 +518,24 @@ export function startEnvironment(map, setup = {}) {
   pickEnvironment(map, setup.net ? environmentRoll(setup.seed) : Math.random());
 }
 
+// Hash the bytes that were parsed, not a later read of the same filename. Only a
+// briefing with a candidate photo needs this digest; map loading never awaits it.
+const sourceBuffers = new WeakMap();
+export async function mapSourceDigest(map) {
+  const bytes = sourceBuffers.get(map);
+  if (!bytes || !globalThis.crypto?.subtle) return null;
+  const hash = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(hash), n => n.toString(16).padStart(2, '0')).join('');
+}
+
 export async function loadMap(name, opts = {}) {
   if (dynamicOf(name)) return dynamic.load(name, opts);
   const buf = await fetchBinary(mapPath(name));
   if (!buf) throw new Error('map not found: ' + name);
   const map = parseTED(buf);
   map.file = name;
+  map.sourcePath = mapPath(name);
+  sourceBuffers.set(map, buf);
   return map;
 }
 

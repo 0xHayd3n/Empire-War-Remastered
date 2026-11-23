@@ -44,7 +44,7 @@ import { loadParticles } from './particles.js';
 import { Advisor } from './game/advisor.js';
 import { FrontEnd } from './game/frontend.js';
 import { InstantBattle, placeInstantBattle, shipsOf, leftOutOfInstant } from './game/instantbattle.js';
-import { openInstantBattle } from './game/instantmenu.js';
+import { openInstantBattle as buildInstantBattle } from './game/instantmenu.js';
 import { isDynamic, dynamicMaps, warmDynamicMaps, dynamicMapStation } from './game/dynamicmap.js';
 import { showSummary } from './game/summary.js';
 import { showLoadScreen, endLoadScreen, activeLoadScreen, loadProgress } from './game/loadscreen.js';
@@ -52,14 +52,14 @@ import { LandGame } from './game/landgame.js';
 import { GalacticGame } from './game/galactic.js';
 import { startServiceWorker, assetsAvailable } from './pack.js';
 import { ensureCurrentBuild } from './update.js';
-import { showSplash, hideSplash, showMessage } from './splash.js';
+import { showSplash, hideSplash, showMessage, splashProgress, whileLoading, battleDestination } from './splash.js';
 import { Cinematic } from './game/cinematic.js';
 import { TacticalMovies } from './game/tacticalmovies.js';
 import { loadPrioritySets } from './game/priorities.js';
 import { loadDialogs, openDialog } from './game/dialogs.js';
 import { Menus } from './game/menus.js';
-import { openLobby } from './game/lobby.js';
-import { openMultiplayer } from './game/multiplayer.js';
+import { openLobby as buildLobby } from './game/lobby.js';
+import { openMultiplayer as buildMultiplayer } from './game/multiplayer.js';
 import { BUILD } from './build.js';
 import {
   snapshot,
@@ -108,6 +108,9 @@ const AI_STEP_MS = 4,
 guardLeaving();
 
 const $ = id => document.getElementById(id);
+const openLobby = args => whileLoading('staging', 'Skirmish setup', () => buildLobby(args));
+const openInstantBattle = args => whileLoading('staging', 'Instant battle', () => buildInstantBattle(args));
+const openMultiplayer = args => whileLoading('network', 'Multiplayer lobby', () => buildMultiplayer(args));
 const DEG = Math.PI / 180;
 const _modelTurn = new THREE.Matrix4().makeRotationZ(Math.PI / 2),
   _modelTurnQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
@@ -222,6 +225,7 @@ function watchBoot(done) {
 
 function progress(text, frac) {
   mark(String(text).replace(/\s*\(\d+\/\d+\)$/, ''));
+  splashProgress(text, frac);
   $('loadText').textContent = text;
   if (frac !== undefined) $('loadBar').style.width = Math.round(frac * 100) + '%';
   const screen = activeLoadScreen();
@@ -372,7 +376,7 @@ class Game {
   async start() {
     const { mapFile, credits, popCap, teamFactions } = this.setup;
     $('lobby').classList.add('hidden');
-    if (!this.setup.attract) showSplash();
+    if (!this.setup.attract) this.finishSplash = showSplash(this.setup.restore ? 'save' : 'space', battleDestination(this.setup));
     progress('Loading map', 0);
     const map = await loadMap(mapFile, { teams: teamFactions.length, instant: !!this.setup.instant });
     ensureMissionPlayers(this.setup, map);
@@ -776,7 +780,7 @@ class Game {
       await this.mirror.whenReady;
     }
     if (this.setup.net) await this.prepareLockstep();
-    if (!this.setup.attract) hideSplash();
+    this.finishSplash?.();
     if (this.setup.replay) this.message('Replaying a recorded battle. It pauses at the moment the bug report was made.', 'good');
     $('loading').classList.add('hidden');
     $('hud').classList.remove('hidden');
@@ -2155,20 +2159,14 @@ class Game {
   }
   async showLoading(map) {
     if (this.setup.attract) return;
-    const dlg = await showLoadScreen({ setup: this.setup, map, land: false, staged: true });
-    if (dlg) hideSplash();
+    showLoadScreen({ setup: this.setup, map, land: false, staged: true });
+    this.finishSplash?.();
   }
 
   async endLoading() {
     window.loadLog?.push([Math.round(performance.now()), 'Loaded', diag.preloaded]);
     const direct = this.setup.benchmark || this.setup.restore || this.setup.direct || this.setup.net;
-    await endLoadScreen({
-      direct,
-      hold: on => {
-        this.paused = on;
-      },
-      unlock: () => audio.unlock()
-    });
+    await endLoadScreen({ direct, unlock: () => audio.unlock() });
   }
 
   touchView(dx, dy, turn) {
@@ -2586,12 +2584,12 @@ async function boot() {
   tag.id = 'buildTag';
   tag.textContent = 'build ' + build;
   document.body.appendChild(tag);
+  splashProgress('Opening the game and mod folders');
   mark('Opening the game and mod folders');
   const local = await fromInstall();
   mark('Looking for the game data');
   if (!local && !(await assetsAvailable())) {
-    hideSplash();
-    progress('No game data found in this browser.');
+    showMessage('No game data found in this browser.');
     $('needData').classList.remove('hidden');
     return;
   }
@@ -2601,15 +2599,13 @@ async function boot() {
     progress('Loading interface', 1);
     await loadIcons();
   } catch (e) {
-    hideSplash();
-    progress('Failed to load game data: ' + e.message);
+    showMessage('Failed to load game data: ' + e.message);
     console.error(e);
     return;
   }
   FACTIONS.push(...skirmishFactions());
   if (!FACTIONS.length) {
-    hideSplash();
-    progress('This game data has no faction that can be played in a skirmish.');
+    showMessage('This game data has no faction that can be played in a skirmish.');
     return;
   }
   const { space: maps, land: landMaps, custom: customMaps } = await skirmishMaps();
@@ -2838,7 +2834,7 @@ async function boot() {
       leaveTo(location.pathname);
       return;
     }
-    const snap = await getSave(id);
+    const snap = await whileLoading('save', '', () => getSave(id));
     if (snap) startFromSave(snap);
     else alert('That save could not be read.');
   };
@@ -3440,8 +3436,8 @@ async function boot() {
       setTimeout(() => {
         endGame('menu');
         history.replaceState(null, '', location.pathname);
-        showSplash();
-        mainMenu();
+        showSplash('menu');
+        mainMenu().catch(e => showMessage('Could not open the main menu: ' + e.message));
       }),
     load: id => setTimeout(() => loadSave(id))
   });
@@ -3469,7 +3465,7 @@ async function boot() {
     sessionStorage.removeItem('swr-load');
   } catch {}
   if (pending) {
-    const snap = await getSave(pending);
+    const snap = await whileLoading('save', '', () => getSave(pending));
     if (pending === 'resume') forgetResume();
     if (snap) {
       startFromSave(snap);
@@ -3477,6 +3473,7 @@ async function boot() {
     }
   }
   if (params.has('mpjoin')) {
+    showSplash('network', 'Joining multiplayer session');
     const room = params.get('mpjoin'),
       S = new NetSession();
     try {
@@ -3533,6 +3530,7 @@ async function boot() {
     launch(staged0);
     return;
   }
+  showSplash('menu');
   await mainMenu();
 }
 
@@ -3590,4 +3588,7 @@ async function startFrontEnd(mapFile, { lobby, instant, multiplayer, load, start
   return true;
 }
 
-watchBoot(boot());
+watchBoot(boot().catch(e => {
+  console.error(e);
+  showMessage('Could not load the game: ' + e.message);
+}));

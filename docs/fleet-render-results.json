@@ -1,0 +1,938 @@
+{
+  "main": "12b0feb",
+  "universalBaseline": "24cc273",
+  "measure": "48 camera poses per mode; synchronized WebGL render ms, not live FPS",
+  "workloads": {
+    "stock": {
+      "main": {
+        "primary": "stock",
+        "hash": "f4cd17192de1965f",
+        "map": "_MP_SPACE_KUAT.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 418,
+        "lod": {
+          "withAlternates": 295,
+          "ships": 339
+        },
+        "framesPerMode": 48,
+        "particles": 10784,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 7.0299999713897705,
+            "p95Ms": 9.989999949932098,
+            "medianCalls": 185,
+            "medianTriangles": 964112
+          },
+          "noHulls": {
+            "medianMs": 4.870000004768372,
+            "p95Ms": 7.330000042915344,
+            "medianCalls": 39,
+            "medianTriangles": 105512
+          },
+          "noWeapons": {
+            "medianMs": 6.944999992847443,
+            "p95Ms": 9.780000030994415,
+            "medianCalls": 182,
+            "medianTriangles": 961170
+          },
+          "noParticles": {
+            "medianMs": 6.745000004768372,
+            "p95Ms": 9.759999990463257,
+            "medianCalls": 181,
+            "medianTriangles": 943032
+          }
+        }
+      },
+      "universalBaseline": {
+        "primary": "stock",
+        "hash": "f4cd17192de1965f",
+        "map": "_MP_SPACE_KUAT.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 418,
+        "lod": {
+          "withAlternates": 295,
+          "ships": 339
+        },
+        "framesPerMode": 48,
+        "particles": 10784,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 6.834999978542328,
+            "p95Ms": 14.97000002861023,
+            "medianCalls": 185,
+            "medianTriangles": 964112
+          },
+          "noHulls": {
+            "medianMs": 4.64000004529953,
+            "p95Ms": 10.889999985694885,
+            "medianCalls": 39,
+            "medianTriangles": 105512
+          },
+          "noWeapons": {
+            "medianMs": 6.634999990463257,
+            "p95Ms": 15.870000004768372,
+            "medianCalls": 182,
+            "medianTriangles": 961170
+          },
+          "noParticles": {
+            "medianMs": 6.610000014305115,
+            "p95Ms": 14.139999985694885,
+            "medianCalls": 181,
+            "medianTriangles": 943032
+          }
+        }
+      },
+      "optInPair": {
+        "primary": "stock",
+        "fleetLod": true,
+        "hash": "f4cd17192de1965f",
+        "switchCheck": "alternate / original / alternate",
+        "map": "_MP_SPACE_KUAT.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 418,
+        "lod": {
+          "withAlternates": 295,
+          "ships": 339
+        },
+        "framesPerMode": 48,
+        "particles": 10780,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 10.185000002384186,
+            "p95Ms": 17.375,
+            "medianCalls": 185,
+            "medianTriangles": 855196
+          },
+          "fullDetail": {
+            "medianMs": 10.189999997615814,
+            "p95Ms": 16.185000002384186,
+            "medianCalls": 185,
+            "medianTriangles": 964104
+          }
+        }
+      }
+    },
+    "3387971722": {
+      "main": {
+        "primary": "3387971722",
+        "hash": "64a70cafae45ff0c",
+        "map": "_MP_SPACE_ALDERAAN.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 334,
+        "lod": {
+          "withAlternates": 0,
+          "ships": 509
+        },
+        "framesPerMode": 48,
+        "particles": 29912,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 18.305000007152557,
+            "p95Ms": 31.180000007152557,
+            "medianCalls": 581,
+            "medianTriangles": 4481278
+          },
+          "noHulls": {
+            "medianMs": 11.525000035762787,
+            "p95Ms": 22.099999964237213,
+            "medianCalls": 305,
+            "medianTriangles": 652326
+          },
+          "noWeapons": {
+            "medianMs": 18.1599999666214,
+            "p95Ms": 31.709999978542328,
+            "medianCalls": 550,
+            "medianTriangles": 4457690
+          },
+          "noParticles": {
+            "medianMs": 18.615000009536743,
+            "p95Ms": 32.54000002145767,
+            "medianCalls": 571,
+            "medianTriangles": 4444148
+          }
+        }
+      },
+      "universalBaseline": {
+        "primary": "3387971722",
+        "hash": "64a70cafae45ff0c",
+        "map": "_MP_SPACE_ALDERAAN.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 334,
+        "lod": {
+          "withAlternates": 0,
+          "ships": 509
+        },
+        "framesPerMode": 48,
+        "particles": 30001,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 33.91499996185303,
+            "p95Ms": 230.37999999523163,
+            "medianCalls": 582,
+            "medianTriangles": 4482706
+          },
+          "noHulls": {
+            "medianMs": 23.669999957084656,
+            "p95Ms": 444.5149999856949,
+            "medianCalls": 306,
+            "medianTriangles": 653754
+          },
+          "noWeapons": {
+            "medianMs": 34.77499997615814,
+            "p95Ms": 517.0349999666214,
+            "medianCalls": 551,
+            "medianTriangles": 4459118
+          },
+          "noParticles": {
+            "medianMs": 33.939999997615814,
+            "p95Ms": 496.6299999952316,
+            "medianCalls": 571,
+            "medianTriangles": 4444148
+          }
+        }
+      },
+      "optInPair": {
+        "primary": "3387971722",
+        "fleetLod": true,
+        "hash": "64a70cafae45ff0c",
+        "switchCheck": "not applicable",
+        "map": "_MP_SPACE_ALDERAAN.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 334,
+        "lod": {
+          "withAlternates": 0,
+          "ships": 509
+        },
+        "framesPerMode": 48,
+        "particles": 29607,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 24.009999990463257,
+            "p95Ms": 28.694999992847443,
+            "medianCalls": 582,
+            "medianTriangles": 4481848
+          },
+          "fullDetail": {
+            "medianMs": 23.75,
+            "p95Ms": 30,
+            "medianCalls": 582,
+            "medianTriangles": 4481848
+          }
+        }
+      }
+    },
+    "1397421866": {
+      "main": {
+        "primary": "1397421866",
+        "hash": "edbfdd2f74e24e7a",
+        "map": "_MP_SPACE_ALDERAAN.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 334,
+        "lod": {
+          "withAlternates": 0,
+          "ships": 400
+        },
+        "framesPerMode": 48,
+        "particles": 30001,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 17.185000002384186,
+            "p95Ms": 22.355000019073486,
+            "medianCalls": 710,
+            "medianTriangles": 4622834
+          },
+          "noHulls": {
+            "medianMs": 10.9200000166893,
+            "p95Ms": 16.35999995470047,
+            "medianCalls": 298,
+            "medianTriangles": 649298
+          },
+          "noWeapons": {
+            "medianMs": 16.75499999523163,
+            "p95Ms": 23.0799999833107,
+            "medianCalls": 666,
+            "medianTriangles": 4593274
+          },
+          "noParticles": {
+            "medianMs": 16.9549999833107,
+            "p95Ms": 23.835000038146973,
+            "medianCalls": 698,
+            "medianTriangles": 4583514
+          }
+        }
+      },
+      "universalBaseline": {
+        "primary": "1397421866",
+        "hash": "edbfdd2f74e24e7a",
+        "map": "_MP_SPACE_ALDERAAN.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 334,
+        "lod": {
+          "withAlternates": 0,
+          "ships": 400
+        },
+        "framesPerMode": 48,
+        "particles": 30001,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 16.410000026226044,
+            "p95Ms": 23.929999947547913,
+            "medianCalls": 712,
+            "medianTriangles": 4622892
+          },
+          "noHulls": {
+            "medianMs": 10.5799999833107,
+            "p95Ms": 16.975000023841858,
+            "medianCalls": 300,
+            "medianTriangles": 649356
+          },
+          "noWeapons": {
+            "medianMs": 16.5450000166893,
+            "p95Ms": 23.214999973773956,
+            "medianCalls": 668,
+            "medianTriangles": 4593332
+          },
+          "noParticles": {
+            "medianMs": 16.360000014305115,
+            "p95Ms": 25.64500004053116,
+            "medianCalls": 698,
+            "medianTriangles": 4583514
+          }
+        }
+      },
+      "optInPair": {
+        "primary": "1397421866",
+        "fleetLod": true,
+        "hash": "edbfdd2f74e24e7a",
+        "switchCheck": "not applicable",
+        "map": "_MP_SPACE_ALDERAAN.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 334,
+        "lod": {
+          "withAlternates": 0,
+          "ships": 400
+        },
+        "framesPerMode": 48,
+        "particles": 0,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 26.439999997615814,
+            "p95Ms": 35.780000030994415,
+            "medianCalls": 699,
+            "medianTriangles": 4586452
+          },
+          "fullDetail": {
+            "medianMs": 26.460000038146973,
+            "p95Ms": 36.13499999046326,
+            "medianCalls": 699,
+            "medianTriangles": 4586452
+          }
+        }
+      }
+    },
+    "1770851727": {
+      "main": {
+        "primary": "1770851727",
+        "hash": "faaf12811b463392",
+        "map": "KUAT REPAIR YARDS.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 403,
+        "lod": {
+          "withAlternates": 32,
+          "ships": 556
+        },
+        "framesPerMode": 48,
+        "particles": 20014,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 14.620000004768372,
+            "p95Ms": 19.610000014305115,
+            "medianCalls": 813,
+            "medianTriangles": 4128443
+          },
+          "noHulls": {
+            "medianMs": 11.610000014305115,
+            "p95Ms": 15.2950000166893,
+            "medianCalls": 644,
+            "medianTriangles": 2634807
+          },
+          "noWeapons": {
+            "medianMs": 14.639999985694885,
+            "p95Ms": 20.0450000166893,
+            "medianCalls": 786,
+            "medianTriangles": 4107601
+          },
+          "noParticles": {
+            "medianMs": 14.980000019073486,
+            "p95Ms": 19.0349999666214,
+            "medianCalls": 801,
+            "medianTriangles": 4113833
+          }
+        }
+      },
+      "universalBaseline": {
+        "primary": "1770851727",
+        "hash": "faaf12811b463392",
+        "map": "KUAT REPAIR YARDS.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 403,
+        "lod": {
+          "withAlternates": 32,
+          "ships": 556
+        },
+        "framesPerMode": 48,
+        "particles": 22104,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 16.214999973773956,
+            "p95Ms": 19.185000002384186,
+            "medianCalls": 813,
+            "medianTriangles": 4130633
+          },
+          "noHulls": {
+            "medianMs": 13.100000023841858,
+            "p95Ms": 15.25,
+            "medianCalls": 644,
+            "medianTriangles": 2636997
+          },
+          "noWeapons": {
+            "medianMs": 16.3299999833107,
+            "p95Ms": 19.759999990463257,
+            "medianCalls": 786,
+            "medianTriangles": 4109791
+          },
+          "noParticles": {
+            "medianMs": 16.12000000476837,
+            "p95Ms": 18.87000000476837,
+            "medianCalls": 801,
+            "medianTriangles": 4113833
+          }
+        }
+      },
+      "optInPair": {
+        "primary": "1770851727",
+        "fleetLod": true,
+        "hash": "faaf12811b463392",
+        "switchCheck": "not applicable",
+        "map": "KUAT REPAIR YARDS.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 403,
+        "lod": {
+          "withAlternates": 32,
+          "ships": 556
+        },
+        "framesPerMode": 48,
+        "particles": 4587,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 24.360000014305115,
+            "p95Ms": 28.480000019073486,
+            "medianCalls": 809,
+            "medianTriangles": 4120967
+          },
+          "fullDetail": {
+            "medianMs": 24.064999997615814,
+            "p95Ms": 29.17500001192093,
+            "medianCalls": 809,
+            "medianTriangles": 4120967
+          }
+        }
+      }
+    },
+    "1976399102": {
+      "main": {
+        "primary": "1976399102",
+        "hash": "936f5555e7749138",
+        "map": "_MP_SPACE_ATRAVIS_MADNESS.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 1114,
+        "lod": {
+          "withAlternates": 455,
+          "ships": 776
+        },
+        "framesPerMode": 48,
+        "particles": 822,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 12.90499997138977,
+            "p95Ms": 15.100000023841858,
+            "medianCalls": 344,
+            "medianTriangles": 4224089
+          },
+          "noHulls": {
+            "medianMs": 7.939999997615814,
+            "p95Ms": 10.139999985694885,
+            "medianCalls": 115,
+            "medianTriangles": 1696497
+          },
+          "noWeapons": {
+            "medianMs": 12.685000002384186,
+            "p95Ms": 14.969999969005585,
+            "medianCalls": 302,
+            "medianTriangles": 4142609
+          },
+          "noParticles": {
+            "medianMs": 12.830000042915344,
+            "p95Ms": 14.949999988079071,
+            "medianCalls": 338,
+            "medianTriangles": 4220901
+          }
+        }
+      },
+      "universalBaseline": {
+        "primary": "1976399102",
+        "hash": "936f5555e7749138",
+        "map": "_MP_SPACE_ATRAVIS_MADNESS.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 1114,
+        "lod": {
+          "withAlternates": 455,
+          "ships": 776
+        },
+        "framesPerMode": 48,
+        "particles": 822,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 11.465000033378601,
+            "p95Ms": 16.225000023841858,
+            "medianCalls": 344,
+            "medianTriangles": 4224089
+          },
+          "noHulls": {
+            "medianMs": 7.034999966621399,
+            "p95Ms": 9.569999992847443,
+            "medianCalls": 115,
+            "medianTriangles": 1696497
+          },
+          "noWeapons": {
+            "medianMs": 11.034999966621399,
+            "p95Ms": 18.8400000333786,
+            "medianCalls": 302,
+            "medianTriangles": 4142609
+          },
+          "noParticles": {
+            "medianMs": 11.584999978542328,
+            "p95Ms": 15.274999976158142,
+            "medianCalls": 338,
+            "medianTriangles": 4220901
+          }
+        }
+      },
+      "optInPair": {
+        "primary": "1976399102",
+        "fleetLod": true,
+        "hash": "936f5555e7749138",
+        "switchCheck": "alternate / original / alternate",
+        "map": "_MP_SPACE_ATRAVIS_MADNESS.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 1114,
+        "lod": {
+          "withAlternates": 455,
+          "ships": 776
+        },
+        "framesPerMode": 48,
+        "particles": 822,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 13.560000002384186,
+            "p95Ms": 16.064999997615814,
+            "medianCalls": 344,
+            "medianTriangles": 4193657
+          },
+          "fullDetail": {
+            "medianMs": 13.185000002384186,
+            "p95Ms": 14.9549999833107,
+            "medianCalls": 344,
+            "medianTriangles": 4224089
+          }
+        }
+      }
+    },
+    "3417277973": {
+      "main": {
+        "primary": "3417277973",
+        "hash": "d4c7c98fcf7bb82c",
+        "map": "_MP_SPACE_ATRAVIS_MADNESS.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 296,
+        "lod": {
+          "withAlternates": 0,
+          "ships": 662
+        },
+        "framesPerMode": 48,
+        "particles": 694,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 15.77999997138977,
+            "p95Ms": 23.775000035762787,
+            "medianCalls": 1128,
+            "medianTriangles": 3578002
+          },
+          "noHulls": {
+            "medianMs": 10.525000035762787,
+            "p95Ms": 16.939999997615814,
+            "medianCalls": 163,
+            "medianTriangles": 1553382
+          },
+          "noWeapons": {
+            "medianMs": 16.064999997615814,
+            "p95Ms": 23.40499997138977,
+            "medianCalls": 1103,
+            "medianTriangles": 3566830
+          },
+          "noParticles": {
+            "medianMs": 15.959999978542328,
+            "p95Ms": 23.459999978542328,
+            "medianCalls": 1125,
+            "medianTriangles": 3575040
+          }
+        }
+      },
+      "universalBaseline": {
+        "primary": "3417277973",
+        "hash": "d4c7c98fcf7bb82c",
+        "map": "_MP_SPACE_ATRAVIS_MADNESS.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 296,
+        "lod": {
+          "withAlternates": 0,
+          "ships": 662
+        },
+        "framesPerMode": 48,
+        "particles": 692,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 14.785000026226044,
+            "p95Ms": 33.814999997615814,
+            "medianCalls": 1128,
+            "medianTriangles": 3578000
+          },
+          "noHulls": {
+            "medianMs": 9.84500002861023,
+            "p95Ms": 23.94999998807907,
+            "medianCalls": 163,
+            "medianTriangles": 1553380
+          },
+          "noWeapons": {
+            "medianMs": 14.814999997615814,
+            "p95Ms": 34.89500004053116,
+            "medianCalls": 1103,
+            "medianTriangles": 3566828
+          },
+          "noParticles": {
+            "medianMs": 14.97000002861023,
+            "p95Ms": 38.62000000476837,
+            "medianCalls": 1125,
+            "medianTriangles": 3575040
+          }
+        }
+      },
+      "optInPair": {
+        "primary": "3417277973",
+        "fleetLod": true,
+        "hash": "d4c7c98fcf7bb82c",
+        "switchCheck": "not applicable",
+        "map": "_MP_SPACE_ATRAVIS_MADNESS.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 296,
+        "lod": {
+          "withAlternates": 0,
+          "ships": 662
+        },
+        "framesPerMode": 48,
+        "particles": 694,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 14.460000038146973,
+            "p95Ms": 24.274999976158142,
+            "medianCalls": 1128,
+            "medianTriangles": 3577934
+          },
+          "fullDetail": {
+            "medianMs": 14.165000021457672,
+            "p95Ms": 23.669999957084656,
+            "medianCalls": 1128,
+            "medianTriangles": 3577934
+          }
+        }
+      }
+    },
+    "1125571106": {
+      "main": {
+        "primary": "1125571106",
+        "hash": "48d85e767b199397",
+        "map": "_MP_SPACE_ATRAVIS_MADNESS.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 807,
+        "lod": {
+          "withAlternates": 239,
+          "ships": 602
+        },
+        "framesPerMode": 48,
+        "particles": 2612,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 13.889999985694885,
+            "p95Ms": 17.55000001192093,
+            "medianCalls": 399,
+            "medianTriangles": 4591361
+          },
+          "noHulls": {
+            "medianMs": 9.129999995231628,
+            "p95Ms": 11.024999976158142,
+            "medianCalls": 181,
+            "medianTriangles": 1791198
+          },
+          "noWeapons": {
+            "medianMs": 13.495000004768372,
+            "p95Ms": 16.369999945163727,
+            "medianCalls": 358,
+            "medianTriangles": 4520749
+          },
+          "noParticles": {
+            "medianMs": 13.5,
+            "p95Ms": 16.139999985694885,
+            "medianCalls": 392,
+            "medianTriangles": 4582971
+          }
+        }
+      },
+      "universalBaseline": {
+        "primary": "1125571106",
+        "hash": "48d85e767b199397",
+        "map": "_MP_SPACE_ATRAVIS_MADNESS.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 807,
+        "lod": {
+          "withAlternates": 239,
+          "ships": 602
+        },
+        "framesPerMode": 48,
+        "particles": 2612,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 14.604999959468842,
+            "p95Ms": 18.290000021457672,
+            "medianCalls": 399,
+            "medianTriangles": 4591361
+          },
+          "noHulls": {
+            "medianMs": 9.629999995231628,
+            "p95Ms": 11.930000007152557,
+            "medianCalls": 181,
+            "medianTriangles": 1791198
+          },
+          "noWeapons": {
+            "medianMs": 14.3299999833107,
+            "p95Ms": 17.9549999833107,
+            "medianCalls": 358,
+            "medianTriangles": 4520749
+          },
+          "noParticles": {
+            "medianMs": 14.269999980926514,
+            "p95Ms": 17.894999980926514,
+            "medianCalls": 392,
+            "medianTriangles": 4582971
+          }
+        }
+      },
+      "optInPair": {
+        "primary": "1125571106",
+        "fleetLod": true,
+        "hash": "48d85e767b199397",
+        "switchCheck": "alternate / original / alternate",
+        "map": "_MP_SPACE_ATRAVIS_MADNESS.TED",
+        "factions": [
+          "Empire",
+          "Rebel"
+        ],
+        "shots": 807,
+        "lod": {
+          "withAlternates": 239,
+          "ships": 602
+        },
+        "framesPerMode": 48,
+        "particles": 2616,
+        "drawingBuffer": [
+          800,
+          450
+        ],
+        "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "results": {
+          "full": {
+            "medianMs": 17.055000007152557,
+            "p95Ms": 20.189999997615814,
+            "medianCalls": 399,
+            "medianTriangles": 4430770
+          },
+          "fullDetail": {
+            "medianMs": 16.99500000476837,
+            "p95Ms": 20.980000019073486,
+            "medianCalls": 399,
+            "medianTriangles": 4591369
+          }
+        }
+      }
+    }
+  }
+}

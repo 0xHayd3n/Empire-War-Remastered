@@ -2,7 +2,7 @@
 
 0xHayd3n’s personal fork of RIRA’s [Empire at War: Browser Edition](https://github.com/Glenn332/Empire-At-War-Browser-Edition). This is the browser game, not a separate desktop reconstruction. [Playeaw.com](https://playeaw.com) runs the upstream edition, not this fork.
 
-**On the `universal` test branch:** [engine-wide remaster changes and comparison results](docs/universal.md). The first experiment reduces temporary memory while generating texture mipmaps. It works with just the stock game; none of the six Workshop mods is required.
+**On the `universal` test branch:** [engine-wide remaster changes and comparison results](docs/universal.md). Texture mipmaps use less temporary memory. The [fleet render experiment](docs/fleet-render.md) measures distant hulls against weapons and offers an opt-in WebGL fighter mesh switch. Both work with just the stock game; no Workshop mod is required.
 
 ## Play this fork
 

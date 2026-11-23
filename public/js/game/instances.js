@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { instanceable, skinBatchable } from '../model.js';
+import { instanceable, skinBatchable, fleetLodMeshes } from '../model.js';
+import { distantFleetHull } from './fleet-lod.js';
+const tryFleetLod = typeof location !== 'undefined' && new URLSearchParams(location.search).get('fleetlod') === '1';
 import { CollectJobs } from './collectjobs.js';
 
 const ROW = 24 * 4;
@@ -34,6 +36,7 @@ export class Instances {
 
   constructor(scene) {
     this.scene = scene;
+    this.fleetLod = tryFleetLod;
     this.pools = new Map();
     this.list = [];
     this.units = new Set();
@@ -225,6 +228,7 @@ export class Instances {
     for (const p of this.list) p.n = 0;
     if (this.jobs?.broken) this.jobs = null;
     const J = this.jobs;
+    const focalHeight = this.fleetLod && !this.gpu && cam.isPerspectiveCamera && this.renderer?.domElement?.height * cam.projectionMatrix.elements[5];
     if (J) J.begin();
     let drawn = 0;
     for (const u of units) {
@@ -260,6 +264,14 @@ export class Instances {
       if (whole) obj.updateWorldMatrix(obj.parent !== scene, true);
       else obj.matrixWorld.copy(obj.matrix);
       if (!inView) continue;
+      let alternate = null;
+      if (focalHeight && u.isFighter && u.model && !u.hyper && !u.construction) {
+        const view = cam.matrixWorldInverse.elements;
+        const depth = -(view[2]*u.x + view[6]*u.y + view[10]*(u.z || 0) + view[14]);
+        const radius = Math.max(u.visualRadius, (u.model.drawRadius || 0) * Math.abs(u.obj.scale.x));
+        u.instFar = distantFleetHull(u.instFar, radius, depth, focalHeight);
+        if (u.instFar) alternate = fleetLodMeshes(u.model);
+      }
       let tr = 0,
         tg = 0,
         tb = 0,
@@ -324,6 +336,10 @@ export class Instances {
         if (fading && p && !e.skin && !p.mat.transparent) {
           const f = (e.fpool ||= this.fadePool(p));
           if (f.ready) p = f;
+        }
+        if (alternate?.size && p && !e.skin && !away && !fading && p.src === m.geometry) {
+          const geo = alternate.get(m);
+          if (geo) p = e.farPool ||= this.poolFor({ material:m.material, geometry:geo, renderOrder:m.renderOrder });
         }
         const pooled = !!p && !away && !(e.skin && !this.taken.has(m)),
           defer = defer0 && pooled;

@@ -9,6 +9,7 @@ import { fetchBinary } from './vfs.js';
 import { planetEnvironment } from './planetlighting.js';
 import { env as gpuEnv } from './gpu/env.js';
 import { skyAtlas } from './skyreflect.js';
+import { rigidLodPairs } from './game/fleet-lod.js';
 
 const noShadow = new THREE.DepthTexture(1, 1);
 noShadow.compareFunction = THREE.LessEqualCompare;
@@ -1139,6 +1140,31 @@ export function prebuildModel(model, teamColor, n) {
 }
 export function dropPrebuilt() {
   prebuilt.clear();
+}
+
+const fleetAlternates = new WeakMap();
+const fleetMeshCache = new WeakMap();
+// Resolve by the original mesh instance, not by geometry identity (geometry is shared across models).
+export function fleetLodMeshes(inst) {
+  if (fleetMeshCache.has(inst)) return fleetMeshCache.get(inst);
+  let pairs = fleetAlternates.get(inst.model);
+  if (!pairs) fleetAlternates.set(inst.model, (pairs = rigidLodPairs(inst.model.meshes)));
+  const out = new Map();
+  for (const [high, low] of pairs) {
+    const group = inst.meshByName.get(high.name.toUpperCase());
+    if (!group?.parent || group.children.length !== 1) continue;
+    const mesh = group.children[0];
+    if (
+      !mesh.isMesh ||
+      !instanceable.has(mesh.material) ||
+      mesh.material.transparent ||
+      mesh.geometry !== makeGeometry(inst.model, high.subs[0].geometry)
+    )
+      continue;
+    out.set(mesh, makeGeometry(inst.model, low.subs[0].geometry));
+  }
+  fleetMeshCache.set(inst, out);
+  return out;
 }
 
 const HEADLESS = new THREE.MeshBasicMaterial();

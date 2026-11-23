@@ -248,7 +248,7 @@ const server = http.createServer(async (req, res) => {
 
 if (universalMode) {
   const { serveUniversal } = await import('./tools/universal-launcher.mjs');
-  await serveUniversal(Number(process.env.SWR_UNIVERSAL_PORT || 8590), process.argv.includes('--open'), startGame);
+  await serveUniversal(Number(portArg > 0 ? process.argv[portArg + 1] : process.env.SWR_UNIVERSAL_PORT || 8590), process.argv.includes('--open'), startGame);
 } else if (workshopMode) {
   const { serveWorkshop } = await import('./tools/workshop-launcher.mjs');
   serveWorkshop(Number(process.env.SWR_LAUNCHER_PORT ?? 8490), process.argv.includes('--open'), startGame);

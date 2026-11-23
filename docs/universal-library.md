@@ -8,9 +8,15 @@ One local start screen for stock Forces of Corruption and six separately playabl
 
 The outer game window stays at the same address. The engine loads only the selected era’s runtime when needed, rather than mixing conflicting Lua or XML in memory. Per-era frames retain the same stable loopback origins as the previous library, including their save stores and workers. Keep ports 8590–8597 available. Change the block with `SWR_UNIVERSAL_PORT`; changing it changes where the browser looks for saves. Built pack manifests need no conversion.
 
+### Click a URL to start Universal (Windows)
+
+From this checkout, register the on-demand link once for your Windows user: `powershell -NoProfile -File tools/universal-game-link.ps1`. Then open `eaw-universal://play` or double-click **Play Universal.url**. Windows starts the local server if needed and opens the title screen in your default browser. Clicking again reuses the same running Universal instance. Your browser may ask permission to open the app. No administrator rights, sign-in task, public hosting or file uploads are involved.
+
+The ordinary `http://127.0.0.1:8590/` bookmark works while the server is running. For a separate instance, pass e.g. `-Port 8600` at registration; the link then always opens `http://127.0.0.1:8600/`. Different port blocks have separate browser saves. The link never stops another listener or silently changes ports. If you move the checkout, remove the registration first and register again at the new location. To unregister: `powershell -NoProfile -File tools/universal-game-link.ps1 -Remove`.
+
 ### Start a campaign and choose its path
 
-Each era has one split crest, with the card background shaded from the faction on its left into the one on its right: Jedi blue / Sith red, a black Republic cog on white / Separatist blue, Rebel ember / Imperial gray, and New Republic gold / the same Imperial gray. Hover a card for the faction names. Gold still marks the selected era. These setup icons need no logo download, Steam cache or extra pack.
+Each era has one split crest, with the card background shaded from the faction on its left into the one on its right: Jedi blue / Sith red, a red Republic cog on white / Separatist blue, Rebel ember / Imperial gray, and New Republic gold / the same Imperial gray. Hover a card for the faction names. Gold still marks the selected era. These setup icons need no logo download, Steam cache or extra pack.
 
 The settings panel runs the full height of the right edge. The rest of the window shows the starting galaxy with its faction key. Drag to pan or use the wheel to zoom. With the map focused, +/− zoom and Home restores the overview; Escape leaves setup.
 

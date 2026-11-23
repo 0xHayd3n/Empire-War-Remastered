@@ -8,7 +8,23 @@ import { libraryHome, listPacks, loadPack, primaries } from './universal-library
 
 const order = ['stock', ...primaries.keys()]; // stable save origins: append new IDs, never reorder
 const hostJS = fs.readFileSync(new URL('../public/js/universalhost.js', import.meta.url));
-export async function serveUniversal(port, openBrowser, startGame, { home = libraryHome(), library = readLibrary() } = {}) {
+function openWindowsURL(url) {
+  if (process.platform === 'win32')
+    execFile(
+      path.join(process.env.SystemRoot, 'System32', 'rundll32.exe'),
+      ['url.dll,FileProtocolHandler', url],
+      { windowsHide: true },
+      e => {
+        if (e) console.warn('Open the printed game address.');
+      }
+    );
+}
+export async function serveUniversal(
+  port,
+  openBrowser,
+  startGame,
+  { home = libraryHome(), library = readLibrary(), open = openWindowsURL } = {}
+) {
   if (!Number.isInteger(port) || port < 1 || port + order.length > 65535)
     throw new Error('Universal needs eight consecutive loopback ports.');
   const origin = `http://127.0.0.1:${port}`,
@@ -60,6 +76,10 @@ export async function serveUniversal(port, openBrowser, startGame, { home = libr
     };
     if (req.headers.host !== `127.0.0.1:${port}`) return send(403, 'Use the printed loopback address.');
     if (req.method === 'GET' && req.url === '/universalhost.js') return send(200, hostJS, 'text/javascript');
+    if (req.method === 'HEAD' && req.url === '/') {
+      res.setHeader('X-EaW-Universal', '1');
+      return send(200, '');
+    }
     if (req.method === 'GET' && req.url === '/')
       return send(
         200,
@@ -80,18 +100,21 @@ export async function serveUniversal(port, openBrowser, startGame, { home = libr
       );
     }
   });
-  await new Promise((ok, no) => server.once('error', no).listen(port, '127.0.0.1', ok));
+  try {
+    await new Promise((ok, no) => server.once('error', no).listen(port, '127.0.0.1', ok));
+  } catch (e) {
+    if (e.code !== 'EADDRINUSE' || !openBrowser) throw e;
+    // A simultaneous/second launch may reuse our host, never another app or a redirect.
+    const r = await fetch(origin, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(2500) });
+    if (r.status !== 200 || r.headers.get('X-EaW-Universal') !== '1')
+      throw Error(`Port ${port} is occupied by another app or an older Universal. Nothing was stopped.`);
+    console.log(`Universal already running: ${origin}/`);
+    open(origin + '/');
+    return;
+  }
   console.log(`Universal game: ${origin}/`);
   if (library.game) atlas.get(0).catch(e => console.warn('Campaign catalog:', e.message));
-  if (openBrowser && process.platform === 'win32')
-    execFile(
-      path.join(process.env.SystemRoot, 'System32', 'rundll32.exe'),
-      ['url.dll,FileProtocolHandler', origin + '/'],
-      { windowsHide: true },
-      e => {
-        if (e) console.warn('Open the printed game address.');
-      }
-    );
+  if (openBrowser) open(origin + '/');
   return {
     async close() {
       await new Promise(ok => {

@@ -55,6 +55,16 @@ for (const bad of [
   { expedition: true }
 ])
   assert.throws(() => launchPlan(atlas, { ...q, ...bad }));
+// Payment is explicitly boolean, scoped to attested sources; false is not a missing choice.
+const terms = structuredClone(atlas),
+  home = terms.profiles[0];
+home.payment = { native: true, declared: true };
+for (const value of [false, 0, 'false', null]) assert.throws(() => launchPlan(terms, { ...q, payAsYouGo: value }));
+terms.profiles.push({ id: 'stock', payment: { native: false, declared: true } });
+assert.deepEqual(launchPlan(terms, { ...q, payAsYouGo: false }).setup.universalOptions, { payAsYouGo: false });
+assert.deepEqual(launchPlan(terms, { ...q, payAsYouGo: true }).setup.universalOptions, {});
+home.rows[0].scripted = true;
+assert.throws(() => launchPlan(terms, { ...q, payAsYouGo: false }));
 const t = menuTable('return { ["map"] = { ["6ABY"] = { ["EMPIRE"] = true, ["REBEL"] = false } }, -- note\n ["regions"] = {"map"} }');
 assert.equal(t.map['6ABY'].EMPIRE, true);
 assert.deepEqual(t.regions, ['map']);

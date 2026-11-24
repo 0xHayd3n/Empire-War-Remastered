@@ -150,7 +150,7 @@ function listed(list, type) {
   }
   return c.set.has(upperName(type));
 }
-export const payAsYouGo = (g, owner) => owner === g.active && db.constants.bool('Pay_As_You_Go', true);
+export const payAsYouGo = (g, owner) => owner === g.active && (g.universalRules?.payAsYouGo ?? db.constants.bool('Pay_As_You_Go', true));
 const queued = (g, owner) =>
   g.planets.flatMap(p =>
     Object.values(p.production || {})

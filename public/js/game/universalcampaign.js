@@ -125,6 +125,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     if (next.p !== p) defaults();
     if (s.row !== row) {
       settings = {};
+      if (s.row.scripted) delete options.payAsYouGo;
       if (!s.row.eraProgression || !row?.eraProgression) delete options.progressive;
     }
     if (s.variant !== v) delete options.expedition;
@@ -209,6 +210,22 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
         }
       );
     }
+    const native = p.payment?.native,
+      sources = data.profiles.filter(x => x.payment?.declared && x.payment.native !== native);
+    if (!row.scripted && typeof native === 'boolean' && sources.length) {
+      const terms = installments => (installments ? 'Installments' : 'Upfront'),
+        source = sources.length === 1 ? sources[0].name : `${sources[0].name} + ${sources.length - 1} more`;
+      ui.field(
+        'payment',
+        'Your production payments',
+        [opt('', `Campaign default · ${terms(native)}`), opt('alternate', `${terms(!native)} · ${source}`)],
+        options.payAsYouGo === undefined ? '' : 'alternate',
+        value => {
+          if (value) options.payAsYouGo = !native;
+          else delete options.payAsYouGo;
+        }
+      );
+    } else ui.hide('payment');
     const paths = [opt('', 'Authored objectives')];
     if (p.id !== '3417277973' && v?.sites.length && data.profiles.some(p => p.donor?.hasSearch))
       paths.push(opt('expedition', 'Star Map Expedition'));
@@ -223,7 +240,9 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
       ? `Expedition: capture ${v.sites.join(', ')} for a one-time 3,000-credit grant.`
       : row?.scripted
         ? 'Authored setup scenario. Its script chooses the final galaxy after launch.'
-        : '';
+        : row?.layout
+          ? 'Choose starting locations and rosters in-game, using the mod’s own setup.'
+          : '';
   }
   function render() {
     ui.el.toggleAttribute('data-await-map', !family);

@@ -3,7 +3,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { openGame } from './megfs.mjs';
 import { loadPack } from './universal-library.mjs';
-import { portableRules } from './universal-rule-catalog.mjs';
+import { portableRules, productionPayment } from './universal-rule-catalog.mjs';
 import { parseXML } from '../public/js/xml.js';
 import { db, loadGameData, loadFileList } from '../public/js/gamedata.js';
 import { loadCampaignData, startingGalaxy } from '../public/js/game/galaxy.js';
@@ -15,6 +15,7 @@ import { galacticLight } from '../public/js/game/galacticlighting.js';
 import { laneKit } from './universal-lane-kit.mjs';
 import { planetSheets } from './universal-planet-portraits.mjs';
 import { catalogFactionArt } from './universal-faction-art.mjs';
+import { fallCustomLayouts, fallCustomRevision } from './universal-fall-layouts.mjs';
 import { menuTable, thrawnSelections } from './universal-loader-table.mjs';
 import { campaignChoices } from '../public/js/game/universalcampaign.js';
 const { game, home, folder, id, language } = workerData,
@@ -34,7 +35,7 @@ const label = t => db.t(t?.str('Text_ID')) || t?.name || '';
 // Attested whole-pack revisions. An update, unknown loader, or incomplete set of destinations stays authored.
 // These two reviewed shims only choose a target and difficulty. Do not flatten arbitrary Lua or mid-campaign transitions.
 const dates = {
-  d0e2f9c8a2856f38eb5ff254e3cb43a29a00d77ccc6dc900b97b9af2213786d1: ['22 BBY', '21 BBY', '20 BBY', '19 BBY'],
+  [fallCustomRevision]: ['22 BBY', '21 BBY', '20 BBY', '19 BBY'],
   '4cdb9e170cce2db5d6cee1fc3c81c58d2913a2c9cf0589131fce573a211dcfd7': ['3964 BBY', '3962 BBY', '3959 BBY', '3957 BBY']
 };
 try {
@@ -233,6 +234,27 @@ try {
       variants: variants || [variant(c, '')],
       scripted: !variants && loc.length === 1
     });
+    // Keep the original listed loader, its credits/tech slots, and every existing start.
+    // Direct layout rows use only destination defaults, as the native LOAD_CAMPAIGN reward does.
+    for (const { c: target, button } of fallCustomLayouts(id, pack?.revision, c, data.campaigns)) {
+      const layout = label(db.type(button)),
+        group = label(c);
+      rows.push({
+        id: target.name,
+        family: target.str('Campaign_Set').toUpperCase(),
+        label: `${group} · ${layout}`,
+        layout: { group, name: layout },
+        description: db.t(target.str('Description_Text')),
+        order: c.num('Sort_Order'),
+        faction,
+        base: campaignDefaults(target, faction),
+        limits: campaignLimits(target),
+        slots: [],
+        initial: 0,
+        variants: [variant(target, '')],
+        scripted: false
+      });
+    }
   }
   if (id === '1125571106' && pack.revision === '5b2ceff618f502cf23a6d052d18d2cc895720a36462f9b4d28c5094515f311c4') {
     const menu = data.campaigns.get('GCMENU_REBEL');
@@ -305,6 +327,7 @@ try {
     yearLegend,
     levels: ['TEXT_DIFFICULTY_EASY_NAME', 'TEXT_DIFFICULTY_NORMAL_NAME', 'TEXT_DIFFICULTY_HARD_NAME'].map(k => db.t(k)),
     defaults: Object.fromEntries(Object.entries(ruleFields).map(([k, r]) => [k, db.constants.num(r.tag, r.fallback)])),
+    payment: productionPayment(archive, pack),
     donor: pack ? portableRules(pack) : null
   });
 } finally {

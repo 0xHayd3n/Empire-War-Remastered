@@ -18,6 +18,7 @@ export function validValue(field, value) {
 export function resolvedOptions(raw) {
   const out = {};
   for (const key of Object.keys(ruleFields)) if (validValue(key, raw?.[key])) out[key] = raw[key];
+  if (typeof raw?.payAsYouGo === 'boolean') out.payAsYouGo = raw.payAsYouGo;
   return out;
 }
 // Start from owned worlds and follow the campaign's own movement graph. Never add a planet, object, or faction.

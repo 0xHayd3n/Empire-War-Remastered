@@ -5,7 +5,9 @@ import { ruleChoices, rulePresets } from '../public/js/game/universalrulemenu.js
 import { beginUniversalRules, restoreUniversalRules } from '../public/js/game/universalrules.js';
 import { creditCap } from '../public/js/game/galacticeconomy.js';
 import { changeController, stepPolitics } from '../public/js/game/galacticpolitics.js';
-import { portableRules } from './universal-rule-catalog.mjs';
+import { payAsYouGo } from '../public/js/game/galacticproduction.js';
+import { fallCustomLayouts, fallCustomRevision } from './universal-fall-layouts.mjs';
+import { portableRules, productionPayment } from './universal-rule-catalog.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -54,6 +56,51 @@ assert.deepEqual(
   ).map(p => [p.label, p.options]),
   [['A / B', { politics: 90 }]]
 );
+const loader = camp('Sandbox_CustomLoader_Republic', {
+  Locations: 'Menu',
+  Starting_Active_Player: 'Empire',
+  Underworld_Story_Name: 'Conquests/Custom/Story_Plots_Sandbox_Loader_Custom.xml'
+});
+const layouts = new Map(
+  ['', '_Small', '_Medium', '_Large', '_Influencers'].map(s => {
+    const family = 'Sandbox_Custom' + s,
+      target = camp(family + '_Empire', {
+        Is_Listed: 'No',
+        Starting_Active_Player: 'Empire',
+        Campaign_Set: family,
+        Underworld_Story_Name: 'Conquests/Custom/Story_Plots_Sandbox_Custom_Container.xml'
+      });
+    return [target.name.toUpperCase(), target];
+  })
+);
+const direct = (rev = fallCustomRevision) => fallCustomLayouts('1976399102', rev, loader, layouts);
+assert.deepEqual(
+  direct().map(x => x.c.name.toUpperCase()),
+  [...layouts.keys()]
+);
+assert.deepEqual(direct('updated'), []);
+const small = layouts.get('SANDBOX_CUSTOM_SMALL_EMPIRE');
+small.props.set('starting_active_player', ['Rebel']);
+assert.deepEqual(direct(), []);
+small.props.set('starting_active_player', ['Empire']);
+layouts.delete('SANDBOX_CUSTOM_LARGE_EMPIRE');
+assert.deepEqual(direct(), []);
+const pay = (raw, owned) =>
+  productionPayment(
+    { resolve: () => 'K', read: () => Buffer.from(`<GameConstants>${raw}</GameConstants>`) },
+    { entries: new Map(owned ? [['K', {}]] : []) }
+  );
+const tag = v => `<Pay_As_You_Go>${v}</Pay_As_You_Go>`;
+assert.deepEqual(pay(tag('true') + tag('No'), true), { native: false, declared: true });
+assert.deepEqual(pay(tag('1'), false), { native: true, declared: false });
+assert.deepEqual(pay('', true), { native: true, declared: false });
+assert.equal(pay(tag('maybe'), true), null);
+const upfront = { active: 'Blue' };
+beginUniversalRules(upfront, { payAsYouGo: false });
+assert.deepEqual(restoreUniversalRules(upfront.universalRules), { payAsYouGo: false });
+assert.equal(payAsYouGo(upfront, 'Blue'), false);
+assert.equal(payAsYouGo({ active: 'Blue' }, 'Blue'), true);
+assert.equal(restoreUniversalRules({ payAsYouGo: 0 }), null);
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'campaign-rules-'));
 try {
   const file = path.join(tmp, 'test.xml');

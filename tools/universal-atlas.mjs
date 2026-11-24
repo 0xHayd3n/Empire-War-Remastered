@@ -6,6 +6,7 @@ import { gzipSync, gunzipSync } from 'node:zlib';
 import { openGame } from './megfs.mjs';
 import { assertPrivateLibrary, loadPack } from './universal-library.mjs';
 import { languageId } from '../public/js/language.js';
+import { fallCustomRevision } from './universal-fall-layouts.mjs';
 import { validValue } from '../public/js/game/universalrules.js';
 const digest = s => createHash('sha256').update(s).digest('hex');
 function stockStamp(game) {
@@ -29,7 +30,7 @@ function stockStamp(game) {
 }
 function build(args) {
   return new Promise((ok, no) => {
-    const w = new Worker(new URL(args.kitOnly ? './universal-lane-kit.mjs' : './universal-atlas-worker.mjs', import.meta.url), {
+    const w = new Worker(new URL(args.upgrade ? './universal-atlas-upgrade.mjs' : './universal-atlas-worker.mjs', import.meta.url), {
       workerData: args,
       execArgv: []
     });
@@ -51,6 +52,16 @@ export function launchPlan(atlas, q) {
       if (!validValue(k, q[k]) || !atlas.profiles.some(p => p.donor?.values[k] === q[k])) throw Error('Unknown rule value.');
       if (q[k] !== p.defaults[k]) options[k] = q[k];
     }
+  if (Object.hasOwn(q, 'payAsYouGo')) {
+    if (
+      r.scripted ||
+      typeof p.payment?.native !== 'boolean' ||
+      typeof q.payAsYouGo !== 'boolean' ||
+      !atlas.profiles.some(x => x.payment?.declared && x.payment.native === q.payAsYouGo)
+    )
+      throw Error('Production payment unavailable.');
+    if (q.payAsYouGo !== p.payment.native) options.payAsYouGo = q.payAsYouGo;
+  }
   if (q.expedition) {
     if (!v.sites.length || p.id === '3417277973' || !atlas.profiles.some(p => p.donor?.hasSearch)) throw Error('Expedition unavailable.');
     options.expedition = true;
@@ -115,16 +126,22 @@ export function atlasStore({ home, library, eras }) {
       throw Error('Local parent or a complete offline pack required.');
     stamp ??= stockStamp(library.game);
     const rev = id === 'stock' ? 'stock' : JSON.parse(fs.readFileSync(path.join(home, 'profiles', id + '.json'))).revision;
-    const filename = path.join(directory, `${id}-${lang}-${digest('planet-portraits-2:' + stamp + ':' + rev)}.gz`);
+    // Only the reviewed Fall revision gained maps/geometry. Other warm profiles
+    // can add the payment metadata without re-parsing campaigns or portrait art.
+    const schema = id === '1976399102' && rev === fallCustomRevision ? 'fall-custom-layouts-1:' : 'planet-portraits-2:';
+    const filename = path.join(directory, `${id}-${lang}-${digest(schema + stamp + ':' + rev)}.gz`);
     let cached;
     try {
       const p = JSON.parse(gunzipSync(fs.readFileSync(filename)));
       if (p.sheets.every(s => /^[a-f0-9]{64}$/.test(s) && fs.existsSync(path.join(home, 'planet-portraits-v1', s + '.png')))) cached = p;
     } catch {}
-    if (cached && 'laneKit' in cached) return cached;
+    if (cached && 'laneKit' in cached && 'payment' in cached) return cached;
     const args = { game: library.game, home, folder: library.items.get(id)?.folder, id, language: lang };
     const p = cached
-      ? { ...cached, laneKit: await build({ ...args, kitOnly: true, profile: { looks: cached.looks, overlay: cached.overlay } }) }
+      ? {
+          ...cached,
+          ...(await build({ ...args, upgrade: true, lanes: 'laneKit' in cached ? null : { looks: cached.looks, overlay: cached.overlay } }))
+        }
       : await build(args);
     fs.mkdirSync(directory, { recursive: true });
     const tmp = filename + '.' + randomUUID() + '.tmp';

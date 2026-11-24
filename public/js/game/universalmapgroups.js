@@ -4,6 +4,8 @@ export const scenarioTypes = ['Story', 'Random', 'Sandbox', 'Miscellaneous'];
 const tag = /^(Story|Random|Sandbox)\s*(?:--?|[–—:])\s*(?=\S)/i;
 function sizes(leaf) {
   const { f } = leaf;
+  const layoutChoice = f.members[0].layout;
+  if (layoutChoice) return [layoutChoice.group, layoutChoice.name];
   // mapFamilies disambiguates reused display names with the exact row ID. Keep
   // that full label on ungrouped rows and accessible names; it isn't a size.
   const tail = ' — ' + f.id,
@@ -27,7 +29,12 @@ export function mapSections(period) {
   const by = new Map();
   for (const f of period.maps.keys()) {
     const match = period.scenario && tag.exec(f.title),
-      section = period.scenario ? scenarioTypes.find(s => s.toLowerCase() === match?.[1]?.toLowerCase()) || 'Miscellaneous' : '';
+      section =
+        period.scenario && f.members[0].layout
+          ? 'Sandbox'
+          : period.scenario
+            ? scenarioTypes.find(s => s.toLowerCase() === match?.[1]?.toLowerCase()) || 'Miscellaneous'
+            : '';
     if (!by.has(section)) by.set(section, []);
     by.get(section).push({ f, title: match ? f.title.slice(match[0].length) : f.title });
   }

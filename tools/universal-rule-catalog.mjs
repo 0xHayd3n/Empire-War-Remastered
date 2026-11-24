@@ -21,6 +21,16 @@ export function portableRules(pack) {
     pack.mounted.workshop === revanId && [...pack.entries].some(([k, entry]) => entry && k.endsWith('\\GOVERNMENTSTARFORGESEARCH.LUA'));
   return { values, hasSearch };
 }
+// Match the engine's last declaration and its absent-tag default. Only explicit
+// values in the winning stock/overhaul file can supply a choice to another pack.
+export function productionPayment(archive, pack) {
+  const k = archive.resolve('Data/XML/GameConstants.xml'),
+    bytes = k && archive.read(k);
+  if (!bytes) return null;
+  const raw = parseXML(bytes.toString('latin1')).children[0]?.all('Pay_As_You_Go').at(-1)?.text.trim();
+  if (raw && !/^(true|yes|1|false|no|0)$/i.test(raw)) return null;
+  return { native: !raw || /^(true|yes|1)$/i.test(raw), declared: !!raw && (!pack || !!pack.entries.get(k)) };
+}
 export function campaignRulesCatalog(home, lib) {
   const donors = [],
     unavailable = [];

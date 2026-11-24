@@ -96,7 +96,7 @@ const { chromium } = require('playwright-core'),
                           complete ??= now;
                           // Native ink is already visible; separately time the end of intentional motion.
                           if (
-                            !scene.querySelector('.uc-map[data-moving],.uc-route-detail[data-refining]') &&
+                            !scene.querySelector('.uc-map[data-moving],.uc-route-detail[data-refining],.uc-context[data-names-fading]') &&
                             !scene.getAnimations({ subtree: true }).length
                           )
                             return ok({

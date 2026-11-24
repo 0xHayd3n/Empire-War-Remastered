@@ -1,3 +1,4 @@
+import { contextNames } from './universalcontextnames.js';
 import { portraitBank, planetDiameter, contextNameSize, nameSize, labelPixels } from './universalplanetart.js';
 // Regional aliases may share a display name. Coalesce only background worlds, never the map's actual locations.
 export function inactiveWorlds(catalog, excluded, activeNames) {
@@ -12,7 +13,9 @@ export function inactiveWorlds(catalog, excluded, activeNames) {
 export function contextWorlds(canvas, front, labels) {
   const ctx = canvas.getContext('2d'),
     fg = front.getContext('2d'),
-    art = portraitBank(schedule);
+    art = portraitBank(schedule),
+    names = contextNames(),
+    reduced = matchMedia('(prefers-reduced-motion: reduce)');
   let points = [],
     centers = [],
     active = null,
@@ -22,7 +25,24 @@ export function contextWorlds(canvas, front, labels) {
     index = [],
     raf = 0,
     hover,
+    pointer,
     view;
+  function hovered() {
+    if (!pointer || !view) return;
+    const r = (planetDiameter * view.z) / 2 + 1,
+      [x, y] = pointer;
+    let best,
+      dist = r * r;
+    for (const [X, Y, p] of index) {
+      const d = (X - x) ** 2 + (Y - y) ** 2;
+      if (p === hover && d < (r + 2) ** 2) return p;
+      if (d < dist) {
+        dist = d;
+        best = p;
+      }
+    }
+    return best;
+  }
   function prepare(c, context, w, h, d) {
     const W = Math.round(w * d),
       H = Math.round(h * d);
@@ -48,27 +68,10 @@ export function contextWorlds(canvas, front, labels) {
     prepare(front, fg, w, h, d);
     index = [];
     if (!w || !h) return;
-    const cols = Math.ceil(w / 8),
-      rows = Math.ceil(h / 8),
-      grid = new Uint8Array(cols * rows),
-      protectedRects = [];
-    function cells(l, t, r, b, write) {
-      const i0 = Math.max(0, Math.floor(l / 8)),
-        i1 = Math.min(cols - 1, Math.floor(r / 8)),
-        j0 = Math.max(0, Math.floor(t / 8)),
-        j1 = Math.min(rows - 1, Math.floor(b / 8));
-      for (let j = j0; j <= j1; j++)
-        for (let i = i0; i <= i1; i++) {
-          const k = j * cols + i;
-          if (write) grid[k] = 1;
-          else if (grid[k]) return true;
-        }
-      return false;
-    }
+    const protectedRects = [];
     function protect(l, t, r, b) {
       if (r < 0 || b < 0 || l > w || t > h) return;
       protectedRects.push([l, t, r - l, b - t]);
-      cells(l, t, r, b, true);
     }
     const rect = canvas.getBoundingClientRect();
     for (const el of labels.children) {
@@ -105,34 +108,14 @@ export function contextWorlds(canvas, front, labels) {
       if (art.has(p.art)) withArt++;
       index.push([X, Y, p]);
     }
-    // The opaque native route plate sits below both globe layers. Punch the foreground footprints
-    // out of the dim layer; never suppress a whole background globe just because its name won't fit.
+    hover = hovered();
+    const fading = names.paint(ctx, index, hover, protectedRects, w, h, r + z, pt, reduced.matches);
+    canvas.toggleAttribute('data-names-fading', fading);
+    if (fading) schedule();
+    // Mask last: even a departing, partially visible name yields to active ink.
     for (const [l, t, width, height] of protectedRects) ctx.clearRect(l, t, width, height);
     canvas.dataset.visible = String(visible);
     canvas.dataset.detailed = String(withArt);
-    function nameAt(p, left, Y) {
-      const width = p.em * pt,
-        pad = Math.max(1, pt * 0.16),
-        half = pt * 0.65;
-      if (
-        left < pad ||
-        left + width > w - pad ||
-        Y < half ||
-        Y > h - half ||
-        cells(left - pad, Y - half, left + width + pad, Y + half, false)
-      )
-        return false;
-      cells(left - pad, Y - half, left + width + pad, Y + half, true);
-      ctx.fillText(p.name, left, Y);
-      return true;
-    }
-    for (const [X, Y, p] of index)
-      if (p === hover) {
-        const gap = r + z;
-        if (!nameAt(p, X + gap, Y) && !nameAt(p, X - p.em * pt - gap, Y) && !nameAt(p, X - (p.em * pt) / 2, Y - gap - pt * 0.5))
-          nameAt(p, X - (p.em * pt) / 2, Y + gap + pt * 0.5);
-      }
-    for (const [X, Y, p] of index) if (p !== hover) nameAt(p, X + r + z, Y);
   }
   function schedule() {
     if (view && !raf) raf = requestAnimationFrame(draw);
@@ -185,7 +168,7 @@ export function contextWorlds(canvas, front, labels) {
     },
     move(w, h, x, y, z, frame) {
       view = { w, h, x, y, z };
-      hover = undefined;
+      // Re-hit-test the last pointer against the new pose inside draw().
       // A camera frame already runs in rAF. Draw at its exact pose, not a frame
       // behind the transformed native plate and DOM names.
       if (frame) {
@@ -194,8 +177,8 @@ export function contextWorlds(canvas, front, labels) {
       } else schedule();
     },
     point(x, y) {
-      const r = (planetDiameter * (view?.z || 1)) / 2 + 1,
-        p = index.find(([X, Y]) => Math.hypot(X - x, Y - y) < r)?.[2];
+      pointer = x < 0 || y < 0 ? null : [x, y];
+      const p = hovered();
       if (hover !== p) {
         hover = p;
         schedule();
@@ -204,7 +187,9 @@ export function contextWorlds(canvas, front, labels) {
     clear() {
       cancelAnimationFrame(raf);
       raf = 0;
-      view = hover = undefined;
+      names.clear();
+      canvas.removeAttribute('data-names-fading');
+      view = hover = pointer = undefined;
       points = centers = models = index = [];
       active = null;
       canvas.dataset.inactive = '0';

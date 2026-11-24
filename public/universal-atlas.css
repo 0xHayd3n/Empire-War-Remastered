@@ -103,6 +103,16 @@ dialog.uc-atlas[open] {
 .uc-worlds {
   transform-origin: 0 0;
 }
+.uc-name-window {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  pointer-events: none;
+  /* Fade only the names crossing a viewport edge, never dim the entire atlas on input. */
+  mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent),
+    linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+  mask-composite: intersect;
+}
 .uc-worlds {
   /* The last map layer: context can never cover or intercept an active name. */
   pointer-events: none;
@@ -112,7 +122,7 @@ dialog.uc-atlas[open] {
   position: absolute;
   white-space: nowrap;
   transform-origin: 0 0;
-  transform: translate(calc(var(--globe-size, 6px) * 0.5 + 1px), -50%);
+  transform: translate(var(--name-gap, 4px), -50%);
   font:
     var(--planet-size, 10px) / 1 var(--planet-type, 'EmpireAtWar-Bold'),
     Arial,
@@ -124,10 +134,10 @@ dialog.uc-atlas[open] {
 .uc-worlds span::before {
   content: '';
   position: absolute;
-  right: calc(100% - 0.25px);
+  right: calc(100% + var(--name-gap, 4px) - var(--name-ring, 8.5px) / 2);
   top: 50%;
-  width: calc(var(--globe-size, 6px) + 2.5px);
-  height: calc(var(--globe-size, 6px) + 2.5px);
+  width: var(--name-ring, 8.5px);
+  height: var(--name-ring, 8.5px);
   transform: translateY(-50%);
   border: 1px solid var(--owner);
   border-radius: 50%;

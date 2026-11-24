@@ -48,7 +48,7 @@ function save(cache, id, result) {
   }
 }
 export function strategicPreview(host) {
-  host.innerHTML = `<div class="uc-map" role="group" aria-label="Starting galaxy map" tabindex="0"><div class="uc-plane"><canvas class="uc-backplate"></canvas><canvas class="uc-planets"></canvas></div><canvas class="uc-route-detail" aria-hidden="true" hidden></canvas><canvas class="uc-context" role="img" aria-label="Other charted worlds, outside this map"></canvas><canvas class="uc-active-globes" aria-hidden="true"></canvas><div class="uc-worlds"></div></div><span class="uc-context-note" hidden>Gray worlds · outside this map</span><div class="uc-key" aria-label="Faction key"></div>`;
+  host.innerHTML = `<div class="uc-map" role="group" aria-label="Starting galaxy map" tabindex="0"><div class="uc-plane"><canvas class="uc-backplate"></canvas><canvas class="uc-planets"></canvas></div><canvas class="uc-route-detail" aria-hidden="true" hidden></canvas><canvas class="uc-context" role="img" aria-label="Other charted worlds, outside this map"></canvas><canvas class="uc-active-globes" aria-hidden="true"></canvas><div class="uc-name-window"><div class="uc-worlds"></div></div></div><span class="uc-context-note" hidden>Gray worlds · outside this map</span><div class="uc-key" aria-label="Faction key"></div>`;
   const map = host.querySelector('.uc-map'),
     plane = host.querySelector('.uc-plane'),
     sky = host.querySelector('.uc-backplate'),
@@ -88,6 +88,7 @@ export function strategicPreview(host) {
     if (reduced.matches) {
       if (selection) motion.set(motion.goal);
       for (const el of [plane, canvas, front]) for (const a of el.getAnimations()) a.cancel();
+      for (const a of labels.getAnimations({ subtree: true })) a.cancel();
     }
   }
   reduced.addEventListener('change', settlePreference);
@@ -96,8 +97,15 @@ export function strategicPreview(host) {
       Y = y * hView;
     map.toggleAttribute('data-zoomed', z > 1);
     map.toggleAttribute('data-moving', motion.moving);
-    labels.style.transform = plane.style.transform = `translate(${X}px,${Y}px) scale(${z})`;
-    labels.style.setProperty('--planet-size', labelPixels(z) / z + 'px');
+    plane.style.transform = `translate(${X}px,${Y}px) scale(${z})`;
+    // Same chart coordinates, but lay out glyphs at their final screen size rather
+    // than magnifying a ~1px font and rerasterizing it throughout a close zoom.
+    labels.style.transform = `translate(${X}px,${Y}px)`;
+    labels.style.width = wView * z + 'px';
+    labels.style.height = hView * z + 'px';
+    labels.style.setProperty('--planet-size', labelPixels(z) + 'px');
+    labels.style.setProperty('--name-gap', (planetDiameter / 2 + 1) * z + 'px');
+    labels.style.setProperty('--name-ring', (planetDiameter + 2.5) * z + 'px');
     detail.move(motion.pose, motion.goal, motion.moving || !!drag);
     ghosts.move(wView, hView, X, Y, z, frame);
   }
@@ -118,6 +126,7 @@ export function strategicPreview(host) {
       motion.stop();
       map.removeAttribute('data-moving');
       manual = true;
+      ghosts.point(-100, -100);
       drag = [e.clientX - motion.pose.x * wView, e.clientY - motion.pose.y * hView, e.pointerId];
       map.setPointerCapture(e.pointerId);
     }
@@ -469,6 +478,7 @@ export function strategicPreview(host) {
             named.set(i, el);
             el.dataset.planet = planet[0];
             el.textContent = planet[1] || planet[0];
+            if (!reduced.matches) el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 145, easing: 'ease-out' });
           }
           if (el.dataset.owner !== (o || '')) {
             el.dataset.owner = o || '';

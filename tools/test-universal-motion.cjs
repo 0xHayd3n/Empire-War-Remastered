@@ -63,6 +63,18 @@ const assert = require('node:assert/strict'),
     await native.waitFor();
     const full = await native.locator('.uc-context').getAttribute('data-sheet-count');
     await native.locator(`.uc-context[data-loaded-sheets="${full}"]`).waitFor();
+    const fades = await require('./check-universal-name-fades.cjs')(map);
+    const peak = fades.up.at(-1),
+      partial = v => v > peak * 0.02 && v < peak * 0.98;
+    assert(
+      fades.initial === 0 &&
+        peak > 0 &&
+        fades.up.some(partial) &&
+        fades.down.some(partial) &&
+        fades.down.at(-1) === 0 &&
+        fades.steady.every(v => v > peak * 0.9),
+      'Hover / camera label ink: ' + JSON.stringify(fades)
+    );
     const wheel = async (delta, wanted) =>
       map.evaluate(
         async (e, [dy, z]) => {
@@ -167,6 +179,7 @@ const assert = require('node:assert/strict'),
       const label = e.querySelector('[data-planet]');
       const sample = () => ({
         font: label.getBoundingClientRect().height,
+        screenFont: parseFloat(getComputedStyle(label).fontSize),
         scale: new DOMMatrix(getComputedStyle(e.querySelector('.uc-plane')).transform).a
       });
       const step = () => label.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
@@ -180,6 +193,15 @@ const assert = require('node:assert/strict'),
     assert.equal(closeSizes.near.scale, 8, 'Reduced motion should move immediately');
     assert(closeSizes.near.font >= 10.8 && closeSizes.near.font < closeSizes.mid.font, 'Names should taper at close zoom');
     assert.equal(closeSizes.shadow, 'none');
+    assert(
+      Math.abs(closeSizes.near.font - closeSizes.near.screenFont) < 0.1,
+      'Close-up names must use screen-sized glyphs, not magnified 1px text'
+    );
+    const still = await require('./check-universal-name-fades.cjs')(map);
+    assert(
+      !still.up.some(partial) && !still.down.some(partial) && still.up.at(-1) > 0 && still.down.at(-1) === 0,
+      'Reduced motion must skip name fades'
+    );
     const detail = map.locator('.uc-route-detail');
     await detail.waitFor();
     const detailSize = await detail.evaluate(c => {

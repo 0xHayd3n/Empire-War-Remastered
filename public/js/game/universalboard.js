@@ -26,8 +26,8 @@ export function atlasBoard(back, play, reset) {
     panel: el.querySelector('.uc-content'),
     roster: el.querySelector('.uc-roster'),
     status: el.querySelector('[role="status"]'),
-    close() {
-      map.dispose();
+    close(remember = false) {
+      map.dispose(remember);
       el.close();
       el.remove();
     },

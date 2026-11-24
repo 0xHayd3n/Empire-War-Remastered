@@ -105,6 +105,7 @@ export class FrontEnd {
   }
 
   async single() {
+    if (this.universal) void import('./universalcampaign.js').then(m => m.campaignLibrary()).catch(() => {});
     const def = this.instant ? (await loadDialogs())?.dialogs.get('IDD_SINGLE_PLAYER_GAMES_MENU_DIALOG') : null,
       slot = def ? instantSlot(def) : null;
     const dlg = await this.screen(

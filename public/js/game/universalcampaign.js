@@ -22,6 +22,19 @@ async function request(path, body) {
   if (!r.ok) throw Error(await r.text());
   return r.json();
 }
+// Metadata only. Single Player and GC can share the same in-flight fetch; never mount
+// a game, open a renderer, or delay showing the native menu during this read.
+export function campaignLibrary(language = activeLanguage) {
+  if (!cached.has(language))
+    cached.set(
+      language,
+      request('?language=' + language).catch(e => {
+        cached.delete(language);
+        throw e;
+      })
+    );
+  return cached.get(language);
+}
 export async function openUniversalCampaign({ start, back, profileId = 'stock', host }) {
   const origin = profileId || 'stock',
     language = activeLanguage;
@@ -47,7 +60,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
   const ui = await atlasBoard(
     () => {
       if (!busy) {
-        finish();
+        finish(true);
         back();
       }
     },
@@ -61,11 +74,11 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
   );
   ui.allow(false);
   ui.status.textContent = 'Reading the local campaign atlas…';
-  function finish() {
+  function finish(remember = false) {
     closed = true;
     removeEventListener('message', error);
     roster?.close();
-    ui.close();
+    ui.close(remember);
   }
   function error(e) {
     if (e.origin === host && e.source === window.parent && e.data?.kind === 'universal-error') {
@@ -282,15 +295,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     note();
   }
   try {
-    if (!cached.has(language))
-      cached.set(
-        language,
-        request('?language=' + language).catch(e => {
-          cached.delete(language);
-          throw e;
-        })
-      );
-    data = await cached.get(language);
+    data = await campaignLibrary(language);
     if (closed) return true;
     if (data.profiles.some(p => p.maps.length)) ui.map.setLibrary(data.profiles);
     const eras = eraTimeline(data);

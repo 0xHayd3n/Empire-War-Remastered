@@ -12,6 +12,7 @@ import { ruleFields, expeditionSites } from '../public/js/game/universalrules.js
 import { parseRC } from '../public/js/game/dialogs.js';
 import { routeSettings, routeStyle } from '../public/js/game/galacticroutes.js';
 import { galacticLight } from '../public/js/game/galacticlighting.js';
+import { laneKit } from './universal-lane-kit.mjs';
 import { planetSheets } from './universal-planet-portraits.mjs';
 import { catalogFactionArt } from './universal-faction-art.mjs';
 import { menuTable, thrawnSelections } from './universal-loader-table.mjs';
@@ -284,6 +285,7 @@ try {
     id,
     revision: pack?.revision || 'stock',
     overlay,
+    laneKit: laneKit(archive, { overlay, looks }),
     sheets: planetSheets(archive, planets, maps, home),
     camera: {
       pitch: db.constants.num('GMC_InitialPitchAngleDegrees', -30),

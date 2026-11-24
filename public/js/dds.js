@@ -388,6 +388,10 @@ export function loadTexture(name, { repeat = true } = {}) {
   return tex;
 }
 
+// Standalone, owned GPU upload from already resolved bytes. No pack-local filename cache.
+export async function textureFromBytes(buf, repeat = false) {
+  return makeTexture(await fullChain(await wholeBlocks(detail(await parseAnyTexture(buf)))), repeat);
+}
 function picture(name, repeat) {
   return fetchBinary('Data/Art/Textures/' + fileOf(name), { keep: false }).then(async buf => {
     if (!buf) return missingTexture();

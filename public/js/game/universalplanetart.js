@@ -28,7 +28,9 @@ export function portraitBank(repaint) {
           () => {
             if (!closed) row.img = img;
           },
-          () => {}
+          () => {
+            pages.delete(key);
+          }
         )
         .finally(() => {
           row.resolve();
@@ -77,6 +79,17 @@ export function portraitBank(repaint) {
   c.fill();
   return {
     load,
+    keep(keys) {
+      return new Map(
+        [...new Set(keys)]
+          .slice(0, 4)
+          .map(k => [k, pages.get(k)?.img])
+          .filter(([, img]) => img)
+      );
+    },
+    restore(images) {
+      for (const [key, img] of images || []) pages.set(key, { img, ready: Promise.resolve(), resolve() {} });
+    },
     has(a) {
       return !!(a && pages.get(a[0])?.img);
     },

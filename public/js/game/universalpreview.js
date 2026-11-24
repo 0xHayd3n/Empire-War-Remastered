@@ -1,10 +1,12 @@
 import { planetArt, planetDiameter, nameSize } from './universalplanetart.js';
+import { previewReturn } from './universalpreviewreturn.js';
 import { contextWorlds } from './universalcontextworlds.js';
 import { planetPool } from './universalplanetpool.js';
 import { crest } from './universalcontrols.js';
 import { overviewView } from './universalviewcamera.js';
 
 import { galaxyChart, sectorView } from './universalgalaxychart.js';
+const onReturn = previewReturn();
 function renderPass(query, signal) {
   return new Promise((resolve, reject) => {
     signal.throwIfAborted();
@@ -57,7 +59,7 @@ export function strategicPreview(host) {
     shots = new Map(),
     ghosts = contextWorlds(host.querySelector('.uc-context'), host.querySelector('.uc-active-globes'), labels),
     pool = planetPool();
-  let contextKey, contextProjection;
+  let contextKey, contextProjection, library, firstShot, firstPlate, reusableSky;
   let chart,
     selection,
     timer,
@@ -164,7 +166,11 @@ export function strategicPreview(host) {
       ref = chart.reference,
       plateId = [ref.id, ref.revision, w, h, W, H].join(':'),
       id = [p.id, p.revision, variant.map, plateId, onlySky].join(':');
-    const mount = [p.id, p.revision, plateId].join(':');
+    const mount = p.sheets && p.laneKit ? 'resolved-lanes:' + plateId : [p.id, p.revision, plateId].join(':');
+    if (!onlySky && !firstShot) {
+      firstShot = id;
+      firstPlate = plateId;
+    }
     pool.retain(mount);
     if (requestKey === id) return;
     requestKey = id;
@@ -226,7 +232,7 @@ export function strategicPreview(host) {
         ? Promise.resolve(display(plates.get(plateId)))
         : !chart.sky.length
           ? Promise.resolve(null)
-          : renderPass(
+          : (reusableSky ? (q, s) => pool.request(mount, { ...q, keepSkyContext: true }, s) : renderPass)(
               { ...base, profile: ref.id, revision: ref.revision, camera: ref.camera, pass: 'backdrop', worlds: [], scenery: chart.sky },
               signal
             )
@@ -248,15 +254,18 @@ export function strategicPreview(host) {
               });
     }
     // Leave the plate on screen between maps; never leave the previous planets or owners over it.
-    canvas.width = W;
-    canvas.height = H;
+    if (canvas.width !== W || canvas.height !== H) {
+      canvas.width = W;
+      canvas.height = H;
+    } else ctx.clearRect(0, 0, W, H);
     delete host.dataset.models;
     const paint = result => {
       ctx.drawImage(result.bitmap, 0, 0);
       ghosts.protectModels(result.bounds);
       host.dataset.scene = 'loading';
+      const exact = selection;
       portraitsReady.then(() => {
-        if (requestKey === id) host.dataset.scene = 'native';
+        if (selection === exact && requestKey === id) host.dataset.scene = 'native';
       });
       host.dataset.models = String(result.placed);
       host.dataset.reused = String(result.reused);
@@ -284,6 +293,7 @@ export function strategicPreview(host) {
           {
             ...base,
             pass: sprites ? 'lanes' : 'worlds',
+            laneKit: p.laneKit,
             ringDiameter: ((planetDiameter + 2.5) * W) / w,
             worlds,
             backplate,
@@ -307,18 +317,42 @@ export function strategicPreview(host) {
           host.dataset.scene = 'unavailable';
         }
       }
-    }, 32);
+    }, 0);
   }
   const observer = new ResizeObserver(layout);
   observer.observe(map);
   return {
     clear,
     setLibrary(profiles) {
-      chart = galaxyChart(profiles);
-      ghosts.library(profiles);
+      library = profiles;
+      reusableSky = profiles.every(p => p.sheets && p.laneKit);
+      const prev = onReturn.take(profiles);
+      chart = prev?.chart || galaxyChart(profiles);
+      if (prev?.plate) {
+        plates.set(...prev.plate);
+        host.dataset.backdropRenders = '0';
+      }
+      if (prev?.shot) shots.set(...prev.shot);
+      ghosts.library(profiles, prev?.images);
       contextKey = null;
     },
-    dispose() {
+    dispose(remember = false) {
+      if (remember && library) {
+        const take = (c, k) => {
+          const value = c.get(k);
+          if (value) {
+            c.delete(k);
+            return [k, value];
+          }
+        };
+        onReturn.put({
+          profiles: library,
+          chart,
+          plate: take(plates, firstPlate),
+          shot: take(shots, firstShot),
+          images: ghosts.openingImages()
+        });
+      } else onReturn.clear();
       clear();
       observer.disconnect();
       ghosts.dispose();

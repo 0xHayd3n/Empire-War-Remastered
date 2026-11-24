@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { rasterPortrait } from './universal-planet-portraits.mjs';
 import { tileSize, planetArt } from '../public/js/game/universalplanetart.js';
+import { laneKit } from './universal-lane-kit.mjs';
+import { previewReturn } from '../public/js/game/universalpreviewreturn.js';
 import { planetPool } from '../public/js/game/universalplanetpool.js';
 import { inactiveWorlds } from '../public/js/game/universalcontextworlds.js';
 import { galaxyChart, sectorView } from '../public/js/game/universalgalaxychart.js';
@@ -376,6 +378,46 @@ assert.throws(() => assertPrivateLibrary(process.cwd(), { items: new Map() }), /
     .concat([[0, 3]]);
   assert.deepEqual(planetArt({ sheets: ['local'] }, row), ['local', 3]);
   assert.equal(planetArt({}, row), null);
+}
+// Same names are NOT a texture namespace. Preserve exact winning bytes, explicit missing
+// textures and a bounded fallback for unusually large packs.
+{
+  const p = { overlay: { ring: 'missing.tga' }, looks: [{ texture: 'line.tga', spark: 'line.tga' }] },
+    archive = (byte, size = 1) => ({
+      resolve: n => (n.endsWith('/line.tga') ? 'WINNER.DDS' : null),
+      index: new Map([['WINNER.DDS', { size }]]),
+      read: () => Buffer.from([byte])
+    });
+  assert.equal(laneKit(archive(123), p)['line.tga'], Buffer.from([123]).toString('base64'));
+  assert.notDeepEqual(laneKit(archive(123), p), laneKit(archive(124), p));
+  assert.equal(laneKit(archive(123), p)['missing.tga'], null);
+  assert.equal(laneKit(archive(123, 129 * 1024), p), null);
+  const recent = previewReturn(5);
+  let closed = 0;
+  const profiles = [],
+    entry = {
+      profiles,
+      plate: [
+        'a',
+        {
+          bitmap: {
+            close() {
+              closed++;
+            }
+          }
+        }
+      ]
+    };
+  recent.put(entry);
+  assert.equal(recent.take(profiles), entry);
+  assert.equal(closed, 0);
+  recent.put(entry);
+  assert.equal(recent.take([]), null);
+  assert.equal(closed, 1);
+  recent.put(entry);
+  await new Promise(ok => setTimeout(ok, 15));
+  assert.equal(closed, 2);
+  assert.equal(recent.take(profiles), null);
 }
 // A -> B -> C during upload must never paint A, waste an upload on B, or lose C.
 {

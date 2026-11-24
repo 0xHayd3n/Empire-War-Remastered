@@ -28,16 +28,15 @@ export function planetPool() {
     const { q } = job;
     try {
       worker.postMessage({ ...q, backplate: hasPlate ? null : q.backplate });
-      hasPlate = true;
-      for (const w of q.worlds) names.add(w[0]);
+      if (q.pass !== 'backdrop') hasPlate = true;
+      if (!q.laneKit) for (const w of q.worlds) names.add(w[0]);
     } catch (e) {
       job.reject(e);
       close();
     }
   }
   function request(ns, q, signal) {
-    const nextNames = new Set([...names, ...q.worlds.map(w => w[0])]);
-    if (ns !== namespace || nextNames.size > Math.max(256, q.worlds.length)) close();
+    if (ns !== namespace || (!q.laneKit && new Set([...names, ...q.worlds.map(w => w[0])]).size > Math.max(256, q.worlds.length))) close();
     if (!worker) {
       namespace = ns;
       worker = new Worker(new URL('./universalviewworker.js', import.meta.url), { type: 'module' });

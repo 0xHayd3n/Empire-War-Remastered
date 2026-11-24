@@ -29,7 +29,10 @@ function stockStamp(game) {
 }
 function build(args) {
   return new Promise((ok, no) => {
-    const w = new Worker(new URL('./universal-atlas-worker.mjs', import.meta.url), { workerData: args, execArgv: [] });
+    const w = new Worker(new URL(args.kitOnly ? './universal-lane-kit.mjs' : './universal-atlas-worker.mjs', import.meta.url), {
+      workerData: args,
+      execArgv: []
+    });
     w.once('message', ok);
     w.once('error', no);
     w.once('exit', code => {
@@ -103,11 +106,16 @@ export function atlasStore({ home, library, eras }) {
     stamp ??= stockStamp(library.game);
     const rev = id === 'stock' ? 'stock' : JSON.parse(fs.readFileSync(path.join(home, 'profiles', id + '.json'))).revision;
     const filename = path.join(directory, `${id}-${lang}-${digest('planet-portraits-2:' + stamp + ':' + rev)}.gz`);
+    let cached;
     try {
       const p = JSON.parse(gunzipSync(fs.readFileSync(filename)));
-      if (p.sheets.every(s => /^[a-f0-9]{64}$/.test(s) && fs.existsSync(path.join(home, 'planet-portraits-v1', s + '.png')))) return p;
+      if (p.sheets.every(s => /^[a-f0-9]{64}$/.test(s) && fs.existsSync(path.join(home, 'planet-portraits-v1', s + '.png')))) cached = p;
     } catch {}
-    const p = await build({ game: library.game, home, folder: library.items.get(id)?.folder, id, language: lang });
+    if (cached && 'laneKit' in cached) return cached;
+    const args = { game: library.game, home, folder: library.items.get(id)?.folder, id, language: lang };
+    const p = cached
+      ? { ...cached, laneKit: await build({ ...args, kitOnly: true, profile: { looks: cached.looks, overlay: cached.overlay } }) }
+      : await build(args);
     fs.mkdirSync(directory, { recursive: true });
     const tmp = filename + '.' + randomUUID() + '.tmp';
     try {

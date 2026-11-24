@@ -1,5 +1,18 @@
 # Galactic Conquest preview switching
 
+## First paint and map switches after the portrait update
+
+Compared `85083d5` with the queue/renderer changes using `node tools/bench-universal-switch.cjs` on the same loopback port, in real Chrome, 1366×768, four fresh contexts per build. **Planets** is the first animation frame after new foreground canvas drawing and the requested destination's complete detailed body count (model-less placeholders are not mistaken for art). **Complete** includes two consecutive animation frames with the requested map's native sky, lanes, rings and detailed planets painted. No browser automation polling is included in these times. Local indexes and portraits were already built. Single Player may now read the campaign index before the Galactic Conquest click; that read does not open a gameplay document or load planet pictures.
+
+| Input (samples per build) | Planets, before → after | Complete, before → after |
+| --- | ---: | ---: |
+| First Galactic Conquest preview (4) | 155 → 113 ms | 843 → 526 ms |
+| Escape and reopen the same starting preview (4) | 41 → 27 ms | 709 → 32 ms |
+| First Fall map after stock (4) | 25 → 39 ms | 378 → 280 ms |
+| Later Fall year/map-size changes (32) | 14 → 16 ms | 69 → 64 ms |
+
+These are medians on one machine, not a guaranteed gain on every click. The biggest saving was reopening. Subsequent detailed bodies were already fast; there was no measured speedup in that column. This measures indexed browsing, not a cold install, first-time portrait generation, or campaign launch. The timing run uses the real sky. In a separate `SWR_SWITCH_PIXELS=1` run the two builds used the same fixed opaque background to compare route/ring rendering without background-render variation: all 11 full-resolution foreground-canvas hashes matched. Chrome also checked all seven normal previews and exact campaign launch.
+
 ## Normalized planet portraits
 
 Compared `4440d61`'s native per-map planet instances with private, 128×128 portraits baked from each installed model/material set. Same local library, viewport, two fresh Chrome contexts per build and the nine inputs described below. The painted milestone on the new build includes decoding the selected map's portraits and drawing its native routes/rings. In both runs all 18 target IDs matched.

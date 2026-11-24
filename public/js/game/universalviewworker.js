@@ -7,7 +7,25 @@ import { routeAxes } from './galacticroutes.js';
 import { GalacticModelFade } from './galacticfade.js';
 let renderer, canvas, quad, namespace;
 const planets = new Map(),
-  ringStyles = new Map();
+  ringStyles = new Map(),
+  laneTextures = new Map();
+// On the shared lanes-only path a filename is never an asset identity. Resolve in the
+// selected kit, then share only identical bytes. No dynamic pack VFS is mounted here.
+async function lanePalette(kit, dds) {
+  const palette = new Map();
+  await Promise.all(
+    Object.entries(kit).map(async ([name, bytes]) => {
+      if (!bytes) return;
+      if (!laneTextures.has(bytes))
+        laneTextures.set(
+          bytes,
+          dds.textureFromBytes(Uint8Array.from(atob(bytes), c => c.charCodeAt(0)).buffer).catch(() => dds.whiteTexture())
+        );
+      palette.set(name, await laneTextures.get(bytes));
+    })
+  );
+  return name => palette.get(name) || dds.whiteTexture();
+}
 // Normalized screen-space bounds of the visible mesh parts, including billboards. These
 // travel with the cached still so zoom and pan only transform rectangles, not models.
 function modelRect(root, camera) {
@@ -25,15 +43,14 @@ self.onmessage = async ({ data: q }) => {
   let batch;
   const attached = [];
   try {
-    const ns = [q.profile, q.revision, q.w, q.h].join(':');
+    const shared = q.pass === 'lanes' && !!q.laneKit;
+    const ns = (shared || q.keepSkyContext ? ['resolved-lanes', q.w, q.h] : [q.profile, q.revision, q.w, q.h]).join(':');
     if (namespace && namespace !== ns) throw Error('Preview mount changed');
     namespace = ns;
-    globalThis.SWR_BASE = `${location.origin}/api/universal/art/${q.profile}/${q.revision}/`;
+    if (!shared) globalThis.SWR_BASE = `${location.origin}/api/universal/art/${q.profile}/${q.revision}/`;
     globalThis.SWR_OVERLAY = { read: async () => undefined };
-    const [{ loadModel, updateBillboards, lighting, planetLighting }, { loadTexture, texturesReady }] = await Promise.all([
-      import('../model.js'),
-      import('../dds.js')
-    ]);
+    const [models, dds] = await Promise.all([q.pass === 'lanes' ? null : import('../model.js'), import('../dds.js')]);
+    const texture = shared ? await lanePalette(q.laneKit, dds) : n => dds.loadTexture(n, { repeat: false });
     canvas ??= new OffscreenCanvas(q.w, q.h);
     renderer ??= new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
@@ -46,14 +63,17 @@ self.onmessage = async ({ data: q }) => {
     cam.position.set(...view.eye);
     cam.lookAt(...view.target);
     cam.updateMatrixWorld();
-    const L = q.camera.light;
-    lighting.sunDir.value.fromArray(L.direction);
-    lighting.sunColor.value.setScalar(L.intensity);
-    lighting.sunSpecular.value.setScalar(2 * L.intensity);
-    lighting.ambient.value.setScalar(0.05);
-    lighting.fillColor.value.setScalar(0);
-    lighting.fillColor2.value.setScalar(0);
-    for (const key of Object.keys(planetLighting)) planetLighting[key].value.copy(lighting[key].value);
+    if (models) {
+      const { lighting, planetLighting } = models,
+        L = q.camera.light;
+      lighting.sunDir.value.fromArray(L.direction);
+      lighting.sunColor.value.setScalar(L.intensity);
+      lighting.sunSpecular.value.setScalar(2 * L.intensity);
+      lighting.ambient.value.setScalar(0.05);
+      lighting.fillColor.value.setScalar(0);
+      lighting.fillColor2.value.setScalar(0);
+      for (const key of Object.keys(planetLighting)) planetLighting[key].value.copy(lighting[key].value);
+    }
     let placed = 0,
       reused = 0;
     const materials = [],
@@ -67,7 +87,7 @@ self.onmessage = async ({ data: q }) => {
         let inst = world && planets.get(p[0]);
         if (inst) reused++;
         else {
-          inst = await loadModel(file, { alts: world ? [0, 1, 2] : false });
+          inst = await models.loadModel(file, { alts: world ? [0, 1, 2] : false });
           if (!inst) return;
           new GalacticModelFade(inst, type, layer === 1);
           for (const [n, meshes] of (inst.alts || []).entries())
@@ -77,7 +97,7 @@ self.onmessage = async ({ data: q }) => {
         placeGalacticModel(inst.root, { pos: p.slice(2, 5), type });
         attached.push(inst.root);
         scenes[layer].add(inst.root);
-        if (inst.billboards.length) updateBillboards(inst, cam);
+        if (inst.billboards.length) models.updateBillboards(inst, cam);
         inst.root.traverse(o => {
           if (o.material?.userData.ready) materials.push(o.material.userData.ready);
         });
@@ -111,23 +131,20 @@ self.onmessage = async ({ data: q }) => {
     if (quad) scenes[1].add(quad);
     if (q.pass === 'backdrop') {
       await Promise.all(materials);
-      await texturesReady();
+      await dds.texturesReady();
       renderGalacticScenes(renderer, cam, ...scenes);
       const bitmap = canvas.transferToImageBitmap();
       self.postMessage({ bitmap }, [bitmap]);
       return;
     }
-    batch = new RouteBatches(
-      scenes[0],
-      n => loadTexture(n, { repeat: false }),
-      l =>
-        /ADDITIVE$/.test(l.mode)
-          ? THREE.AdditiveBlending
-          : /MODULATE$/.test(l.mode)
-            ? THREE.MultiplyBlending
-            : l.mode === 'OPAQUE'
-              ? THREE.NoBlending
-              : THREE.NormalBlending
+    batch = new RouteBatches(scenes[0], texture, l =>
+      /ADDITIVE$/.test(l.mode)
+        ? THREE.AdditiveBlending
+        : /MODULATE$/.test(l.mode)
+          ? THREE.MultiplyBlending
+          : l.mode === 'OPAQUE'
+            ? THREE.NoBlending
+            : THREE.NormalBlending
     );
     const routes = q.routes.map(([a, b, i]) => {
       const A = q.worlds[a].slice(2, 5),
@@ -135,9 +152,9 @@ self.onmessage = async ({ data: q }) => {
       return { A, B, axes: routeAxes(A, B), look: q.looks[i] };
     });
     batch.build(routes);
-    const ring = q.overlay?.ring && loadTexture(q.overlay.ring, { repeat: false });
+    const ring = q.overlay?.ring && texture(q.overlay.ring);
     await Promise.all(materials);
-    await texturesReady();
+    if (!shared) await dds.texturesReady();
     for (const rt of routes) {
       const l = rt.look;
       batch.setQuad(rt, l.width || rt.quad.group.mesh.material.uniforms.map.value.image?.height || 1, ...l.out);
@@ -154,10 +171,11 @@ self.onmessage = async ({ data: q }) => {
       const scale = Math.min(q.w / 1024, q.h / 768) * q.overlay.scale,
         styles = ringStyles;
       view.labels.forEach(([u, v], i) => {
-        const color = q.colors[i];
-        if (!styles.has(color))
+        const color = q.colors[i],
+          key = [ring.uuid, q.overlay.alpha, color].join(':');
+        if (!styles.has(key))
           styles.set(
-            color,
+            key,
             new THREE.SpriteMaterial({
               map: ring,
               color: new THREE.Color(color).convertLinearToSRGB(),
@@ -167,7 +185,7 @@ self.onmessage = async ({ data: q }) => {
               depthWrite: false
             })
           );
-        const s = new THREE.Sprite(styles.get(color));
+        const s = new THREE.Sprite(styles.get(key));
         s.position.set(u * q.w, (1 - v) * q.h, 0);
         const diameter = q.pass === 'lanes' ? q.ringDiameter : ring.image.width * scale;
         s.scale.set(diameter, (diameter * ring.image.height) / ring.image.width, 1);
@@ -189,7 +207,7 @@ self.onmessage = async ({ data: q }) => {
     batch?.clear();
     // The quad texture retains its source for the life of this worker. Terminating the
     // worker releases the renderer, model caches and bitmap together.
-    if (q.pass === 'backdrop') {
+    if (q.pass === 'backdrop' && !q.keepSkyContext) {
       renderer?.dispose();
       renderer?.forceContextLoss();
     }

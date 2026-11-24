@@ -17,6 +17,7 @@ export function contextWorlds(canvas, front, labels) {
     centers = [],
     active = null,
     preload,
+    opening,
     models = [],
     index = [],
     raf = 0,
@@ -140,7 +141,11 @@ export function contextWorlds(canvas, front, labels) {
   }
   document.fonts.addEventListener('loadingdone', schedule);
   return {
-    library(profiles) {
+    openingImages() {
+      return art.keep(opening || []);
+    },
+    library(profiles, images) {
+      art.restore(images);
       preload = [...new Set(profiles.flatMap(p => p.sheets || []))];
       canvas.dataset.sheetCount = String(preload.length);
     },
@@ -153,25 +158,22 @@ export function contextWorlds(canvas, front, labels) {
       models = [];
       hover = undefined;
       canvas.dataset.inactive = String(points.length);
-      const ready = art.load(
-        (active || []).map(a => a?.[0]),
-        true
-      );
-      art.load(points.map(p => p.art?.[0]));
-      // The current campaign gets the first decoder slots. Fill the rest of the library
-      // in the background, including alternate pack-local art not used by the reference chart.
-      if (preload) {
-        const all = preload;
-        preload = null;
-        art.load(all).then(() => {
-          canvas.dataset.loadedSheets = String(all.filter(s => art.has([s])).length);
-        });
-      }
+      const keys = (active || []).map(a => a?.[0]).filter(Boolean);
+      if (!opening && keys.length) opening = keys;
+      const ready = art.load(keys, true);
       schedule();
       return ready.then(() => {
-        if (view) {
-          cancelAnimationFrame(raf);
-          draw();
+        if (!view || centers !== positions) return;
+        cancelAnimationFrame(raf);
+        draw();
+        // Give the initially visible globes the disk/decode bandwidth first. Launch the
+        // remaining library once, not a new thousand-entry Promise.all on every switch.
+        if (preload) {
+          const all = preload;
+          preload = null;
+          art.load([...points.map(p => p.art?.[0]), ...all]).then(() => {
+            canvas.dataset.loadedSheets = String(all.filter(s => art.has([s])).length);
+          });
         }
       });
     },

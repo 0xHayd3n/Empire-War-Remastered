@@ -7,6 +7,7 @@
     "workshop": "node server.mjs --workshop --open",
     "universal": "node server.mjs --universal --open",
     "universal:build": "node tools/build-universal-packs.mjs",
+    "universal:audit": "node tools/audit-universal-packs.mjs",
     "test:universal-library": "node tools/test-universal-library.mjs",
     "test:universal-window": "node tools/test-universal-window.cjs",
     "vendor": "node tools/vendor.mjs",

@@ -1,4 +1,4 @@
-import { portraitBank, planetDiameter, contextNameSize } from './universalplanetart.js';
+import { portraitBank, planetDiameter, contextNameSize, nameSize, labelPixels } from './universalplanetart.js';
 // Regional aliases may share a display name. Coalesce only background worlds, never the map's actual locations.
 export function inactiveWorlds(catalog, excluded, activeNames) {
   const seen = new Set(activeNames.map(n => n.trim().toLowerCase()));
@@ -38,11 +38,12 @@ export function contextWorlds(canvas, front, labels) {
   function draw() {
     raf = 0;
     if (!view) return;
+    canvas.hidden = front.hidden = false;
     const { w, h, x, y, z } = view,
       d = Math.min(devicePixelRatio || 1, 2),
       size = planetDiameter * z,
       r = size / 2,
-      pt = contextNameSize * z;
+      pt = (labelPixels(z) * contextNameSize) / nameSize;
     prepare(canvas, ctx, w, h, d);
     prepare(front, fg, w, h, d);
     index = [];
@@ -92,9 +93,7 @@ export function contextWorlds(canvas, front, labels) {
     front.dataset.worlds = String(centers.length);
     ctx.textBaseline = 'middle';
     ctx.font = `${pt}px system-ui`;
-    ctx.strokeStyle = '#111';
     ctx.fillStyle = '#eee';
-    ctx.lineWidth = Math.max(1, pt / 7);
     let visible = 0,
       withArt = 0;
     for (const p of points) {
@@ -124,7 +123,6 @@ export function contextWorlds(canvas, front, labels) {
       )
         return false;
       cells(left - pad, Y - half, left + width + pad, Y + half, true);
-      ctx.strokeText(p.name, left, Y);
       ctx.fillText(p.name, left, Y);
       return true;
     }
@@ -150,6 +148,9 @@ export function contextWorlds(canvas, front, labels) {
       canvas.dataset.sheetCount = String(preload.length);
     },
     set(catalog, excluded, positions, names, activeArt) {
+      // A slow decode or a selection arriving inside rAF must not leave the previous
+      // map's portrait pixels visible beside the incoming owners and names.
+      canvas.hidden = front.hidden = true;
       ctx.font = '32px system-ui';
       points = inactiveWorlds(catalog, excluded, positions.length ? names : []);
       for (const p of points) p.em ??= ctx.measureText(p.name).width / 32;
@@ -182,10 +183,15 @@ export function contextWorlds(canvas, front, labels) {
       models = bounds;
       schedule();
     },
-    move(w, h, x, y, z) {
+    move(w, h, x, y, z, frame) {
       view = { w, h, x, y, z };
       hover = undefined;
-      schedule();
+      // A camera frame already runs in rAF. Draw at its exact pose, not a frame
+      // behind the transformed native plate and DOM names.
+      if (frame) {
+        cancelAnimationFrame(raf);
+        draw();
+      } else schedule();
     },
     point(x, y) {
       const r = (planetDiameter * (view?.z || 1)) / 2 + 1,

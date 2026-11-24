@@ -29,7 +29,17 @@ dialog.uc-atlas[open] {
   position: relative;
   min-width: 0;
   min-height: 0;
-  background: #000;
+  /* Visible from dialog construction, even while the atlas/index is unavailable.
+     Decorative light only: no previous campaign, planets, ownership or lanes. */
+  background-color: #0a101a;
+  background-image: radial-gradient(1px 1px at 22px 28px, #b9c8d6 60%, transparent),
+    radial-gradient(1px 1px at 63px 47px, #74879e 70%, transparent), radial-gradient(1.4px 1.4px at 77px 81px, #c3c9d1 56%, transparent),
+    radial-gradient(ellipse at 42% 49%, #263443 0%, #141e2a 37%, #090e16 77%);
+  background-size:
+    103px 127px,
+    173px 149px,
+    233px 197px,
+    100% 100%;
   overflow: hidden;
 }
 .uc-map,
@@ -101,18 +111,15 @@ dialog.uc-atlas[open] {
     sans-serif;
   text-transform: uppercase;
   color: var(--ink, var(--owner));
-  text-shadow:
-    -1px -1px 1px black,
-    1px 1px 1px black,
-    0 1px 2px black;
+  text-shadow: none;
 }
 .uc-worlds span::before {
   content: '';
   position: absolute;
-  right: calc(100% + 3px);
+  right: calc(100% - 0.25px);
   top: 50%;
-  width: 9px;
-  height: 9px;
+  width: calc(var(--globe-size, 6px) + 2.5px);
+  height: calc(var(--globe-size, 6px) + 2.5px);
   transform: translateY(-50%);
   border: 1px solid var(--owner);
   border-radius: 50%;
@@ -278,9 +285,6 @@ dialog.uc-atlas[open] {
 .uc-atlas[data-await-map] .uc-fields,
 .uc-atlas[data-await-map] .uc-reset {
   display: none;
-}
-.uc-atlas[data-await-map] .uc-canvas {
-  background: radial-gradient(ellipse at 50% 48%, #172532, #080e14 48%, #040609);
 }
 .uc-atlas[data-await-map] .uc-map {
   cursor: default;

@@ -72,6 +72,7 @@ const { chromium } = require('playwright-core'),
                   window.ucWatch = true;
                   const start = performance.now();
                   let bodies,
+                    complete,
                     frames = 0;
                   function frame() {
                     const b = document.querySelector('.uc-atlas[open]'),
@@ -91,7 +92,17 @@ const { chromium } = require('playwright-core'),
                     if (valid) {
                       bodies ??= now;
                       if (scene?.dataset.scene === 'native') {
-                        if (++frames === 2) return ok({ campaign: selected, bodies: Math.round(bodies), complete: Math.round(now) });
+                        if (++frames >= 2) {
+                          complete ??= now;
+                          // Native ink is already visible; separately time the end of intentional motion.
+                          if (!scene.querySelector('.uc-map[data-moving]') && !scene.getAnimations({ subtree: true }).length)
+                            return ok({
+                              campaign: selected,
+                              bodies: Math.round(bodies),
+                              complete: Math.round(complete),
+                              settled: Math.round(now)
+                            });
+                        }
                       } else frames = 0;
                     }
                     if (now > 90000) return no(Error('Preview did not finish: ' + selected + ' vs ' + target));

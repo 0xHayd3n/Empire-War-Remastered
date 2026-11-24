@@ -1,4 +1,5 @@
-import { planetArt, planetDiameter, nameSize } from './universalplanetart.js';
+import { chartPose, cameraMotion, relatedMaps, nearlyFramed } from './universalviewmotion.js';
+import { planetArt, planetDiameter, labelPixels } from './universalplanetart.js';
 import { previewReturn } from './universalpreviewreturn.js';
 import { contextWorlds } from './universalcontextworlds.js';
 import { planetPool } from './universalplanetpool.js';
@@ -46,19 +47,20 @@ function save(cache, id, result) {
   }
 }
 export function strategicPreview(host) {
-  host.innerHTML = `<div class="uc-map" role="group" aria-label="Starting galaxy map" tabindex="0"><div class="uc-plane"><canvas class="uc-backplate"></canvas><canvas class="uc-planets"></canvas></div><canvas class="uc-context" role="img" aria-label="Other charted worlds, outside this map"></canvas><canvas class="uc-active-globes" aria-hidden="true"></canvas><div class="uc-worlds"></div></div><span class="uc-context-note">Gray worlds · outside this map</span><div class="uc-key" aria-label="Faction key"></div>`;
+  host.innerHTML = `<div class="uc-map" role="group" aria-label="Starting galaxy map" tabindex="0"><div class="uc-plane"><canvas class="uc-backplate"></canvas><canvas class="uc-planets"></canvas></div><canvas class="uc-context" role="img" aria-label="Other charted worlds, outside this map"></canvas><canvas class="uc-active-globes" aria-hidden="true"></canvas><div class="uc-worlds"></div></div><span class="uc-context-note" hidden>Gray worlds · outside this map</span><div class="uc-key" aria-label="Faction key"></div>`;
   const map = host.querySelector('.uc-map'),
     plane = host.querySelector('.uc-plane'),
     sky = host.querySelector('.uc-backplate'),
     canvas = host.querySelector('.uc-planets'),
     skyCtx = sky.getContext('2d'),
     ctx = canvas.getContext('2d'),
+    front = host.querySelector('.uc-active-globes'),
     labels = host.querySelector('.uc-worlds'),
     key = host.querySelector('.uc-key'),
     named = new Map(),
     plates = new Map(),
     shots = new Map(),
-    ghosts = contextWorlds(host.querySelector('.uc-context'), host.querySelector('.uc-active-globes'), labels),
+    ghosts = contextWorlds(host.querySelector('.uc-context'), front, labels),
     pool = planetPool();
   let contextKey, contextProjection, library, firstShot, firstPlate, reusableSky;
   let chart,
@@ -69,34 +71,51 @@ export function strategicPreview(host) {
     skyReady,
     requestKey,
     painted = 0,
-    zoom = 1,
-    x = 0,
-    y = 0,
+    wView = 0,
+    hView = 0,
+    framed,
+    manual = false,
     drag;
-  function move() {
-    x = Math.min(0, Math.max(map.clientWidth * (1 - zoom), x));
-    y = Math.min(0, Math.max(map.clientHeight * (1 - zoom), y));
-    map.toggleAttribute('data-zoomed', zoom > 1);
-    ghosts.move(map.clientWidth, map.clientHeight, x, y, zoom);
-    map.style.setProperty('--globe-size', planetDiameter + 'px');
-    labels.style.transform = plane.style.transform = `translate(${x}px,${y}px) scale(${zoom})`;
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)'),
+    motion = cameraMotion(move, () => reduced.matches);
+  function reveal(el, opacity, duration) {
+    for (const a of el.getAnimations()) a.cancel();
+    if (!reduced.matches) el.animate([{ opacity }, { opacity: 1 }], { duration, easing: 'ease-out' });
   }
-  function scale(f, px, py) {
+  function settlePreference() {
+    if (reduced.matches) {
+      if (selection) motion.set(motion.goal);
+      for (const el of [plane, canvas, front]) for (const a of el.getAnimations()) a.cancel();
+    }
+  }
+  reduced.addEventListener('change', settlePreference);
+  function move({ z, x, y }, frame) {
+    const X = x * wView,
+      Y = y * hView;
+    map.toggleAttribute('data-zoomed', z > 1);
+    map.toggleAttribute('data-moving', motion.moving);
+    labels.style.transform = plane.style.transform = `translate(${X}px,${Y}px) scale(${z})`;
+    labels.style.setProperty('--planet-size', labelPixels(z) / z + 'px');
+    ghosts.move(wView, hView, X, Y, z, frame);
+  }
+  function scale(f, u, v) {
     if (!selection || selection.onlySky) return;
-    const z = Math.min(8, Math.max(1, zoom * f));
-    x = px - ((px - x) * z) / zoom;
-    y = py - ((py - y) * z) / zoom;
-    zoom = z;
-    move();
+    manual = true;
+    motion.zoom(f, u, v);
   }
   map.onwheel = e => {
     e.preventDefault();
     const r = map.getBoundingClientRect();
-    scale(e.deltaY < 0 ? 1.18 : 1 / 1.18, e.clientX - r.left, e.clientY - r.top);
+    // Pixel-mode trackpads deliver many small deltas; a wheel notch is about 120px.
+    const delta = Math.max(-240, Math.min(240, e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? r.height : 1)));
+    scale(1.18 ** (-delta / 120), (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
   };
   map.onpointerdown = e => {
-    if (zoom > 1 && e.button === 0 && e.isPrimary) {
-      drag = [e.clientX - x, e.clientY - y, e.pointerId];
+    if (motion.pose.z > 1 && e.button === 0 && e.isPrimary && !selection?.onlySky) {
+      motion.stop();
+      map.removeAttribute('data-moving');
+      manual = true;
+      drag = [e.clientX - motion.pose.x * wView, e.clientY - motion.pose.y * hView, e.pointerId];
       map.setPointerCapture(e.pointerId);
     }
   };
@@ -106,9 +125,7 @@ export function strategicPreview(host) {
       ghosts.point(e.clientX - r.left, e.clientY - r.top);
     }
     if (drag?.[2] === e.pointerId) {
-      x = e.clientX - drag[0];
-      y = e.clientY - drag[1];
-      move();
+      motion.set(chartPose(motion.pose.z, (e.clientX - drag[0]) / wView, (e.clientY - drag[1]) / hView));
     }
   };
   map.onpointerleave = () => ghosts.point(-100, -100);
@@ -117,19 +134,18 @@ export function strategicPreview(host) {
     if (!selection || selection.onlySky) return;
     const r = map.getBoundingClientRect(),
       el = e.target.closest('[data-planet]');
-    const u = el ? parseFloat(el.style.left) / 100 : (e.clientX - r.left - x) / (r.width * zoom),
-      v = el ? parseFloat(el.style.top) / 100 : (e.clientY - r.top - y) / (r.height * zoom);
-    zoom = Math.min(8, zoom * 1.8);
-    x = r.width * (0.5 - u * zoom);
-    y = r.height * (0.5 - v * zoom);
-    move();
+    const pose = motion.pose,
+      u = el ? parseFloat(el.style.left) / 100 : ((e.clientX - r.left) / r.width - pose.x) / pose.z,
+      v = el ? parseFloat(el.style.top) / 100 : ((e.clientY - r.top) / r.height - pose.y) / pose.z,
+      z = Math.min(8, motion.goal.z * 1.8);
+    manual = true;
+    motion.set(chartPose(z, 0.5 - z * u, 0.5 - z * v), 210);
   };
   map.onkeydown = e => {
     if (e.key === 'Home') {
-      zoom = 1;
-      x = y = 0;
-      move();
-    } else if (['+', '=', '-'].includes(e.key)) scale(e.key === '-' ? 1 / 1.18 : 1.18, map.clientWidth / 2, map.clientHeight / 2);
+      manual = true;
+      motion.set(chartPose(), 190);
+    } else if (['+', '=', '-'].includes(e.key)) scale(e.key === '-' ? 1 / 1.18 : 1.18, 0.5, 0.5);
     else return;
     e.preventDefault();
   };
@@ -141,6 +157,13 @@ export function strategicPreview(host) {
     stopScene();
     skyJob?.abort();
     pool.close();
+    motion.stop();
+    framed = null;
+    manual = false;
+    for (const el of [plane, canvas, front]) for (const a of el.getAnimations()) a.cancel();
+    map.removeAttribute('data-moving');
+    map.removeAttribute('data-zoomed');
+    delete host.dataset.sectorZoom;
     ghosts.clear();
     selection = skyJob = skyReady = skyKey = requestKey = null;
     named.clear();
@@ -177,11 +200,18 @@ export function strategicPreview(host) {
     const view = overviewView(worlds, ref.camera, w, h, chart.frame),
       base = { profile: p.id, revision: p.revision, w: W, h: H, camera: p.camera, view },
       sector = sectorView(onlySky ? [] : view.labels);
-    zoom = sector.zoom;
-    x = w * (0.5 - zoom * sector.u);
-    y = h * (0.5 - zoom * sector.v);
-    move();
-    host.dataset.sectorZoom = String(zoom);
+    wView = w;
+    hView = h;
+    const fit = chartPose(sector.zoom, 0.5 - sector.zoom * sector.u, 0.5 - sector.zoom * sector.v);
+    const keep = framed && (framed === selection ? manual : selection.related && (manual || nearlyFramed(motion.goal, fit)));
+    if (keep) move(motion.pose, false);
+    else {
+      manual = false;
+      motion.set(fit, framed ? 230 : 0);
+      move(motion.pose, false);
+    }
+    framed = selection;
+    host.dataset.sectorZoom = String(sector.zoom);
     const sprites = !!p.sheets;
     // A warm sky can be submitted immediately. Let the renderer process native lanes
     // in parallel with label layout, form updates and drawing this map's portraits.
@@ -238,6 +268,12 @@ export function strategicPreview(host) {
       worlds.map(p => p[1] || p[0]),
       sprites ? activeArt : null
     );
+    if (!onlySky && !selection.related && !shots.has(id)) {
+      const incoming = selection;
+      portraitsReady.then(() => {
+        if (selection === incoming && requestKey === id) reveal(front, 0.72, 100);
+      });
+    }
     host.querySelector('.uc-context-note').hidden = onlySky;
     if (!onlySky)
       view.labels.forEach(([u, v], i) => {
@@ -245,7 +281,7 @@ export function strategicPreview(host) {
         labels.children[i].style.top = v * 100 + '%';
       });
     labels.style.setProperty('--planet-type', JSON.stringify(p.overlay.font));
-    labels.style.setProperty('--planet-size', nameSize + 'px');
+
     if (plateId !== skyKey) {
       skyJob?.abort();
       skyKey = plateId;
@@ -255,6 +291,7 @@ export function strategicPreview(host) {
       sky.height = H;
       const display = result => {
         skyCtx.drawImage(result.bitmap, 0, 0);
+        if (!shots.has(id)) reveal(plane, 0, 160);
         return result.bitmap;
       };
       skyReady = plates.has(plateId)
@@ -288,8 +325,13 @@ export function strategicPreview(host) {
       canvas.height = H;
     } else ctx.clearRect(0, 0, W, H);
     delete host.dataset.models;
+    delete host.dataset.routes;
+    delete host.dataset.reused;
     const paint = result => {
       ctx.drawImage(result.bitmap, 0, 0);
+      // Same opaque sky on both canvases. Only this selection's routes/rings
+      // dissolve in; never blend two maps' topology, owners or labels together.
+      if (selection.transition) reveal(canvas, 0.36, 125);
       ghosts.protectModels(result.bounds);
       host.dataset.scene = 'loading';
       const exact = selection;
@@ -364,13 +406,14 @@ export function strategicPreview(host) {
       } else onReturn.clear();
       clear();
       observer.disconnect();
+      reduced.removeEventListener('change', settlePreference);
       ghosts.dispose();
       for (const c of [shots, plates]) {
         for (const r of c.values()) r.bitmap.close();
         c.clear();
       }
     },
-    show(p, variant, onlySky = false) {
+    show(p, variant, onlySky = false, family) {
       const m = p.maps[variant.map],
         worlds = m.worlds.map(([i]) => chart.world(p, i).placed);
       if (!worlds.length) {
@@ -382,10 +425,9 @@ export function strategicPreview(host) {
         named.clear();
       }
       const continuing = selection?.p === p && !selection.onlySky;
-      selection = { p, m, worlds, variant, onlySky, continuing };
+      const related = continuing && !onlySky && ((family && selection.family === family) || relatedMaps(selection.m.worlds, m.worlds));
+      selection = { p, m, worlds, variant, onlySky, continuing, related, family, transition: !!selection };
       requestKey = null;
-      zoom = 1;
-      x = y = 0;
       drag = null;
       const live = new Set(onlySky ? [] : m.worlds.map(([i]) => i));
       for (const [i, el] of named)

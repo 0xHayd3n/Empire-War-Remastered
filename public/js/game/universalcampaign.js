@@ -223,7 +223,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
   function render() {
     ui.el.toggleAttribute('data-await-map', !family);
     function showMap() {
-      if (v) ui.map.show(p, v);
+      if (v) ui.map.show(p, v, false, family);
       else ui.map.clear();
       previewProfile = p;
       previewMap = v?.map;

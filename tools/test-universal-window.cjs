@@ -262,18 +262,37 @@ const assert = require('node:assert/strict'),
           b = e.firstElementChild.getBoundingClientRect();
         return [a.left - b.left, a.top - b.top, b.right - a.right, b.bottom - a.bottom];
       });
+    const settleZoom = z =>
+      galaxy.evaluate(async (e, wanted) => {
+        const start = performance.now();
+        while (performance.now() - start < 3000) {
+          await new Promise(requestAnimationFrame);
+          const plane = new DOMMatrix(getComputedStyle(e.querySelector('.uc-plane')).transform);
+          if (
+            Math.abs(plane.a - wanted) < 0.00001 &&
+            Math.abs(Number(e.querySelector('.uc-active-globes').dataset.diameter) - wanted * 6) < 0.00001
+          )
+            return;
+        }
+        throw Error('Camera did not reach ' + wanted);
+      }, z);
     await galaxy.press('Home');
+    await settleZoom(1);
     const label = native.locator('[data-planet]').first();
     const labelSize = await label.boundingBox();
     await label.dispatchEvent('dblclick');
+    await settleZoom(1.8);
     assert.equal(await mapZoomed(), true);
     await checkContext();
-    assert(Math.abs((await label.boundingBox()).width / labelSize.width - 1.8) < 0.02, 'Names zoom with planet diameter');
+    const labelGain = (await label.boundingBox()).width / labelSize.width;
+    assert(labelGain > 1 && labelGain < 1.78, 'Labels must grow more slowly than planets');
+    assert.equal(await label.evaluate(e => getComputedStyle(e).textShadow), 'none');
     assert(Math.abs(Number(await globes.getAttribute('data-diameter')) - 6 * 1.8) < 0.02);
     async function mapZoomed() {
       return galaxy.evaluate(e => e.hasAttribute('data-zoomed'));
     }
     await galaxy.press('Home');
+    await settleZoom(1);
     await drag(20, 20, 220, 165);
     assert.deepEqual(await bounds(), [0, 0, 0, 0]);
     await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2);
@@ -291,6 +310,7 @@ const assert = require('node:assert/strict'),
       );
     }
     await galaxy.press('Home');
+    await settleZoom(1);
     assert.deepEqual(await bounds(), [0, 0, 0, 0]);
     const root = await board.evaluate(e => (e.marker = crypto.randomUUID()));
     let docs = 0,
@@ -327,7 +347,7 @@ const assert = require('node:assert/strict'),
         await board.locator('[data-scene="native"],[data-scene="unavailable"]').waitFor();
         assert.equal(await board.locator('.uc-canvas').getAttribute('data-scene'), 'native', id + ' preview');
         await galaxy.press('Home');
-        await globes.evaluate(() => new Promise(ok => requestAnimationFrame(() => requestAnimationFrame(ok))));
+        await settleZoom(1);
         assert.equal(Number(await globes.getAttribute('data-diameter')), 6, id + ' world size at the same camera zoom');
         assert.equal(Number(await globes.getAttribute('data-worlds')), count, id + ' renders every active location');
         assert(
@@ -371,8 +391,14 @@ const assert = require('node:assert/strict'),
       return rows;
     };
     const beforeYear = await checkMap();
+    await galaxy.press('Home');
+    await settleZoom(1);
+    await corellia.dispatchEvent('dblclick');
+    await settleZoom(1.8);
+    const aimed = await galaxy.locator('.uc-plane').evaluate(e => e.style.transform);
     await selectPeriod('19 BBY');
     await native.waitFor();
+    assert.equal(await galaxy.locator('.uc-plane').evaluate(e => e.style.transform), aimed, 'Related year should preserve player framing');
     assert(await corellia.evaluate(el => el.ucReuseCheck === true), 'Shared label should survive a year switch');
     const laterYear = await checkMap(),
       owners = new Map(beforeYear.map(row => row));

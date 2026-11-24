@@ -1,5 +1,7 @@
 # Galactic Conquest preview switching
 
+The current browser benchmark reports `bodies` (detailed foreground portraits), `complete` (the requested native map is drawn on consecutive frames), and `settled` (the incoming fades and camera motion have also finished). A visible loading starfield is **not** a ready map. `tools/test-universal-motion.cjs` separately holds the catalog fetch, checks actual opening pixels, samples wheel motion and cursor anchoring, checks close-up text and reduced motion, and releases an obsolete worker result during a map change. The older times below predate these cosmetic transitions.
+
 ## Overlap lane rendering with in-story map changes
 
 Compared `6de0f82` with early worker submission and reuse of profile-local label nodes and unchanged select options. Same 1366×768 Chrome benchmark and visible milestones described below. Two four-context runs per build, already indexed; medians pooled across those runs. Timings used the real backdrop, not the pixel-test fixture.

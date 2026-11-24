@@ -5,6 +5,13 @@ export const tileSize = 128,
   planetDiameter = 6,
   nameSize = 4.5,
   contextNameSize = 3.75;
+// Screen pixels. Names grow to reading size on approach, then recede a little as
+// the portrait becomes the focus (13 px at sector distance, 11 px at closest).
+export function labelPixels(z) {
+  if (z < 3.5) return nameSize + ((13 - nameSize) * (z - 1)) / 2.5;
+  const t = Math.min(1, (z - 3.5) / 4.5);
+  return 13 - 2 * t * t * (3 - 2 * t);
+}
 export function planetArt(profile, world) {
   const cell = world[9];
   return cell && profile.sheets?.[cell[0]] ? [profile.sheets[cell[0]], cell[1]] : null;

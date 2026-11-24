@@ -419,6 +419,31 @@ assert.throws(() => assertPrivateLibrary(process.cwd(), { items: new Map() }), /
   assert.equal(closed, 2);
   assert.equal(recent.take(profiles), null);
 }
+// Only the duplicate region meshes on the preview sky disappear. Same-named
+// meshes on planets, native owner rings, unrelated components and hidden parts stay untouched.
+{
+  const { omitRegionBorders } = await import('../public/js/game/universalchartdetail.js');
+  const groups = ['core', 'region_lines', 'region_lines', 'region_lines', 'Stars', 'rings', 'Object01', 'hidden'].map(name => ({
+    name,
+    visible: name !== 'hidden'
+  }));
+  const inst = { meshByName: new Map(groups.entries()) };
+  omitRegionBorders(inst, 'planet.alo', 'stock');
+  assert.deepEqual(
+    groups.filter(g => !g.visible).map(g => g.name),
+    ['hidden']
+  );
+  omitRegionBorders(inst, 'W_GALAXY00.ALO', '1125571106');
+  assert.deepEqual(
+    groups.filter(g => g.visible).map(g => g.name),
+    ['core', 'Stars', 'Object01']
+  );
+  omitRegionBorders(inst, 'W_GALAXY00.ALO', '1397421866');
+  assert.deepEqual(
+    groups.filter(g => g.visible).map(g => g.name),
+    ['core', 'Stars']
+  );
+}
 // A static briefing draws the same route quads without the gameplay-only spark geometry.
 {
   const { RouteBatches } = await import('../public/js/game/routebatch.js');

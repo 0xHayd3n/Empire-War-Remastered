@@ -4,6 +4,7 @@ import * as THREE from '../../vendor/three/build/three.module.js';
 import { renderGalacticScenes, placeGalacticModel } from './galacticscenes.js';
 import { RouteBatches } from './routebatch.js';
 import { routeAxes } from './galacticroutes.js';
+import { omitRegionBorders } from './universalchartdetail.js';
 import { GalacticModelFade } from './galacticfade.js';
 let renderer, canvas, quad, namespace;
 const planets = new Map(),
@@ -57,7 +58,12 @@ self.onmessage = async ({ data: q }) => {
     const scenes = Array.from({ length: 4 }, () => new THREE.Scene()),
       cam = new THREE.PerspectiveCamera(45, q.w / q.h, 1, 20000),
       view = q.view;
+    const crop = q.crop;
+    const cropCamera = c => {
+      if (crop) c.setViewOffset(q.w * crop.z, q.h * crop.z, -q.w * crop.x, -q.h * crop.y, q.w, q.h);
+    };
     cam.fov = view.fov;
+    cropCamera(cam);
     cam.updateProjectionMatrix();
     cam.up.set(0, 0, 1);
     cam.position.set(...view.eye);
@@ -94,6 +100,7 @@ self.onmessage = async ({ data: q }) => {
             if (meshes) for (const m of meshes) m.visible = n === 0 && !m.userData.hiddenByDefault;
           if (world) planets.set(p[0], inst);
         }
+        if (q.pass === 'backdrop') omitRegionBorders(inst, file, q.profile);
         placeGalacticModel(inst.root, { pos: p.slice(2, 5), type });
         attached.push(inst.root);
         scenes[layer].add(inst.root);
@@ -113,22 +120,27 @@ self.onmessage = async ({ data: q }) => {
     if (q.backplate) {
       const texture = new THREE.Texture(q.backplate);
       texture.generateMipmaps = false;
-      texture.minFilter = texture.magFilter = THREE.NearestFilter;
+      texture.minFilter = texture.magFilter = THREE.LinearFilter;
       texture.needsUpdate = true;
       quad = new THREE.Mesh(
         new THREE.PlaneGeometry(2, 2),
         new THREE.RawShaderMaterial({
-          uniforms: { plate: { value: texture } },
+          uniforms: { plate: { value: texture }, uvWindow: { value: new THREE.Vector3(0, 0, 1) } },
           depthTest: false,
           depthWrite: false,
           vertexShader:
-            'attribute vec3 position; attribute vec2 uv; varying vec2 v; void main(){v=vec2(uv.x,1.0-uv.y);gl_Position=vec4(position.xy,0.,1.);}',
+            'attribute vec3 position; attribute vec2 uv; uniform vec3 uvWindow; varying vec2 v; void main(){v=uvWindow.xy+vec2(uv.x,1.0-uv.y)*uvWindow.z;gl_Position=vec4(position.xy,0.,1.);}',
           fragmentShader: 'precision highp float; uniform sampler2D plate; varying vec2 v; void main(){gl_FragColor=texture2D(plate,v);}'
         })
       );
       quad.frustumCulled = false;
     }
-    if (quad) scenes[1].add(quad);
+    if (quad) {
+      const uv = quad.material.uniforms.uvWindow.value;
+      if (crop) uv.set(-crop.x / crop.z, -crop.y / crop.z, 1 / crop.z);
+      else uv.set(0, 0, 1);
+      scenes[1].add(quad);
+    }
     if (q.pass === 'backdrop') {
       await Promise.all(materials);
       await dds.texturesReady();
@@ -167,6 +179,7 @@ self.onmessage = async ({ data: q }) => {
       const hud = new THREE.Scene(),
         screen = new THREE.OrthographicCamera(0, q.w, q.h, 0, 0.1, 10);
       screen.position.z = 1;
+      cropCamera(screen);
       const scale = Math.min(q.w / 1024, q.h / 768) * q.overlay.scale,
         styles = ringStyles;
       view.labels.forEach(([u, v], i) => {

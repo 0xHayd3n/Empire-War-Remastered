@@ -180,9 +180,61 @@ const assert = require('node:assert/strict'),
     assert.equal(closeSizes.near.scale, 8, 'Reduced motion should move immediately');
     assert(closeSizes.near.font >= 10.8 && closeSizes.near.font < closeSizes.mid.font, 'Names should taper at close zoom');
     assert.equal(closeSizes.shadow, 'none');
+    const detail = map.locator('.uc-route-detail');
+    await detail.waitFor();
+    const detailSize = await detail.evaluate(c => {
+      const r = c.getBoundingClientRect(),
+        m = c.parentNode.getBoundingClientRect();
+      return {
+        width: c.width,
+        height: c.height,
+        aligned: Math.abs(r.x - m.x) + Math.abs(r.y - m.y) + Math.abs(r.width - m.width) + Math.abs(r.height - m.height) < 1
+      };
+    });
+    assert(
+      detailSize.aligned && detailSize.width >= box.width && detailSize.height >= box.height,
+      'Display-resolution lane crop must cover the current viewport'
+    );
+    const edges = await require('./check-universal-lane-detail.cjs')(map);
+    assert(
+      edges.routes === 1 &&
+        edges.redrawnInk > 100 &&
+        edges.columns > 200 &&
+        edges.centerError < 1.5 &&
+        edges.bgChecks === 4 &&
+        edges.redrawnSoft < edges.scaledSoft * 0.55,
+      JSON.stringify(edges)
+    );
+    // A late close-up must not cover an unselected chart or another map. Hold the
+    // next crop in the real pool while leaving the selected story, then release it.
+    await map.evaluate(e => {
+      const post = Worker.prototype.postMessage;
+      window.cropHeld = new Promise(held => {
+        Worker.prototype.postMessage = function (q, ...args) {
+          if (q?.crop) {
+            Worker.prototype.postMessage = post;
+            window.releaseCrop = () =>
+              new Promise(done => {
+                this.addEventListener('message', () => requestAnimationFrame(() => requestAnimationFrame(done)), { once: true });
+                post.call(this, q, ...args);
+              });
+            held();
+            return;
+          }
+          return post.call(this, q, ...args);
+        };
+      });
+    });
+    await map.press('-');
+    await map.evaluate(() => window.cropHeld);
+    await board.getByRole('button', { name: 'Clone Wars', exact: true }).click();
+    await detail.waitFor({ state: 'hidden' });
+    await map.evaluate(() => window.releaseCrop());
+    assert(await detail.isHidden());
+    assert.equal(await board.locator('[data-planet]').count(), 0);
     await page.keyboard.press('Escape');
     await board.waitFor({ state: 'detached' });
-    console.log(JSON.stringify({ pendingLit: lit / total, zoomIn, zoomOut, closeSizes, dissolve, errors }));
+    console.log(JSON.stringify({ pendingLit: lit / total, zoomIn, zoomOut, closeSizes, dissolve, detailSize, edges, errors }));
     assert.deepEqual(errors, []);
   } finally {
     release?.();

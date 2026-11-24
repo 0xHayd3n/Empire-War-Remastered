@@ -1,3 +1,4 @@
+import { laneDetail } from './universalchartdetail.js';
 import { chartPose, cameraMotion, relatedMaps, nearlyFramed } from './universalviewmotion.js';
 import { planetArt, planetDiameter, labelPixels } from './universalplanetart.js';
 import { previewReturn } from './universalpreviewreturn.js';
@@ -47,7 +48,7 @@ function save(cache, id, result) {
   }
 }
 export function strategicPreview(host) {
-  host.innerHTML = `<div class="uc-map" role="group" aria-label="Starting galaxy map" tabindex="0"><div class="uc-plane"><canvas class="uc-backplate"></canvas><canvas class="uc-planets"></canvas></div><canvas class="uc-context" role="img" aria-label="Other charted worlds, outside this map"></canvas><canvas class="uc-active-globes" aria-hidden="true"></canvas><div class="uc-worlds"></div></div><span class="uc-context-note" hidden>Gray worlds · outside this map</span><div class="uc-key" aria-label="Faction key"></div>`;
+  host.innerHTML = `<div class="uc-map" role="group" aria-label="Starting galaxy map" tabindex="0"><div class="uc-plane"><canvas class="uc-backplate"></canvas><canvas class="uc-planets"></canvas></div><canvas class="uc-route-detail" aria-hidden="true" hidden></canvas><canvas class="uc-context" role="img" aria-label="Other charted worlds, outside this map"></canvas><canvas class="uc-active-globes" aria-hidden="true"></canvas><div class="uc-worlds"></div></div><span class="uc-context-note" hidden>Gray worlds · outside this map</span><div class="uc-key" aria-label="Faction key"></div>`;
   const map = host.querySelector('.uc-map'),
     plane = host.querySelector('.uc-plane'),
     sky = host.querySelector('.uc-backplate'),
@@ -61,7 +62,8 @@ export function strategicPreview(host) {
     plates = new Map(),
     shots = new Map(),
     ghosts = contextWorlds(host.querySelector('.uc-context'), front, labels),
-    pool = planetPool();
+    pool = planetPool(),
+    detail = laneDetail(host.querySelector('.uc-route-detail'));
   let contextKey, contextProjection, library, firstShot, firstPlate, reusableSky;
   let chart,
     selection,
@@ -96,6 +98,7 @@ export function strategicPreview(host) {
     map.toggleAttribute('data-moving', motion.moving);
     labels.style.transform = plane.style.transform = `translate(${X}px,${Y}px) scale(${z})`;
     labels.style.setProperty('--planet-size', labelPixels(z) / z + 'px');
+    detail.move(motion.pose, motion.goal, motion.moving || !!drag);
     ghosts.move(wView, hView, X, Y, z, frame);
   }
   function scale(f, u, v) {
@@ -150,6 +153,7 @@ export function strategicPreview(host) {
     e.preventDefault();
   };
   function stopScene() {
+    detail.clear();
     sceneJob?.abort();
     sceneJob = null;
   }
@@ -216,6 +220,20 @@ export function strategicPreview(host) {
     // A warm sky can be submitted immediately. Let the renderer process native lanes
     // in parallel with label layout, form updates and drawing this map's portraits.
     const readyPlate = plates.get(plateId);
+    const query = (backplate, crop) => ({
+      ...base,
+      pass: sprites ? 'lanes' : 'worlds',
+      laneKit: p.laneKit,
+      ringDiameter: ((planetDiameter + 2.5) * W) / w,
+      worlds,
+      backplate,
+      overlay: p.overlay,
+      colors: m.worlds.map(([, o]) => p.facts[o]?.color || '#bbb'),
+      scenery: [],
+      routes: m.routes,
+      looks: p.looks,
+      crop
+    });
     let pending, renderLanes, signal;
     if (!onlySky && !shots.has(id)) {
       sceneJob = new AbortController();
@@ -223,23 +241,7 @@ export function strategicPreview(host) {
       renderLanes = async backplate => {
         signal.throwIfAborted();
         if (chart.sky.length && !backplate) throw Error('Native backdrop unavailable');
-        return pool.request(
-          mount,
-          {
-            ...base,
-            pass: sprites ? 'lanes' : 'worlds',
-            laneKit: p.laneKit,
-            ringDiameter: ((planetDiameter + 2.5) * W) / w,
-            worlds,
-            backplate,
-            overlay: p.overlay,
-            colors: m.worlds.map(([, o]) => p.facts[o]?.color || '#bbb'),
-            scenery: [],
-            routes: m.routes,
-            looks: p.looks
-          },
-          signal
-        );
+        return pool.request(mount, query(backplate), signal);
       };
       if (readyPlate && selection.continuing) pending = renderLanes(readyPlate.bitmap);
     }
@@ -341,6 +343,25 @@ export function strategicPreview(host) {
       host.dataset.models = String(result.placed);
       host.dataset.reused = String(result.reused);
       host.dataset.routes = String(result.routes);
+      if (sprites && result.routes) {
+        const plate = plates.get(plateId)?.bitmap;
+        if (plate || !chart.sky.length) {
+          // An opaque crop must not jump ahead of the incoming map's sky/lane fade.
+          // Render during the dissolve; reveal after it. Cancellation still closes stale bitmaps.
+          const faded = Promise.allSettled([...plane.getAnimations(), ...canvas.getAnimations()].map(a => a.finished));
+          detail.set(
+            async (crop, s) => {
+              const image = await pool.request(mount, query(plate, crop), s);
+              await faded;
+              return image;
+            },
+            w,
+            h,
+            Math.max(1, Math.min(W / w, H / h) / Math.min(devicePixelRatio || 1, 2))
+          );
+          detail.move(motion.pose, motion.goal, motion.moving);
+        }
+      }
     };
     if (onlySky) {
       host.dataset.scene = 'backdrop';

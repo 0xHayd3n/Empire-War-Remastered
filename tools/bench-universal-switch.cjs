@@ -95,7 +95,10 @@ const { chromium } = require('playwright-core'),
                         if (++frames >= 2) {
                           complete ??= now;
                           // Native ink is already visible; separately time the end of intentional motion.
-                          if (!scene.querySelector('.uc-map[data-moving]') && !scene.getAnimations({ subtree: true }).length)
+                          if (
+                            !scene.querySelector('.uc-map[data-moving],.uc-route-detail[data-refining]') &&
+                            !scene.getAnimations({ subtree: true }).length
+                          )
                             return ok({
                               campaign: selected,
                               bodies: Math.round(bodies),

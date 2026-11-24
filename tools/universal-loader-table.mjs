@@ -38,7 +38,7 @@ export function menuTable(source) {
 }
 // This release enables the first seven progressive era buttons. A map/date/faction must also be enabled
 // in the authored availability table and resolve to a real single-player scenario in the mounted VFS.
-export const thrawnRevision = '5b2ceff618f502cf23a6d052d18d2cc895720a36462f9b4d28c5094515f311c4';
+export { thrawnRevision } from '../public/js/game/universaleligibility.js';
 export const customOpenings = new Map(['Small', 'Medium', 'Large', 'FTGU', 'Influencers'].map(size => ['Custom_' + size, size]));
 export function thrawnSelections(trans, availability) {
   const rows = [];

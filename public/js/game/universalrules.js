@@ -10,7 +10,9 @@ export const ruleFields = {
     max: 86400
   }
 };
-export const rescueCampaign = 'Sandbox_Equal_Footing_Rebel';
+import { equalFooting, canonStart } from './universaleligibility.js';
+import { envoyEligible } from './universalobjectives.js';
+export const rescueCampaign = equalFooting;
 export const validLoss = n => Number.isFinite(n) && n >= 0 && n <= 1;
 export const revanId = '3417277973';
 export function validValue(field, value) {
@@ -53,6 +55,8 @@ export function expeditionSites(g, allies = []) {
 export function beginUniversalRules(g, options, allies) {
   const rules = resolvedOptions(options);
   if (options?.heroRescue === true && g.campaign?.name === rescueCampaign && g.active === 'Rebel') rules.rescue = { state: 'ready' };
+  if (options?.envoy === true && envoyEligible(g)) rules.envoy = { state: 'travel' };
+  if (options?.canonUnits === true && g.campaign?.name === canonStart && g.active === 'Rebel') rules.canon = { state: 'request' };
   if (options?.expedition === true) {
     const sites = expeditionSites(g, allies);
     if (!sites.length) throw new Error('This campaign has no connected expedition sites. Choose the authored path instead.');
@@ -75,6 +79,13 @@ export function restoreUniversalRules(raw) {
   ) {
     rules.expedition = { owner: x.owner, sites: [...x.sites], found: x.sites.filter(s => x.found.includes(s)) };
   }
+  const envoy = raw?.envoy,
+    canon = raw?.canon;
+  if (['travel', 'complete', 'unavailable'].includes(envoy?.state)) rules.envoy = { state: envoy.state };
+  if (envoy?.state === 'report' && Number.isFinite(envoy.until) && envoy.until >= 0) rules.envoy = { state: 'report', until: envoy.until };
+  if (['request', 'ordered', 'unavailable'].includes(canon?.state)) rules.canon = { state: canon.state };
+  if (canon?.state === 'category' && typeof canon.planet === 'string' && Number.isFinite(canon.deadline))
+    rules.canon = { state: 'category', planet: canon.planet, deadline: canon.deadline };
   const hold = raw?.rescue;
   if (['ready', 'complete'].includes(hold?.state)) rules.rescue = { state: hold.state };
   if (hold?.state === 'captive' && typeof hold.prison === 'string' && hold.prison && typeof hold.jailer === 'string' && hold.jailer)

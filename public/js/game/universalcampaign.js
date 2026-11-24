@@ -1,4 +1,5 @@
 import { activeLanguage } from '../language.js';
+import { canonEligible, envoyStart } from './universaleligibility.js';
 import { ruleFields, rescueCampaign } from './universalrules.js';
 import { ruleChoices, rulePresets } from './universalrulemenu.js';
 import { eraTimeline, periodOf, startWithin } from './universaltimeline.js';
@@ -130,6 +131,8 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
       if (!s.row.eraProgression || !row?.eraProgression) delete options.progressive;
     }
     if (s.variant !== v) {
+      delete options.canonUnits;
+      delete options.envoy;
       delete options.expedition;
       delete options.heroRescue;
       if (s.row.scripted || !next.p.combat?.transport?.allowed.includes(s.variant?.id)) delete options.transportLosses;
@@ -249,30 +252,53 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
         }
       );
     else ui.hide('transport');
+    if (canonEligible(p, row, v))
+      ui.field(
+        'canon',
+        'Canon Units',
+        [opt('', 'Campaign default'), opt('request', 'Queue Enable Canon Units after the briefing')],
+        options.canonUnits ? 'request' : '',
+        value => {
+          if (value) options.canonUnits = true;
+          else delete options.canonUnits;
+        }
+      );
+    else ui.hide('canon');
     const paths = [opt('', 'Authored objectives')];
+    if (envoyStart(p, row, v)) paths.push(opt('envoy', 'Mon Mothma · diplomatic envoy'));
     if (p.combat?.rescue && v?.id === rescueCampaign) paths.push(opt('rescue', 'Rescue Han and Chewbacca'));
     if (p.id !== '3417277973' && v?.sites.length && data.profiles.some(p => p.donor?.hasSearch))
       paths.push(opt('expedition', 'Star Map Expedition'));
-    ui.radios('path', 'Objective', paths, options.heroRescue ? 'rescue' : options.expedition ? 'expedition' : '', value => {
-      delete options.expedition;
-      delete options.heroRescue;
-      if (value === 'expedition') options.expedition = true;
-      if (value === 'rescue') options.heroRescue = true;
-      note();
-    });
+    ui.radios(
+      'path',
+      'Objective',
+      paths,
+      options.envoy ? 'envoy' : options.heroRescue ? 'rescue' : options.expedition ? 'expedition' : '',
+      value => {
+        delete options.envoy;
+        if (value === 'envoy') options.envoy = true;
+        delete options.expedition;
+        delete options.heroRescue;
+        if (value === 'expedition') options.expedition = true;
+        if (value === 'rescue') options.heroRescue = true;
+        note();
+      }
+    );
   }
   function note() {
-    ui.status.textContent = options.heroRescue
-      ? 'If Han and Chewbacca fall in a lost battle, conquer their prison world to bring them back once.'
-      : options.expedition
-        ? `Expedition: capture ${v.sites.join(', ')} for a one-time 3,000-credit grant.`
-        : row?.scripted
-          ? 'Authored setup scenario. Its script chooses the final galaxy after launch.'
-          : row?.customOpening
-            ? 'Choose Learner, Static era or Progressive era in Settings.'
-            : row?.layout
-              ? 'Choose starting locations and rosters in-game, using the mod’s own setup.'
-              : '';
+    ui.status.textContent = options.envoy
+      ? 'Bring Mon Mothma to friendly Bespin for a 60-second report on the fleet at Sullust. Campaign time pauses in the log.'
+      : options.heroRescue
+        ? 'If Han and Chewbacca fall in a lost battle, conquer their prison world to bring them back once.'
+        : options.expedition
+          ? `Expedition: capture ${v.sites.join(', ')} for a one-time 3,000-credit grant.`
+          : row?.scripted
+            ? 'Authored setup scenario. Its script chooses the final galaxy after launch.'
+            : row?.customOpening
+              ? 'Choose Learner, Static era or Progressive era in Settings.'
+              : row?.layout
+                ? 'Choose starting locations and rosters in-game, using the mod’s own setup.'
+                : '';
   }
   function render() {
     ui.el.toggleAttribute('data-await-map', !family);

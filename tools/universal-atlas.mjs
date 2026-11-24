@@ -8,6 +8,7 @@ import { assertPrivateLibrary, loadPack } from './universal-library.mjs';
 import { languageId } from '../public/js/language.js';
 import { thrawnRevision } from './universal-loader-table.mjs';
 import { fallCustomRevision } from './universal-fall-layouts.mjs';
+import { canonEligible, envoyStart } from '../public/js/game/universaleligibility.js';
 import { validValue, validLoss, rescueCampaign } from '../public/js/game/universalrules.js';
 const digest = s => createHash('sha256').update(s).digest('hex');
 function stockStamp(game) {
@@ -86,6 +87,14 @@ export function launchPlan(atlas, q) {
     )
       throw Error('Hero rescue unavailable.');
     options.heroRescue = true;
+  }
+  if (Object.hasOwn(q, 'canonUnits')) {
+    if (q.canonUnits !== true || !canonEligible(p, r, v)) throw Error('Native Canon Units order unavailable.');
+    options.canonUnits = true;
+  }
+  if (Object.hasOwn(q, 'envoy')) {
+    if (q.envoy !== true || q.heroRescue || q.expedition || !envoyStart(p, r, v)) throw Error('Envoy mission unavailable.');
+    options.envoy = true;
   }
   if (q.expedition) {
     if (!v.sites.length || p.id === '3417277973' || !atlas.profiles.some(p => p.donor?.hasSearch)) throw Error('Expedition unavailable.');

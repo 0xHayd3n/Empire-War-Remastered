@@ -607,6 +607,20 @@ async function nativeList(parent, id, c) {
     drawLine = item => {
       const row = document.createElement('div');
       nativeLabel(row, item.text || '', f, { top: item.color, bottom: item.color });
+      if (item.activate) {
+        row.setAttribute('role', 'button');
+        row.tabIndex = 0;
+        row.setAttribute('aria-label', item.label);
+        row.style.cursor = 'pointer';
+        row.style.pointerEvents = 'auto';
+        row.onclick = item.activate;
+        row.onkeydown = e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            item.activate();
+          }
+        };
+      }
       row.style.height = rowHeight + 'px';
       row.style.marginLeft = textGap + 'px';
       row.style.color = item.color;
@@ -614,7 +628,12 @@ async function nativeList(parent, id, c) {
     };
     rows.style.backgroundImage = 'none';
     lines = items.flatMap(item =>
-      (item.wrap ? wrapDialogText(item.text, c.w - sw - ix * 4, measure) : [item.text]).map(text => ({ text, color: item.color }))
+      (item.wrap ? wrapDialogText(item.text, c.w - sw - ix * 4, measure) : [item.text]).map((text, index) => ({
+        text,
+        color: item.color,
+        activate: index === 0 ? item.activate : null,
+        label: item.text
+      }))
     );
     max = Math.max(0, lines.length - count);
     scroll.classList.toggle('disabled', !max);

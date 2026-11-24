@@ -1,5 +1,6 @@
 import { db } from '../gamedata.js';
 import { planetIncome } from './galacticeconomy.js';
+import { envoyIntel } from './universalobjectives.js';
 import { spyMask } from './galacticspy.js';
 import { planetCreditValue } from './planetstats.js';
 import { abilityEnabled, overrideState } from './abilityoverride.js';
@@ -245,6 +246,7 @@ export function stepVisibility(g, viewer, elapsedFrames = 0) {
     }
     let mask = (g.observer || friendly(targetController(p), viewer) ? VIS.ALL : baseline) | spies[p.index];
     for (const m of p.visibilityModifiers || []) if (same(m.owner, viewer) && (m.expires == null || m.expires > g.time)) mask |= m.mask;
+    if (g.universalRules?.envoy?.state === 'report' && envoyIntel(g, p, viewer)) mask |= VIS.FLEET_COUNT | VIS.FLEET_CONTENTS;
     if (corrupted) mask |= VIS.ALL;
     if (v.mask & VIS.OWNER && !(mask & VIS.OWNER)) v.rememberedOwner = controller(p);
     v.mask = mask;

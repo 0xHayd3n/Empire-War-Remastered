@@ -13,6 +13,7 @@ import {
   techTreeDialog,
   updateHistory
 } from './galacticlogdata.js';
+import { objectiveRows } from './universalobjectives.js';
 import { renderHistory } from './galactichistory.js';
 import { renderTechTree } from './galactictechtree.js';
 import { renderSummary } from './galacticsummary.js';
@@ -169,8 +170,22 @@ export class GalacticLog {
     const url = await pictures.get(key);
     if (this.dialog === d && ctl._pictureRequest === request) d.setImage(id, url);
   }
+  fillLog(d) {
+    const game = this.game,
+      g = game.galaxy;
+    d.coloredTextList('IDC_DROID_LIST', () => [
+      ...logRows(g),
+      ...objectiveRows(g, p => {
+        this.close();
+        game.select(p.index);
+        game.view.x = p.pos[0];
+        game.view.y = p.pos[1];
+        if (game.view.zoom === 1) game.view.planet = p.index;
+      })
+    ]);
+  }
   async renderLog(d) {
-    d.coloredTextList('IDC_DROID_LIST', logRows(this.game.galaxy));
+    this.fillLog(d);
     const label = () => d.ctl('IDC_DROID_LIST')?.setAttribute('aria-label', db.t('TEXT_DROID_LOG'));
     label();
     d.onLanguageRefresh(label);
@@ -190,7 +205,7 @@ export class GalacticLog {
   add(text, color) {
     if (!text) return;
     appendLog(this.game.galaxy, text, color);
-    if (this.opened && this.page === 0) this.dialog?.coloredTextList('IDC_DROID_LIST', logRows(this.game.galaxy));
+    if (this.opened && this.page === 0 && this.dialog) this.fillLog(this.dialog);
   }
   showType(type) {
     this.encyclopedia?.showType(type, this.page === 0 || this.page === 2);

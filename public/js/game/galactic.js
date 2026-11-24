@@ -78,6 +78,8 @@ import { GalacticStoryDialog } from './galacticstorydialog.js';
 import { GalacticMovies } from './galacticmovies.js';
 import { GalacticLog } from './galacticlog.js';
 import { Menus } from './menus.js';
+import { envoyArrival, envoyUpdate } from './universalobjectives.js';
+import { stepCanonOrder } from './universalcanon.js';
 import { prisonChanged } from './universalrescue.js';
 import { beginUniversalRules } from './universalrules.js';
 import { stepIncome, orbitFleets, cycleNumber, creditCap } from './galacticeconomy.js';
@@ -434,14 +436,20 @@ export class GalacticGame {
     this.storyDialog = new GalacticStoryDialog(this);
     this.galacticLog = new GalacticLog(this, hud);
     if (!this.setup.restore && g.universalRules?.expedition) {
-      const names = g.universalRules.expedition.sites.map(n => db.t(db.type(n)?.str('Text_ID')) || n);
-      this.galacticLog.message('Star Map Expedition: gain control of ' + names.join(', ') + '. Survey each once for a 3,000-credit grant.');
+      this.galacticLog.message(
+        'Star Map Expedition: survey all sites for a 3,000-credit grant. Known sites are listed in the galactic log.'
+      );
     }
+    if (!this.setup.restore && g.universalRules?.envoy)
+      this.galacticLog.message('Diplomatic envoy: send Mon Mothma to Bespin. See the galactic log for the rendezvous.');
     onOrbit((planet, owner, units, raid) => {
       if (this.galaxy.planets.includes(planet)) this.story?.fleetEntered?.({ owner, units, raid: raid ? planet.index : undefined }, planet);
     });
     onLanded((g, planet, unit) => {
-      if (g === this.galaxy) this.story?.unitLanded?.(planet, unit);
+      if (g === this.galaxy) {
+        this.story?.unitLanded?.(planet, unit);
+        if (g.universalRules?.envoy?.state === 'travel') envoyArrival(this, planet, unit.owner, [unit]);
+      }
     });
     onControllerChange((planet, old, now, bonus, surveyed, invasion) => {
       if (!this.over && this.galaxy.universalRules?.rescue?.state === 'captive') prisonChanged(this, planet, old, now, invasion);
@@ -3759,6 +3767,7 @@ export class GalacticGame {
         }
         this.sweepEmptyFleets();
         stepFleets(this.galaxy, dt * LOGIC_FPS, (f, p) => {
+          if (this.galaxy.universalRules?.envoy?.state === 'travel') envoyArrival(this, this.galaxy.planets[p], f.owner, f.units);
           const raid = f.raid === p && isRaidForce(f) ? [...f.units] : null;
           this.story?.fleetEntered?.({ ...f, raid: raid ? p : undefined }, this.galaxy.planets[p]);
           delete f.raid;
@@ -3777,6 +3786,8 @@ export class GalacticGame {
           }
           if (raid) this.raidLanding(raid, p);
         });
+        if (this.galaxy.universalRules?.envoy) envoyUpdate(this);
+        if (this.galaxy.universalRules?.canon) stepCanonOrder(this);
         this.warnApproaching();
         this.battles.update();
         stepVisibility(this.galaxy, this.me, dt * LOGIC_FPS);

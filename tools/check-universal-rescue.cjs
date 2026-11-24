@@ -124,6 +124,15 @@ const { chromium } = require('playwright-core'),
       if (alternate) {
         await run.evaluate(() => setTimeout(() => location.reload(), 0));
         await run.waitForFunction(() => window.game?.setup?.restore && game.galaxy?.universalRules?.rescue?.state === 'captive');
+        await run.evaluate(() => game.galacticLog.show(0));
+        const locate = f.getByRole('button', { name: `Locate: ${result.prison}`, exact: true });
+        await locate.press('Enter');
+        assert(
+          await run.evaluate(n => {
+            const p = game.galaxy.planets[game.selected];
+            return !game.galacticLog.opened && p.name === n && game.view.x === p.pos[0] && game.view.y === p.pos[1];
+          }, result.prison)
+        );
         const released = await run.evaluate(async ({ prison, id }) => {
           const g = game.galaxy;
           game.paused = true;

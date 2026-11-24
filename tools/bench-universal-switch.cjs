@@ -140,6 +140,7 @@ const { chromium } = require('playwright-core'),
       await year.focus();
       await year.press('Home');
       await year.press('ArrowRight');
+      await board.locator('tr[data-profile="1976399102"] [data-size-group="Known Galaxy"]').click();
       const results = [];
       for (const [action, size, era] of [
         ['Small', 'Small', 2],

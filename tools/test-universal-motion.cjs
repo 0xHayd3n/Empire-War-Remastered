@@ -125,7 +125,7 @@ const assert = require('node:assert/strict'),
     checkTravel(zoomOut, 1.18, 1);
     // Hold an uncached lane job, select another map, then deliver the obsolete reply.
     // The real renderer can paint the latest map only; do not dissolve via the old still.
-    const choices = board.locator('.uc-map-choice'),
+    const choices = board.locator('tr[data-profile="stock"] .uc-map-choice:visible'),
       surface = board.locator('.uc-planets');
     await board.evaluate(e => {
       const post = Worker.prototype.postMessage,

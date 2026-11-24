@@ -8,6 +8,7 @@ import { inactiveWorlds } from '../public/js/game/universalcontextworlds.js';
 import { galaxyChart, sectorView } from '../public/js/game/universalgalaxychart.js';
 import { overviewView } from '../public/js/game/universalviewcamera.js';
 import { mapFamilies, mapStart, planetCount } from '../public/js/game/universalmaplist.js';
+import { mapSections } from '../public/js/game/universalmapgroups.js';
 import { yearStops, nearestStop } from '../public/js/game/universalyeartrack.js';
 import { eraTimeline, startWithin } from '../public/js/game/universaltimeline.js';
 import { launchPlan } from './universal-atlas.mjs';
@@ -334,6 +335,42 @@ const ff = { members: [{}], p: { maps: [{ worlds: [1, 2] }, { worlds: [1, 2, 3] 
   variations = [{ choices: [{ variant: { map: 0 } }, { variant: { map: 1 } }] }];
 assert.equal(planetCount(ff, variations), '2–3 planets');
 assert.equal(planetCount(ff, variations, { map: 0 }), '2 planets');
+// Group only unambiguous sizes from the same profile, section and historical span.
+// Engine IDs are not a scenario genre; a story campaign can have a Sandbox_* ID.
+{
+  const fam = (title, id = 'p', span = '') => ({ id: 'Sandbox_Test', title, p: { id }, span, members: [{}] });
+  const families = [
+    fam('Unknown'),
+    fam('SANDBOX -- Atlas - Small'),
+    fam('RANDOM -- Atlas - Large'),
+    fam('Story -- Atlas - Large'),
+    fam('STORY -- Atlas - Small'),
+    fam('Story -- Atlas - Small', 'q'),
+    fam('Story -- Atlas - Medium', 'p', '11 ABY'),
+    fam('story -- Island - Large'),
+    fam('STORY -- Island - Large'),
+    fam('STORY -- Island - Small')
+  ];
+  const sections = mapSections({ scenario: true, maps: new Map(families.map(f => [f, variations])) });
+  assert.deepEqual(
+    sections.map(s => s.name),
+    ['Story', 'Random', 'Sandbox', 'Miscellaneous']
+  );
+  const lists = sections.flatMap(s => s.rows),
+    groups = lists.filter(r => r.children);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].title, 'Atlas');
+  assert.deepEqual(
+    groups[0].children.map(r => r.title),
+    ['Large', 'Small']
+  );
+  const restored = lists.flatMap(r => r.children || [r]).map(r => r.f);
+  assert.equal(restored.length, families.length);
+  assert.deepEqual(new Set(restored), new Set(families));
+  assert.deepEqual(mapSections({ scenario: false, maps: new Map([[families[0], variations]]) }), [
+    { name: '', rows: [{ f: families[0], title: 'Unknown' }] }
+  ]);
+}
 assert.throws(() => assertPrivateLibrary(process.cwd(), { items: new Map() }), /private library/);
 // Synthetic rigid mesh and texture, not installed game art. Same normalized result at
 // either authored model scale, genuine material colors, transparent background and missing-art fallback.

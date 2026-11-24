@@ -53,7 +53,7 @@ const assert = require('node:assert/strict'),
       radio = (k, v) => field(k).locator(`input[type=radio][value="${v}"]`),
       checkedValue = k => field(k).locator('input:checked').inputValue(),
       slider = k => field(k).getByRole('slider'),
-      group = id => board.locator(`.uc-map-table tbody[data-profile="${id}"]`),
+      group = id => board.locator(`.uc-map-table tr[data-profile="${id}"]`),
       current = board.locator('.uc-map-choice[aria-pressed="true"]'),
       eras = board.getByRole('group', { name: 'Era', exact: true }),
       eraCard = name => eras.getByRole('button', { name, exact: true }),
@@ -163,7 +163,8 @@ const assert = require('node:assert/strict'),
     assert(await mode('Time-based').isDisabled());
     assert.equal(await mode('Scenario-based').getAttribute('aria-selected'), 'true');
     assert.deepEqual(await table.getByRole('columnheader').allTextContents(), ['Map', 'Category', 'Planets']);
-    assert.equal(await table.locator('tbody').count(), 3);
+    assert.equal(await table.locator('tr[data-profile]').evaluateAll(rs => new Set(rs.map(r => r.dataset.profile)).size), 3);
+    assert.deepEqual(await table.locator('.uc-scenario-heading').allTextContents(), ['Story', 'Random', 'Sandbox', 'Miscellaneous']);
     assert.equal(
       await table
         .locator('tr:has(.uc-map-choice)')
@@ -350,7 +351,12 @@ const assert = require('node:assert/strict'),
       }
       const date = { 3417277973: '3964 BBY', 1976399102: '22 BBY', 1125571106: '4 ABY' }[id] || 'Scenario starts';
       await selectPeriod(date);
-      await group(id).locator('.uc-map-choice').first().click();
+      const first = group(id).locator('.uc-map-choice').first();
+      if (!(await first.isVisible())) {
+        const rowId = await first.locator('xpath=ancestor::tr').getAttribute('id');
+        await group(id).locator(`[aria-controls~="${rowId}"]`).click();
+      }
+      await first.click();
       await setup('Faction').click();
       assert.equal(await board.getAttribute('data-profile'), id);
       const count = await board.locator('[data-planet]').count();
@@ -390,10 +396,56 @@ const assert = require('node:assert/strict'),
       }
     }
     await select('1976399102');
+    const fall = group('1976399102'),
+      cw = fall.locator('[data-size-group="The Clone Wars"]'),
+      cwRow = cw.locator('xpath=ancestor::tr'),
+      cwChildren = fall.locator('[data-family^="CloneWars_"]');
+    const prior = await board.getAttribute('data-campaign');
+    assert.equal(await cw.getAttribute('aria-expanded'), 'false');
+    assert(await cwChildren.first().isHidden());
+    assert.equal(await cwRow.locator('.uc-planet-count').innerText(), '80–115');
+    await cw.press('Space');
+    assert.equal(await board.getAttribute('data-campaign'), prior);
+    assert.deepEqual(await cwChildren.allInnerTexts(), ['Large', 'Medium', 'Small']);
+    assert.deepEqual(await cwChildren.locator('xpath=ancestor::tr').locator('.uc-planet-count').allInnerTexts(), ['115', '95', '80']);
+    await cw.press('ArrowRight');
+    assert(await cwChildren.first().evaluate(b => b === document.activeElement));
+    await cwChildren.first().press('Enter');
+    const selectedSize = await board.getAttribute('data-campaign');
+    assert.equal(selectedSize, 'Clone_Wars_Large_Era_2_Empire');
+    await cwChildren.first().press('ArrowLeft');
+    assert.equal(await board.getAttribute('data-campaign'), selectedSize);
+    assert.match(await cw.innerText(), /Selected: Large/);
+    assert.equal(await board.locator('.uc-map-table button[tabindex="0"]:visible').count(), 1);
+    await selectPeriod('21 BBY');
+    assert.equal(await cw.getAttribute('aria-expanded'), 'false');
+    await selectPeriod('22 BBY');
+    await selectPeriod('Scenario starts');
+    if (process.env.SWR_TEST_ALL_ERAS || (await group('3387971722').count())) {
+      assert.deepEqual(await board.locator('.uc-scenario-heading').allTextContents(), ['Story', 'Random', 'Sandbox', 'Miscellaneous']);
+      assert.equal(await group('3387971722').locator('.uc-map-choice').count(), 8);
+      const story = group('3387971722').locator('[data-size-group="Awakening of the Clone Wars"]');
+      await story.click();
+      assert.equal(await board.getAttribute('data-campaign'), '');
+      assert.deepEqual(await story.locator('xpath=ancestor::tbody').locator('.uc-map-choice:visible').allInnerTexts(), [
+        'Full Campaign',
+        'Full Big Campaign',
+        'Lite Big Campaign'
+      ]);
+      if (process.env.SWR_TEST_SCREENSHOTS)
+        await board.locator('.uc-panel').screenshot({ path: path.join(process.env.SWR_TEST_SCREENSHOTS, 'clone-wars-sections.png') });
+      const random = board.getByRole('rowheader', { name: 'Random', exact: true }).locator('xpath=ancestor::tbody');
+      await random.locator('.uc-size-group').click();
+      const big = random.locator('[data-family="Awakening_of_the_Clone_Wars_Big_Campaign_Random_CIS"]');
+      assert.equal(await big.innerText(), 'Full Random · Big');
+      await big.click();
+      assert.equal(await board.getAttribute('data-campaign'), 'Awakening_of_the_Clone_Wars_Big_Campaign_Random_CIS');
+      assert.equal(await board.locator('[data-planet]').count(), 189);
+    }
+    await select('1976399102');
     await radio('faction', 'Rebel').check();
     assert.match(await board.getAttribute('data-campaign'), /Rebel/i);
     await radio('faction', 'Empire').check();
-    const fall = group('1976399102');
     await selectPeriod('20 BBY');
     await fall.getByRole('button', { name: /Known Galaxy - Medium/ }).click();
     assert.match(await board.getAttribute('data-campaign'), /Medium_Era_4_Empire/i);
@@ -520,7 +572,12 @@ const assert = require('node:assert/strict'),
     if (process.env.SWR_TEST_THR) {
       await select('1125571106');
       await radio('faction', 'Empire').check();
-      await group('1125571106').locator('[data-family="KnownSmall_Era_1_Rebel"]').click();
+      const small = group('1125571106').locator('[data-family="KnownSmall_Era_1_Rebel"]');
+      if (!(await small.isVisible())) {
+        const id = await small.locator('xpath=ancestor::tr').getAttribute('id');
+        await group('1125571106').locator(`[aria-controls~="${id}"]`).click();
+      }
+      await small.click();
       await selectPeriod('11.5 ABY');
       assert.equal(await year.inputValue(), '11.5');
       await selectPeriod('6 ABY');

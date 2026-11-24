@@ -81,11 +81,18 @@ export function mapFamilies(p) {
 }
 // Count playable locations, not decorative atlas entries. An unselected family can have
 // different authored rosters; only a selected variant has a single definitive count.
-export function planetCount(f, dates, variant) {
+export function planetRange(f, dates, variant) {
   const counts = (variant ? [variant] : dates.flatMap(d => d.choices.map(s => s.variant))).map(v => f.p.maps[v.map].worlds.length);
-  const lo = Math.min(...counts),
-    hi = Math.max(...counts);
-  return `${lo === hi ? lo : `${lo}–${hi}`} ${f.members.every(r => r.scripted) ? 'setup ' : ''}planet${hi === 1 ? '' : 's'}`;
+  return [Math.min(...counts), Math.max(...counts)];
+}
+export function countLabel([lo, hi], setup) {
+  return `${lo === hi ? lo : `${lo}–${hi}`} ${setup ? 'setup ' : ''}planet${hi === 1 ? '' : 's'}`;
+}
+export function planetCount(f, dates, variant) {
+  return countLabel(
+    planetRange(f, dates, variant),
+    f.members.every(r => r.scripted)
+  );
 }
 export function mapStart(family, priorDate, preferredFaction) {
   const base = family.members.find(r => r.faction === preferredFaction) || family.members[0];

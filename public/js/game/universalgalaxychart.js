@@ -86,7 +86,7 @@ export function galaxyChart(profiles) {
       if (!shared && !uncharted) coordinates.set(k, placed.slice(2, 5));
       placed[6] *= scale;
       locations.set(i, { id: k, placed, uncharted });
-      if (!uncharted && context.has(i) && !catalog.has(k)) catalog.set(k, { id: k, planet: placed });
+      if (!uncharted && context.has(i) && !catalog.has(k)) catalog.set(k, { id: k, planet: placed, profile: p });
       frame.push(placed);
     }
     rows.set(p, locations);

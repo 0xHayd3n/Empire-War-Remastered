@@ -59,7 +59,7 @@ self.onmessage = async ({ data: q }) => {
     const materials = [],
       bounds = [];
     await Promise.all(
-      [...q.worlds, ...q.scenery].map(async (p, i) => {
+      (q.pass === 'lanes' ? [] : [...q.worlds, ...q.scenery]).map(async (p, i) => {
         const [, , , , , file, scale, layer, excluded] = p;
         if (!file) return;
         const world = i < q.worlds.length,
@@ -144,7 +144,7 @@ self.onmessage = async ({ data: q }) => {
       batch.setSparkColor(rt, 0, 0, 0, 0);
     }
     batch.flush();
-    if (!placed) throw Error('No planet models');
+    if (!placed && q.pass !== 'lanes') throw Error('No planet models');
     renderGalacticScenes(renderer, cam, ...scenes);
     if (ring?.image?.width > 1) {
       // Gameplay's G_PLANET_RING is a screen-space texture tinted to the visible owner.
@@ -169,7 +169,8 @@ self.onmessage = async ({ data: q }) => {
           );
         const s = new THREE.Sprite(styles.get(color));
         s.position.set(u * q.w, (1 - v) * q.h, 0);
-        s.scale.set(ring.image.width * scale, ring.image.height * scale, 1);
+        const diameter = q.pass === 'lanes' ? q.ringDiameter : ring.image.width * scale;
+        s.scale.set(diameter, (diameter * ring.image.height) / ring.image.width, 1);
         hud.add(s);
         const du = s.scale.x / (2 * q.w),
           dv = s.scale.y / (2 * q.h);

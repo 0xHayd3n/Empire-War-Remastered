@@ -1,3 +1,4 @@
+import { planetArt, planetDiameter, nameSize } from './universalplanetart.js';
 import { contextWorlds } from './universalcontextworlds.js';
 import { planetPool } from './universalplanetpool.js';
 import { crest } from './universalcontrols.js';
@@ -43,7 +44,7 @@ function save(cache, id, result) {
   }
 }
 export function strategicPreview(host) {
-  host.innerHTML = `<div class="uc-map" role="group" aria-label="Starting galaxy map" tabindex="0"><div class="uc-plane"><canvas class="uc-backplate"></canvas><canvas class="uc-planets"></canvas></div><canvas class="uc-context" role="img" aria-label="Other charted worlds, outside this map"></canvas><div class="uc-worlds"></div></div><span class="uc-context-note">Gray worlds · outside this map</span><div class="uc-key" aria-label="Faction key"></div>`;
+  host.innerHTML = `<div class="uc-map" role="group" aria-label="Starting galaxy map" tabindex="0"><div class="uc-plane"><canvas class="uc-backplate"></canvas><canvas class="uc-planets"></canvas></div><canvas class="uc-context" role="img" aria-label="Other charted worlds, outside this map"></canvas><canvas class="uc-active-globes" aria-hidden="true"></canvas><div class="uc-worlds"></div></div><span class="uc-context-note">Gray worlds · outside this map</span><div class="uc-key" aria-label="Faction key"></div>`;
   const map = host.querySelector('.uc-map'),
     plane = host.querySelector('.uc-plane'),
     sky = host.querySelector('.uc-backplate'),
@@ -54,7 +55,7 @@ export function strategicPreview(host) {
     key = host.querySelector('.uc-key'),
     plates = new Map(),
     shots = new Map(),
-    ghosts = contextWorlds(host.querySelector('.uc-context'), labels),
+    ghosts = contextWorlds(host.querySelector('.uc-context'), host.querySelector('.uc-active-globes'), labels),
     pool = planetPool();
   let contextKey, contextProjection;
   let chart,
@@ -75,7 +76,7 @@ export function strategicPreview(host) {
     y = Math.min(0, Math.max(map.clientHeight * (1 - zoom), y));
     map.toggleAttribute('data-zoomed', zoom > 1);
     ghosts.move(map.clientWidth, map.clientHeight, x, y, zoom);
-    labels.style.setProperty('--label-scale', 1 / zoom);
+    map.style.setProperty('--globe-size', planetDiameter + 'px');
     labels.style.transform = plane.style.transform = `translate(${x}px,${y}px) scale(${zoom})`;
   }
   function scale(f, px, py) {
@@ -184,7 +185,8 @@ export function strategicPreview(host) {
         h,
         chart.frame
       ).labels;
-      contextProjection = chart.catalog.map(({ id, planet }, i) => ({
+      contextProjection = chart.catalog.map(({ id, planet, profile }, i) => ({
+        art: planetArt(profile, planet),
         id,
         name: planet[1] || planet[0],
         u: projected[i][0],
@@ -192,11 +194,14 @@ export function strategicPreview(host) {
       }));
       contextKey = plateId;
     }
-    ghosts.set(
+    const sprites = !!p.sheets,
+      activeArt = onlySky ? [] : worlds.map(world => planetArt(p, world));
+    const portraitsReady = ghosts.set(
       contextProjection,
       new Set(onlySky ? [] : m.worlds.map(([i]) => chart.world(p, i).id)),
       onlySky ? [] : view.labels,
-      worlds.map(p => p[1] || p[0])
+      worlds.map(p => p[1] || p[0]),
+      sprites ? activeArt : null
     );
     host.querySelector('.uc-context-note').hidden = onlySky;
     if (!onlySky)
@@ -205,7 +210,7 @@ export function strategicPreview(host) {
         labels.children[i].style.top = v * 100 + '%';
       });
     labels.style.setProperty('--planet-type', JSON.stringify(p.overlay.font));
-    labels.style.setProperty('--planet-size', Math.max(8, Math.min(12, p.overlay.pt * 1.6 * Math.min(w / 1024, h / 768))) + 'px');
+    labels.style.setProperty('--planet-size', nameSize + 'px');
     if (plateId !== skyKey) {
       skyJob?.abort();
       skyKey = plateId;
@@ -249,7 +254,10 @@ export function strategicPreview(host) {
     const paint = result => {
       ctx.drawImage(result.bitmap, 0, 0);
       ghosts.protectModels(result.bounds);
-      host.dataset.scene = 'native';
+      host.dataset.scene = 'loading';
+      portraitsReady.then(() => {
+        if (requestKey === id) host.dataset.scene = 'native';
+      });
       host.dataset.models = String(result.placed);
       host.dataset.reused = String(result.reused);
       host.dataset.routes = String(result.routes);
@@ -275,7 +283,8 @@ export function strategicPreview(host) {
           mount,
           {
             ...base,
-            pass: 'worlds',
+            pass: sprites ? 'lanes' : 'worlds',
+            ringDiameter: ((planetDiameter + 2.5) * W) / w,
             worlds,
             backplate,
             overlay: p.overlay,
@@ -306,6 +315,7 @@ export function strategicPreview(host) {
     clear,
     setLibrary(profiles) {
       chart = galaxyChart(profiles);
+      ghosts.library(profiles);
       contextKey = null;
     },
     dispose() {
@@ -343,7 +353,11 @@ export function strategicPreview(host) {
           if (fact?.ink?.length === 3) el.style.setProperty('--ink', `rgb(${fact.ink.join(',')})`);
           el.textContent = planet[1] || planet[0];
           el.title =
-            el.textContent + ' — ' + (fact?.label || o || 'Unclaimed') + (chart.world(p, i).uncharted ? ' · Uncharted setup location' : '');
+            el.textContent +
+            ' — ' +
+            (fact?.label || o || 'Unclaimed') +
+            (chart.world(p, i).uncharted ? ' · Uncharted setup location' : '') +
+            (p.sheets && !planet[9] ? ' · No visible surface in source model' : '');
           labels.append(el);
           counts.set(o, (counts.get(o) || 0) + 1);
         }

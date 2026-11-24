@@ -14,7 +14,7 @@ function stockStamp(game) {
     h = createHash('sha256');
   try {
     for (const [k, e] of v.index) {
-      if (!/^DATA\\(?:XML\\|TEXT\\|RESOURCES\\GUIDIALOG\\|ART\\TEXTURES\\(?:MT_COMMANDBAR\.|I_))/.test(k)) continue;
+      if (!/^DATA\\(?:XML\\|TEXT\\|RESOURCES\\GUIDIALOG\\|ART\\(?:MODELS|TEXTURES)\\)/.test(k)) continue;
       const file = e.file || e.meg;
       if (!stats.has(file)) {
         const s = fs.statSync(file);
@@ -95,15 +95,17 @@ export function atlasStore({ home, library, eras }) {
   assertPrivateLibrary(home, library);
   const directory = path.join(home, 'campaign-atlas-v1'),
     ticket = new Map(),
-    sets = new Map();
+    sets = new Map(),
+    allowedSheets = new Set();
   let stamp,
     queue = Promise.resolve();
   async function one(id, lang) {
     stamp ??= stockStamp(library.game);
     const rev = id === 'stock' ? 'stock' : JSON.parse(fs.readFileSync(path.join(home, 'profiles', id + '.json'))).revision;
-    const filename = path.join(directory, `${id}-${lang}-${digest('galaxy-locations-1:' + stamp + ':' + rev)}.gz`);
+    const filename = path.join(directory, `${id}-${lang}-${digest('planet-portraits-2:' + stamp + ':' + rev)}.gz`);
     try {
-      return JSON.parse(gunzipSync(fs.readFileSync(filename)));
+      const p = JSON.parse(gunzipSync(fs.readFileSync(filename)));
+      if (p.sheets.every(s => /^[a-f0-9]{64}$/.test(s) && fs.existsSync(path.join(home, 'planet-portraits-v1', s + '.png')))) return p;
     } catch {}
     const p = await build({ game: library.game, home, folder: library.items.get(id)?.folder, id, language: lang });
     fs.mkdirSync(directory, { recursive: true });
@@ -133,6 +135,7 @@ export function atlasStore({ home, library, eras }) {
           }
         }
         if (!profiles.length) throw Error('No campaign catalogs available.');
+        for (const p of profiles) for (const s of p.sheets) allowedSheets.add(s);
         const atlas = { profiles, eras: eras(), unavailable, language: lang };
         return { atlas, bytes: gzipSync(JSON.stringify(atlas)) };
       });
@@ -170,6 +173,11 @@ export function atlasStore({ home, library, eras }) {
   return {
     get,
     picture,
+    portrait(hash) {
+      return /^[0-9a-f]{64}$/.test(hash) && allowedSheets.has(hash)
+        ? fs.readFileSync(path.join(home, 'planet-portraits-v1', hash + '.png'))
+        : null;
+    },
     closeArt,
     async issue(q) {
       const a = (await get(q.language)).atlas,

@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { rasterPortrait } from './universal-planet-portraits.mjs';
+import { tileSize, planetArt } from '../public/js/game/universalplanetart.js';
 import { planetPool } from '../public/js/game/universalplanetpool.js';
 import { inactiveWorlds } from '../public/js/game/universalcontextworlds.js';
 import { galaxyChart, sectorView } from '../public/js/game/universalgalaxychart.js';
@@ -331,6 +333,50 @@ const ff = { members: [{}], p: { maps: [{ worlds: [1, 2] }, { worlds: [1, 2, 3] 
 assert.equal(planetCount(ff, variations), '2–3 planets');
 assert.equal(planetCount(ff, variations, { map: 0 }), '2 planets');
 assert.throws(() => assertPrivateLibrary(process.cwd(), { items: new Map() }), /private library/);
+// Synthetic rigid mesh and texture, not installed game art. Same normalized result at
+// either authored model scale, genuine material colors, transparent background and missing-art fallback.
+{
+  const triangle = scale => ({
+    bones: [],
+    meshes: [
+      {
+        name: 'body_ALT0',
+        subs: [
+          {
+            material: { shader: 'planet.fx', params: { BaseTexture: 'land' } },
+            geometry: {
+              nVerts: 3,
+              indices: [0, 1, 2],
+              vertices: {
+                pos: [-1, 0, -1, 1, 0, -1, 0, 0, 1].map(n => n * scale),
+                nrm: [0, -1, 0, 0, -1, 0, 0, -1, 0],
+                uv: [0, 0, 1, 0, 0.5, 1]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  });
+  const tex = name => (name === 'land' ? { width: 1, height: 1, data: [180, 65, 10, 255] } : null);
+  const a = rasterPortrait(triangle(1), tex),
+    b = rasterPortrait(triangle(4), tex);
+  assert.equal(a.length, tileSize ** 2 * 4);
+  assert.deepEqual(a, b);
+  assert.equal(a[3], 0);
+  const center = ((tileSize / 2) * tileSize + tileSize / 2) * 4;
+  assert.equal(a[center + 3], 255);
+  assert(a[center] > a[center + 1]);
+  assert.equal(
+    rasterPortrait(triangle(1), () => null),
+    null
+  );
+  const row = Array(9)
+    .fill(null)
+    .concat([[0, 3]]);
+  assert.deepEqual(planetArt({ sheets: ['local'] }, row), ['local', 3]);
+  assert.equal(planetArt({}, row), null);
+}
 // A -> B -> C during upload must never paint A, waste an upload on B, or lose C.
 {
   const jobs = [],

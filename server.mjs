@@ -121,6 +121,12 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(302, { Location: '/play.html', 'Cache-Control': 'no-store' }); return res.end();
     }
     if (session.eras && p === '/api/universal/eras') return send(res, 200, JSON.stringify(session.eras()), MIME['.json'], { 'Cache-Control':'no-store' });
+    if (session.atlas && p.startsWith('/api/universal/portraits/')) {
+      const id = /^\/api\/universal\/portraits\/([a-f0-9]{64})\.png$/.exec(p)?.[1];
+      try { const bytes = req.method === 'GET' && id && session.atlas.portrait(id);
+        return bytes ? send(res, 200, bytes, 'image/png', {'Cache-Control':'private, max-age=31536000, immutable'}) : send(res,404,'Unknown preview sheet.');
+      } catch { return send(res,404,'Preview sheet unavailable.'); }
+    }
     if (session.atlas && p.startsWith('/api/universal/art/')) {
       const match = /^\/api\/universal\/art\/(stock|\d+)\/(stock|[a-f0-9]{64})\/asset\/(.+)$/i.exec(p);
       if (req.method!=='GET'||!match) return send(res,404,'Unknown preview asset.');

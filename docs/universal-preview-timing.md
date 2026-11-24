@@ -1,5 +1,19 @@
 # Galactic Conquest preview switching
 
+## Normalized planet portraits
+
+Compared `4440d61`'s native per-map planet instances with private, 128×128 portraits baked from each installed model/material set. Same local library, viewport, two fresh Chrome contexts per build and the nine inputs described below. The painted milestone on the new build includes decoding the selected map's portraits and drawing its native routes/rings. In both runs all 18 target IDs matched.
+
+| Fall preview on this PC | Previous | Portraits |
+| --- | ---: | ---: |
+| First Fall map, individual times | 5.51 / 4.92 s | 1.03 / 0.60 s |
+| Following 16 map/year switches, median | 1.07 s | 0.13 s |
+| Following switches, range | 0.15–2.18 s | 0.10–0.27 s |
+
+This is browsing with an indexed library, not first-install time or gameplay FPS. The one-time local indexing pass with portrait generation took about 47 s in a development run. The final seven-profile set has 46 PNG sheets (20.9 MiB encoded). Of 2,286 pack-scoped world records, 2,264 had visible textured mesh art; the other 22 use three invisible/particle-only model names. These are not 2,286 distinct named systems. The chooser requests every sheet but prioritizes the map being opened. No generated art belongs in the repository.
+
+## Earlier comparison: per-map worker versus reusable model pool
+
 Local installed-data Chrome check, 1366×768. Baseline: `f003534` (fresh WebGL worker on every uncached map). Candidate: shared chart with gray context, per-profile model pool, same three-entry whole-still cache. Both use the same cached local library, the actual title screen and native Galactic Conquest button. No saves or campaigns are launched by this benchmark.
 
 `node tools/bench-universal-switch.cjs` opens two fresh browser contexts. In each, from the loaded stock preview it switches to Clone Wars, 22 BBY, then selects Fall's Known Galaxy Small, advances through 21/20/19 BBY, switches to Medium at 19, steps to 20/21, returns to Small at 21, then 22. Each sample begins on the click/keydown event and ends after two animation frames with the active foreground marked native. All 18 destination IDs matched between builds. Indexing, starting the game and entering an actual campaign are excluded.

@@ -6,6 +6,7 @@ import { gzipSync, gunzipSync } from 'node:zlib';
 import { openGame } from './megfs.mjs';
 import { assertPrivateLibrary, loadPack } from './universal-library.mjs';
 import { languageId } from '../public/js/language.js';
+import { thrawnRevision } from './universal-loader-table.mjs';
 import { fallCustomRevision } from './universal-fall-layouts.mjs';
 import { validValue } from '../public/js/game/universalrules.js';
 const digest = s => createHash('sha256').update(s).digest('hex');
@@ -76,6 +77,11 @@ export function launchPlan(atlas, q) {
     universalPath: 1,
     universalOptions: options
   };
+  if (q.opening !== undefined) {
+    if (!r.customOpening || !['learner', 'static', 'progressive'].includes(q.opening) || q.progressive !== undefined)
+      throw Error('Custom opening unavailable.');
+    if (q.opening !== 'static') setup.startingTechLevel = q.opening === 'learner' ? 5 : 4;
+  }
   if (q.progressive != null) {
     if (typeof q.progressive !== 'boolean' || !r.eraProgression) throw Error('Era progression unavailable.');
     // The native FTGU popup sends reward parameter 4 for progressive, and no override for static.
@@ -128,7 +134,12 @@ export function atlasStore({ home, library, eras }) {
     const rev = id === 'stock' ? 'stock' : JSON.parse(fs.readFileSync(path.join(home, 'profiles', id + '.json'))).revision;
     // Only the reviewed Fall revision gained maps/geometry. Other warm profiles
     // can add the payment metadata without re-parsing campaigns or portrait art.
-    const schema = id === '1976399102' && rev === fallCustomRevision ? 'fall-custom-layouts-1:' : 'planet-portraits-2:';
+    const schema =
+      id === '1125571106' && rev === thrawnRevision
+        ? 'thrawn-custom-opening-1:'
+        : id === '1976399102' && rev === fallCustomRevision
+          ? 'fall-custom-layouts-1:'
+          : 'planet-portraits-2:';
     const filename = path.join(directory, `${id}-${lang}-${digest(schema + stamp + ':' + rev)}.gz`);
     let cached;
     try {

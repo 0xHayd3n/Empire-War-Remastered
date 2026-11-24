@@ -95,6 +95,22 @@ const openings = {
 assert.deepEqual(thrawnSelections(openings, { FTGU: { '4ABY': { EMPIRE: true, REBEL: false }, '6ABY': { EMPIRE: true } } }), [
   { map: 'FTGU', targets: [['FTGU_Era_1_EMPIRE', '4 ABY']] }
 ]);
+const customStarts = thrawnSelections(
+  { ...openings, CustomMaps: ['Custom_Small'] },
+  { Custom_Small: { '4ABY': { REBEL: true, EMPIRE: false }, '6ABY': { EMPIRE: true } } }
+);
+assert.deepEqual(customStarts, [{ map: 'Custom_Small', targets: [['Custom_Small_Era_1_REBEL', '4 ABY']] }]);
+const learnerAtlas = structuredClone(atlas);
+learnerAtlas.profiles[0].rows[0].customOpening = true;
+for (const [opening, level] of [
+  ['static', undefined],
+  ['learner', 5],
+  ['progressive', 4]
+])
+  assert.equal(launchPlan(learnerAtlas, { ...q, opening }).setup.startingTechLevel, level);
+assert.throws(() => launchPlan(atlas, { ...q, opening: 'learner' }));
+assert.throws(() => launchPlan(learnerAtlas, { ...q, opening: 5 }));
+assert.throws(() => launchPlan(learnerAtlas, { ...q, opening: 'learner', progressive: true }));
 const staticAtlas = structuredClone(atlas);
 staticAtlas.profiles[0].rows[0].eraProgression = true;
 assert.equal(launchPlan(staticAtlas, q).setup.startingTechLevel, undefined);

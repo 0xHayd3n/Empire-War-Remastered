@@ -16,7 +16,7 @@ import { laneKit } from './universal-lane-kit.mjs';
 import { planetSheets } from './universal-planet-portraits.mjs';
 import { catalogFactionArt } from './universal-faction-art.mjs';
 import { fallCustomLayouts, fallCustomRevision } from './universal-fall-layouts.mjs';
-import { menuTable, thrawnSelections } from './universal-loader-table.mjs';
+import { menuTable, thrawnSelections, thrawnRevision, customOpenings } from './universal-loader-table.mjs';
 import { campaignChoices } from '../public/js/game/universalcampaign.js';
 const { game, home, folder, id, language } = workerData,
   pack = id === 'stock' ? null : loadPack(home, id, folder),
@@ -256,16 +256,18 @@ try {
       });
     }
   }
-  if (id === '1125571106' && pack.revision === '5b2ceff618f502cf23a6d052d18d2cc895720a36462f9b4d28c5094515f311c4') {
+  if (id === '1125571106' && pack.revision === thrawnRevision) {
     const menu = data.campaigns.get('GCMENU_REBEL');
     if (menu?.str('Story_Name').toUpperCase().includes('STORY_PLOTS_GCMENU.XML')) {
       const add = (c, variants, order, family, scripted = false) => {
-        const faction = c.str('Starting_Active_Player');
+        const faction = c.str('Starting_Active_Player'),
+          layout = customOpenings.get(family.replace(/^selector:/, ''));
         rows.push({
           id: c.name,
           family,
           ...(family === 'selector:FTGU' ? { eraProgression: true } : {}),
-          label: label(c),
+          ...(layout ? { customOpening: true, layout: { group: label(c), name: layout } } : {}),
+          label: layout ? `${label(c)} · ${layout}` : label(c),
           description: db.t(c.str('Description_Text')),
           faction,
           base: campaignDefaults(c, faction),
@@ -279,6 +281,7 @@ try {
       };
       // Keep the original menu reachable for warlord and custom starts with additional authored decisions.
       add(menu, [variant(menu, 'Original in-game selector')], 10000, '', true);
+      const nameMatchesFaction = c => c.name.toUpperCase().endsWith('_' + c.str('Starting_Active_Player').toUpperCase());
       const table = n => menuTable(read(`Data/Scripts/Story/GCMenu${n}.lua`).toString());
       for (const { map, targets } of thrawnSelections(table('Translator'), table('_FactionsbyMapEra'))) {
         const choices = targets
@@ -289,7 +292,8 @@ try {
               !c.bool('Is_Multiplayer') &&
               !c.bool('Tutorial') &&
               c.list('Locations').length > 1 &&
-              db.faction(c.str('Starting_Active_Player'))
+              db.faction(c.str('Starting_Active_Player')) &&
+              (!customOpenings.has(map) || (nameMatchesFaction(c) && campaignDefaults(c, c.str('Starting_Active_Player')).maxTech >= 5))
           );
         if (choices.length)
           add(

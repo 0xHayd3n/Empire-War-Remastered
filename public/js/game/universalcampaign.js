@@ -125,6 +125,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     if (next.p !== p) defaults();
     if (s.row !== row) {
       settings = {};
+      if (!s.row.customOpening || !row?.customOpening) delete options.opening;
       if (s.row.scripted) delete options.payAsYouGo;
       if (!s.row.eraProgression || !row?.eraProgression) delete options.progressive;
     }
@@ -240,9 +241,11 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
       ? `Expedition: capture ${v.sites.join(', ')} for a one-time 3,000-credit grant.`
       : row?.scripted
         ? 'Authored setup scenario. Its script chooses the final galaxy after launch.'
-        : row?.layout
-          ? 'Choose starting locations and rosters in-game, using the mod’s own setup.'
-          : '';
+        : row?.customOpening
+          ? 'Choose Learner, Static era or Progressive era in Settings.'
+          : row?.layout
+            ? 'Choose starting locations and rosters in-game, using the mod’s own setup.'
+            : '';
   }
   function render() {
     ui.el.toggleAttribute('data-await-map', !family);
@@ -287,6 +290,18 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
       difficulty,
       n => (difficulty = n)
     );
+    if (row.customOpening)
+      ui.field(
+        'opening',
+        'Custom opening',
+        [opt('static', 'Static era'), opt('learner', 'Learner · standard roster and heroes'), opt('progressive', 'Progressive era')],
+        options.opening ?? 'static',
+        value => {
+          if (value === 'static') delete options.opening;
+          else options.opening = value;
+        }
+      );
+    else ui.hide('opening');
     if (row.eraProgression)
       ui.field(
         'progression',

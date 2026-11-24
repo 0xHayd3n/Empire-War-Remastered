@@ -38,18 +38,20 @@ export function menuTable(source) {
 }
 // This release enables the first seven progressive era buttons. A map/date/faction must also be enabled
 // in the authored availability table and resolve to a real single-player scenario in the mounted VFS.
+export const thrawnRevision = '5b2ceff618f502cf23a6d052d18d2cc895720a36462f9b4d28c5094515f311c4';
+export const customOpenings = new Map(['Small', 'Medium', 'Large', 'FTGU', 'Influencers'].map(size => ['Custom_' + size, size]));
 export function thrawnSelections(trans, availability) {
   const rows = [];
-  // The standard FTGU opener has one extra native choice (static or progressive). Custom_FTGU
-  // uses a different selector, including learner mode; leave it and later FTGU starts there.
-  const ftgu = trans.CustomMaps?.includes('FTGU') ? ['FTGU'] : [];
+  // Only the 4 ABY Custom/FTGU opening is translated. Later starts, including
+  // the additional 6 ABY Imperial regime dialog, remain in the native selector.
+  const ftgu = (trans.CustomMaps || []).filter(m => m === 'FTGU' || customOpenings.has(m));
   for (const map of [...trans.ProgressiveMaps, ...trans.RegionalMaps, ...trans.HistoricalMaps, ...ftgu]) {
     const historical = trans.HistoricalMaps.includes(map);
     for (const faction of trans.AllFactions) {
       if (faction === 'IMPERIAL_PROTEUS') continue; // separate subfaction chooser, not an ordinary start
       const targets = [];
       for (const era of historical ? ['Historical'] : trans.ProgressiveEras.slice(0, 7)) {
-        if (map === 'FTGU' && era !== '4ABY') continue;
+        if (ftgu.includes(map) && era !== '4ABY') continue;
         if (availability[map]?.[era]?.[faction] !== true) continue;
         const base = [map, historical ? '' : trans.Era_XML_Nums[era], faction].filter(Boolean).join('_'),
           date = historical ? '' : era.replace('ABY', ' ABY');

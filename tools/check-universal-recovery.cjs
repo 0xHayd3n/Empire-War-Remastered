@@ -168,7 +168,11 @@ const { chromium } = require('playwright-core'),
     });
     assert(at.ticks > 0 && at.ticks < 150);
     console.log('Natural boarding progress', at.ticks, at.dist);
-    await r.evaluate(() => setTimeout(() => location.reload(), 0));
+    // The old game can already satisfy the restore predicate (e.g. after the
+    // tactical return). Observe the game frame's reload before checking state.
+    const reloadSavedGame = () =>
+      Promise.all([page.waitForEvent('framenavigated', frame => frame === r), r.evaluate(() => setTimeout(() => location.reload(), 0))]);
+    await reloadSavedGame();
     await r.waitForFunction(() => window.game?.setup?.restore && !!game.loadedSave && !!game.recoveryHud);
     assert(
       await r.evaluate(
@@ -239,9 +243,11 @@ const { chromium } = require('playwright-core'),
       game.galacticLog.close();
       const { putSave, snapshot } = await import('/js/game/savegame.js');
       sessionStorage.setItem('swr-load', await putSave(snapshot(game, 'Recommissioned frigate')));
-      setTimeout(() => location.reload(), 0);
     });
-    await r.waitForFunction(() => window.game?.setup?.restore && game.galaxy?.recovery?.state === 'commissioned');
+    await reloadSavedGame();
+    await r.waitForFunction(
+      () => window.game?.setup?.restore?.recovery?.state === 'commissioned' && game.galaxy?.recovery?.state === 'commissioned'
+    );
     assert.deepEqual(await stats(), after);
     assert.deepEqual(errors, []);
     console.log('PASS: quote, cancel, one paid frigate and post-refit OPFS reload', before, price, after);

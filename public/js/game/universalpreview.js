@@ -55,6 +55,7 @@ export function strategicPreview(host) {
     ctx = canvas.getContext('2d'),
     labels = host.querySelector('.uc-worlds'),
     key = host.querySelector('.uc-key'),
+    named = new Map(),
     plates = new Map(),
     shots = new Map(),
     ghosts = contextWorlds(host.querySelector('.uc-context'), host.querySelector('.uc-active-globes'), labels),
@@ -62,7 +63,6 @@ export function strategicPreview(host) {
   let contextKey, contextProjection, library, firstShot, firstPlate, reusableSky;
   let chart,
     selection,
-    timer,
     sceneJob,
     skyJob,
     skyKey,
@@ -134,7 +134,6 @@ export function strategicPreview(host) {
     e.preventDefault();
   };
   function stopScene() {
-    clearTimeout(timer);
     sceneJob?.abort();
     sceneJob = null;
   }
@@ -144,6 +143,7 @@ export function strategicPreview(host) {
     pool.close();
     ghosts.clear();
     selection = skyJob = skyReady = skyKey = requestKey = null;
+    named.clear();
     labels.replaceChildren();
     key.replaceChildren();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -155,7 +155,6 @@ export function strategicPreview(host) {
     delete host.dataset.routes;
   }
   function layout() {
-    move();
     if (!selection || !map.clientWidth || !map.clientHeight) return;
     const { p, m, worlds, variant, onlySky } = selection,
       w = map.clientWidth,
@@ -183,6 +182,37 @@ export function strategicPreview(host) {
     y = h * (0.5 - zoom * sector.v);
     move();
     host.dataset.sectorZoom = String(zoom);
+    const sprites = !!p.sheets;
+    // A warm sky can be submitted immediately. Let the renderer process native lanes
+    // in parallel with label layout, form updates and drawing this map's portraits.
+    const readyPlate = plates.get(plateId);
+    let pending, renderLanes, signal;
+    if (!onlySky && !shots.has(id)) {
+      sceneJob = new AbortController();
+      signal = sceneJob.signal;
+      renderLanes = async backplate => {
+        signal.throwIfAborted();
+        if (chart.sky.length && !backplate) throw Error('Native backdrop unavailable');
+        return pool.request(
+          mount,
+          {
+            ...base,
+            pass: sprites ? 'lanes' : 'worlds',
+            laneKit: p.laneKit,
+            ringDiameter: ((planetDiameter + 2.5) * W) / w,
+            worlds,
+            backplate,
+            overlay: p.overlay,
+            colors: m.worlds.map(([, o]) => p.facts[o]?.color || '#bbb'),
+            scenery: [],
+            routes: m.routes,
+            looks: p.looks
+          },
+          signal
+        );
+      };
+      if (readyPlate && selection.continuing) pending = renderLanes(readyPlate.bitmap);
+    }
     if (contextKey !== plateId) {
       const projected = overviewView(
         chart.catalog.map(e => e.planet),
@@ -200,8 +230,7 @@ export function strategicPreview(host) {
       }));
       contextKey = plateId;
     }
-    const sprites = !!p.sheets,
-      activeArt = onlySky ? [] : worlds.map(world => planetArt(p, world));
+    const activeArt = onlySky ? [] : worlds.map(world => planetArt(p, world));
     const portraitsReady = ghosts.set(
       contextProjection,
       new Set(onlySky ? [] : m.worlds.map(([i]) => chart.world(p, i).id)),
@@ -279,45 +308,25 @@ export function strategicPreview(host) {
       paint(shots.get(id));
       return;
     }
-    sceneJob = new AbortController();
-    const signal = sceneJob.signal,
-      ready = skyReady;
     host.dataset.scene = 'loading';
-    timer = setTimeout(async () => {
-      try {
-        const backplate = await ready;
-        signal.throwIfAborted();
-        if (chart.sky.length && !backplate) throw Error('Native backdrop unavailable');
-        const result = await pool.request(
-          mount,
-          {
-            ...base,
-            pass: sprites ? 'lanes' : 'worlds',
-            laneKit: p.laneKit,
-            ringDiameter: ((planetDiameter + 2.5) * W) / w,
-            worlds,
-            backplate,
-            overlay: p.overlay,
-            colors: m.worlds.map(([, o]) => p.facts[o]?.color || '#bbb'),
-            scenery: [],
-            routes: m.routes,
-            looks: p.looks
-          },
-          signal
-        );
+    // A restored still has no live worker. Don't synchronously clone its whole sky on
+    // the first input's UI task. Continuing maps above already have a warm renderer.
+    const ready = skyReady;
+    (pending || (readyPlate ? new Promise(resolve => setTimeout(() => resolve(ready), 0)) : ready).then(renderLanes))
+      .then(result => {
         if (signal.aborted) {
           result.bitmap.close();
           return;
         }
         save(shots, id, result);
         paint(result);
-      } catch (e) {
+      })
+      .catch(e => {
         if (!signal.aborted) {
           console.warn('Galaxy preview:', e.message);
           host.dataset.scene = 'unavailable';
         }
-      }
-    }, 0);
+      });
   }
   const observer = new ResizeObserver(layout);
   observer.observe(map);
@@ -368,31 +377,50 @@ export function strategicPreview(host) {
         clear();
         return;
       }
-      selection = { p, m, worlds, variant, onlySky };
+      if (selection?.p !== p) {
+        labels.replaceChildren();
+        named.clear();
+      }
+      const continuing = selection?.p === p && !selection.onlySky;
+      selection = { p, m, worlds, variant, onlySky, continuing };
       requestKey = null;
       zoom = 1;
       x = y = 0;
       drag = null;
-      labels.replaceChildren();
+      const live = new Set(onlySky ? [] : m.worlds.map(([i]) => i));
+      for (const [i, el] of named)
+        if (!live.has(i)) {
+          el.remove();
+          named.delete(i);
+        }
+      let nextLabel = labels.firstElementChild;
       key.replaceChildren();
       const counts = new Map();
       if (!onlySky)
         for (const [i, o] of m.worlds) {
           const planet = p.planets[i],
-            fact = p.facts[o],
+            fact = p.facts[o];
+          let el = named.get(i);
+          if (!el) {
             el = document.createElement('span');
-          el.dataset.planet = planet[0];
-          el.dataset.owner = o || '';
-          el.style.setProperty('--owner', fact?.color || '#bbb');
-          if (fact?.ink?.length === 3) el.style.setProperty('--ink', `rgb(${fact.ink.join(',')})`);
-          el.textContent = planet[1] || planet[0];
-          el.title =
-            el.textContent +
-            ' — ' +
-            (fact?.label || o || 'Unclaimed') +
-            (chart.world(p, i).uncharted ? ' · Uncharted setup location' : '') +
-            (p.sheets && !planet[9] ? ' · No visible surface in source model' : '');
-          labels.append(el);
+            named.set(i, el);
+            el.dataset.planet = planet[0];
+            el.textContent = planet[1] || planet[0];
+          }
+          if (el.dataset.owner !== (o || '')) {
+            el.dataset.owner = o || '';
+            el.style.setProperty('--owner', fact?.color || '#bbb');
+            if (fact?.ink?.length === 3) el.style.setProperty('--ink', `rgb(${fact.ink.join(',')})`);
+            else el.style.removeProperty('--ink');
+            el.title =
+              el.textContent +
+              ' — ' +
+              (fact?.label || o || 'Unclaimed') +
+              (chart.world(p, i).uncharted ? ' · Uncharted setup location' : '') +
+              (p.sheets && !planet[9] ? ' · No visible surface in source model' : '');
+          }
+          if (el !== nextLabel) labels.insertBefore(el, nextLabel);
+          nextLabel = el.nextElementSibling;
           counts.set(o, (counts.get(o) || 0) + 1);
         }
       for (const [o, n] of [...counts].sort((a, b) => b[1] - a[1])) {

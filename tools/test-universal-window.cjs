@@ -361,6 +361,28 @@ const assert = require('node:assert/strict'),
     await fall.getByRole('button', { name: /Known Galaxy - Medium/ }).click();
     assert.match(await board.getAttribute('data-campaign'), /Medium_Era_4_Empire/i);
     assert.equal(await year.getAttribute('aria-valuetext'), '20 BBY');
+    const corellia = board.locator('[data-planet="Corellia"]');
+    await corellia.evaluate(el => (el.ucReuseCheck = true));
+    const checkMap = async () => {
+      const rows = await board
+        .locator('[data-planet]')
+        .evaluateAll(es => es.map(e => [e.dataset.planet, e.dataset.owner, e.title, e.style.getPropertyValue('--owner')]));
+      assert.equal(new Set(rows.map(r => r[0])).size, rows.length);
+      return rows;
+    };
+    const beforeYear = await checkMap();
+    await selectPeriod('19 BBY');
+    await native.waitFor();
+    assert(await corellia.evaluate(el => el.ucReuseCheck === true), 'Shared label should survive a year switch');
+    const laterYear = await checkMap(),
+      owners = new Map(beforeYear.map(row => row));
+    assert(
+      laterYear.some(([n, o]) => owners.has(n) && owners.get(n) !== o),
+      'Fixture must exercise changed ownership'
+    );
+    await selectPeriod('20 BBY');
+    await native.waitFor();
+    assert.deepEqual(await checkMap(), beforeYear, 'Exact map order and ownership must round-trip');
     await fall.getByRole('button', { name: /From the Ground Up/ }).click();
     assert.equal(await year.getAttribute('aria-valuetext'), '20 BBY');
     await year.focus();

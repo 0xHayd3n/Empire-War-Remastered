@@ -40,6 +40,11 @@ const { chromium } = require('playwright-core'),
                 ctx = c.getContext('2d');
               ctx.fillStyle = '#45546b';
               ctx.fillRect(0, 0, q.w, q.h);
+              // Asymmetric opaque regions also catch an inverted or shifted plate.
+              ctx.fillStyle = '#563322';
+              ctx.fillRect(0, 0, q.w, Math.floor(q.h / 3));
+              ctx.fillStyle = '#162b58';
+              ctx.fillRect(0, 0, Math.floor(q.w / 5), q.h);
               const plate = c.transferToImageBitmap();
               try {
                 return post.call(this, { ...q, backplate: plate }, ...rest);

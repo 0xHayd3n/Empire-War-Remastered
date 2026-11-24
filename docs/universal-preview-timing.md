@@ -1,5 +1,20 @@
 # Galactic Conquest preview switching
 
+## Overlap lane rendering with in-story map changes
+
+Compared `6de0f82` with early worker submission and reuse of profile-local label nodes and unchanged select options. Same 1366×768 Chrome benchmark and visible milestones described below. Two four-context runs per build, already indexed; medians pooled across those runs. Timings used the real backdrop, not the pixel-test fixture.
+
+| Input (samples per build) | Detailed planets, before → after | Complete map, before → after |
+| --- | ---: | ---: |
+| First Galactic Conquest preview (8) | 137 → 140.5 ms | 658.5 → 608.5 ms |
+| Escape and reopen (8) | 26 → 25 ms | 35 → 31.5 ms |
+| First Fall map after stock (8) | 34.5 → 35.5 ms | 318.5 → 271 ms |
+| Later Fall year/map-size changes (64) | 16 → 16 ms | **52 → 33.5 ms** |
+
+The repeat-switch gain was in completing lanes and ownership rings, not in first drawing the planets. The two batches separately measured 47.5 → 31 and 66.5 → 35.5 ms for those switches. Opening and reopening had large run-to-run variation; don't interpret single-digit differences as a reliable speedup. These are browsing results on one PC, not indexing, campaign start or simulation FPS.
+
+The worker now begins an in-story map's native render while the page updates its controls. A static preview doesn't allocate or draw the gameplay-only route spark meshes. Reused planet labels follow the new map's authored order, change owner styling and tooltips, and are removed when absent; a profile change discards the label set. A Chrome regression switches Fall's Medium map through an ownership change and back. The seven-profile browsing check still made zero game-document loads and launched only the requested campaign. With `SWR_SWITCH_PIXELS=1` the same asymmetric opaque pixels were fed to both lane renderers; all 11 full-canvas hashes matched. A cropped framebuffer experiment was discarded: the first version changed pixels, and the pixel-matching scissor version wasn't faster.
+
 ## First paint and map switches after the portrait update
 
 Compared `85083d5` with the queue/renderer changes using `node tools/bench-universal-switch.cjs` on the same loopback port, in real Chrome, 1366×768, four fresh contexts per build. **Planets** is the first animation frame after new foreground canvas drawing and the requested destination's complete detailed body count (model-less placeholders are not mistaken for art). **Complete** includes two consecutive animation frames with the requested map's native sky, lanes, rings and detailed planets painted. No browser automation polling is included in these times. Local indexes and portraits were already built. Single Player may now read the campaign index before the Galactic Conquest click; that read does not open a gameplay document or load planet pictures.

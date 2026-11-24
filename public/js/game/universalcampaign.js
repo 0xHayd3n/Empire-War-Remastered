@@ -221,8 +221,17 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
         : '';
   }
   function render() {
-    roster.show(era, period, story, family, date, v);
     ui.el.toggleAttribute('data-await-map', !family);
+    function showMap() {
+      if (v) ui.map.show(p, v);
+      else ui.map.clear();
+      previewProfile = p;
+      previewMap = v?.map;
+    }
+    // On an in-story switch start the worker before rebuilding the right panel. On
+    // first entry build the form first so computing the viewport needs just one layout.
+    if (family && previewProfile === p && previewMap !== v?.map) showMap();
+    roster.show(era, period, story, family, date, v);
     ui.el.dataset.profile = family ? p.id : '';
     ui.el.dataset.campaign = v?.id || '';
     ui.allow(!!v);
@@ -286,12 +295,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
         else settings[k] = +s;
       });
     }
-    if (p !== previewProfile || v?.map !== previewMap) {
-      if (v) ui.map.show(p, v);
-      else ui.map.clear();
-      previewProfile = p;
-      previewMap = v?.map;
-    }
+    if (previewProfile !== p || previewMap !== v?.map) showMap();
     note();
   }
   try {

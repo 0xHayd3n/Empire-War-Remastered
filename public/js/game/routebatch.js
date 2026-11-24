@@ -60,7 +60,7 @@ export class RouteBatches {
     this.groups = [];
   }
 
-  build(routes) {
+  build(routes, { sparks: animated = true } = {}) {
     this.clear();
     const quads = new Map(),
       sparks = new Map();
@@ -70,7 +70,7 @@ export class RouteBatches {
         qk = rt.look.texture + '|' + blending,
         sk = rt.look.spark;
       (quads.get(qk) || quads.set(qk, { texture: rt.look.texture, blending, routes: [] }).get(qk)).routes.push(rt);
-      (sparks.get(sk) || sparks.set(sk, { texture: sk, routes: [] }).get(sk)).routes.push(rt);
+      if (animated) (sparks.get(sk) || sparks.set(sk, { texture: sk, routes: [] }).get(sk)).routes.push(rt);
     }
     for (const spec of quads.values()) this.addQuads(spec);
     for (const spec of sparks.values()) this.addSparks(spec);

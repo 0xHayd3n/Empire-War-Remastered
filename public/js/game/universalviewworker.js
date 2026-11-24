@@ -151,14 +151,13 @@ self.onmessage = async ({ data: q }) => {
         B = q.worlds[b].slice(2, 5);
       return { A, B, axes: routeAxes(A, B), look: q.looks[i] };
     });
-    batch.build(routes);
+    batch.build(routes, { sparks: false });
     const ring = q.overlay?.ring && texture(q.overlay.ring);
     await Promise.all(materials);
     if (!shared) await dds.texturesReady();
     for (const rt of routes) {
       const l = rt.look;
       batch.setQuad(rt, l.width || rt.quad.group.mesh.material.uniforms.map.value.image?.height || 1, ...l.out);
-      batch.setSparkColor(rt, 0, 0, 0, 0);
     }
     batch.flush();
     if (!placed && q.pass !== 'lanes') throw Error('No planet models');

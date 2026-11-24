@@ -178,6 +178,7 @@ export function contextWorlds(canvas, front, labels) {
       });
     },
     protectModels(bounds) {
+      if (!bounds.length && !models.length) return;
       models = bounds;
       schedule();
     },

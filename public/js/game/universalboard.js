@@ -48,17 +48,25 @@ export function atlasBoard(back, play, reset) {
         panel.append(l);
         fields.set(id, { l, caption, select });
       }
-      const { l, caption, select } = fields.get(id);
+      const field = fields.get(id),
+        { l, caption, select } = field;
       l.hidden = false;
       caption.textContent = label;
       select.setAttribute('aria-label', label);
-      select.replaceChildren(
-        ...rows.map(r => {
-          const o = new Option(r.label, r.value);
-          o.disabled = !!r.disabled;
-          return o;
-        })
-      );
+      if (
+        !field.rows ||
+        field.rows.length !== rows.length ||
+        rows.some((r, i) => r.value !== field.rows[i].value || r.label !== field.rows[i].label || !!r.disabled !== !!field.rows[i].disabled)
+      ) {
+        field.rows = rows;
+        select.replaceChildren(
+          ...rows.map(r => {
+            const o = new Option(r.label, r.value);
+            o.disabled = !!r.disabled;
+            return o;
+          })
+        );
+      }
       select.value = value;
       select.disabled = !rows.length;
       select.onchange = () => change(select.value);

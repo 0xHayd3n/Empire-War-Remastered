@@ -419,6 +419,37 @@ assert.throws(() => assertPrivateLibrary(process.cwd(), { items: new Map() }), /
   assert.equal(closed, 2);
   assert.equal(recent.take(profiles), null);
 }
+// A static briefing draws the same route quads without the gameplay-only spark geometry.
+{
+  const { RouteBatches } = await import('../public/js/game/routebatch.js');
+  const { Scene, AdditiveBlending } = await import('../public/vendor/three/build/three.module.js');
+  const scene = new Scene(),
+    batch = new RouteBatches(
+      scene,
+      () => null,
+      () => AdditiveBlending
+    );
+  const route = () => ({
+    A: [0, 0, 0],
+    B: [0, 10, 0],
+    axes: { across: [1, 0, 0], along: [0, 1, 0] },
+    look: { texture: 'line', spark: 'dot' }
+  });
+  const a = route(),
+    b = route();
+  batch.build([a]);
+  assert.equal(scene.children.length, 2);
+  assert(a.spark);
+  batch.setQuad(a, 2, 1, 0.5, 0, 1);
+  const expected = a.quad.group.geo;
+  batch.build([b], { sparks: false });
+  batch.setQuad(b, 2, 1, 0.5, 0, 1);
+  assert.equal(scene.children.length, 1);
+  assert.equal(b.spark, undefined);
+  for (const [name, att] of Object.entries(expected.attributes)) assert.deepEqual(b.quad.group.geo.attributes[name].array, att.array);
+  assert.deepEqual(b.quad.group.geo.index.array, expected.index.array);
+  batch.clear();
+}
 // A -> B -> C during upload must never paint A, waste an upload on B, or lose C.
 {
   const jobs = [],

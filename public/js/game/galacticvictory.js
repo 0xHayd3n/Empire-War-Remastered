@@ -1,5 +1,6 @@
 import { db } from '../gamedata.js';
 import { isHumanFaction } from './galaxy.js';
+import { checkPrison, heldForRescue, rescueDeath } from './universalrescue.js';
 import { scheduleHeroRespawn, stepHeroRespawns } from './galacticherorespawn.js';
 const key = x => String(x || '').toUpperCase();
 export const GALACTIC_VICTORIES = [
@@ -143,7 +144,7 @@ export class GalacticVictory {
   }
   heroKilled(record, planet, owner, killer) {
     const t = record.carries || record.type;
-    scheduleHeroRespawn(this.game, record, planet, owner, killer);
+    if (!heldForRescue(this.game.galaxy, record, owner)) scheduleHeroRespawn(this.game, record, planet, owner, killer);
     const actual = [record.type, ...t.list('Company_Units').map(n => db.type(n))];
     const leader = db.faction(owner)?.str('Faction_Leader');
     if (actual.some(t => t && key(t.name) === key(leader))) {
@@ -162,7 +163,10 @@ export class GalacticVictory {
     const alive = new Set(r.alive),
       participants = new Set(r.participants || []),
       winner = r.sides[r.winner === 'attacker' ? 0 : 1];
-    const killed = (record, owner) => this.heroKilled(record, p, owner, winner);
+    const killed = (record, owner) => {
+      if (owner !== winner && !r.linked && !r.retreatOnly) rescueDeath(this.game, record, p, owner, winner);
+      this.heroKilled(record, p, owner, winner);
+    };
     for (const [fi, f] of g.fleets.entries())
       if (f.planet === r.planet && !f.leg && r.sides.includes(f.owner))
         for (const [ui, u] of f.units.entries()) {
@@ -303,6 +307,7 @@ export class GalacticVictory {
       frame = Math.floor((g.time || 0) * 30),
       delta = Math.max(0, frame - this.lastFrame);
     this.lastFrame = frame;
+    if (this.game.galaxy.universalRules?.rescue?.state === 'captive') checkPrison(this.game);
     stepHeroRespawns(this.game);
     for (const p of g.players)
       if (this.credits.get(p.faction) !== p.credits) {

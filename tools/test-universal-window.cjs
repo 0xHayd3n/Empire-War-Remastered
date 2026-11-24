@@ -757,6 +757,10 @@ const assert = require('node:assert/strict'),
     );
     assert(await board.locator('.uc-roster').evaluate(e => e.scrollWidth === e.clientWidth));
     assert(await eras.evaluate(e => e.scrollWidth === e.clientWidth && [...e.children].every(b => b.getBoundingClientRect().width > 0)));
+    // Measure the four cards together at the top of the scroller, not while
+    // successive locator screenshots are individually scrolling them into view.
+    await board.locator('.uc-content').evaluate(el => el.scrollTo({ top: 0, behavior: 'instant' }));
+    await page.mouse.move(1, 1);
     await checkCrests();
     await snap('era-narrow');
     await page.setViewportSize({ width: 1366, height: 768 });

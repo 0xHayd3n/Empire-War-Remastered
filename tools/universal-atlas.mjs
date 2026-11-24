@@ -8,7 +8,7 @@ import { assertPrivateLibrary, loadPack } from './universal-library.mjs';
 import { languageId } from '../public/js/language.js';
 import { thrawnRevision } from './universal-loader-table.mjs';
 import { fallCustomRevision } from './universal-fall-layouts.mjs';
-import { validValue } from '../public/js/game/universalrules.js';
+import { validValue, validLoss, rescueCampaign } from '../public/js/game/universalrules.js';
 const digest = s => createHash('sha256').update(s).digest('hex');
 function stockStamp(game) {
   const v = openGame(game),
@@ -62,6 +62,30 @@ export function launchPlan(atlas, q) {
     )
       throw Error('Production payment unavailable.');
     if (q.payAsYouGo !== p.payment.native) options.payAsYouGo = q.payAsYouGo;
+  }
+  if (Object.hasOwn(q, 'transportLosses')) {
+    const source = p.combat?.transport;
+    if (
+      r.scripted ||
+      !source?.allowed.includes(v.id) ||
+      !validLoss(q.transportLosses) ||
+      !atlas.profiles.some(x => x.combat?.transport?.declared && x.combat.transport.native === q.transportLosses)
+    )
+      throw Error('Transport loss rule unavailable.');
+    if (q.transportLosses !== source.native) options.transportLosses = q.transportLosses;
+  }
+  if (Object.hasOwn(q, 'heroRescue')) {
+    if (
+      q.heroRescue !== true ||
+      q.expedition ||
+      p.id !== 'stock' ||
+      !p.combat?.rescue ||
+      r.id !== rescueCampaign ||
+      v.id !== rescueCampaign ||
+      r.faction !== 'Rebel'
+    )
+      throw Error('Hero rescue unavailable.');
+    options.heroRescue = true;
   }
   if (q.expedition) {
     if (!v.sites.length || p.id === '3417277973' || !atlas.profiles.some(p => p.donor?.hasSearch)) throw Error('Expedition unavailable.');
@@ -132,8 +156,8 @@ export function atlasStore({ home, library, eras }) {
       throw Error('Local parent or a complete offline pack required.');
     stamp ??= stockStamp(library.game);
     const rev = id === 'stock' ? 'stock' : JSON.parse(fs.readFileSync(path.join(home, 'profiles', id + '.json'))).revision;
-    // Only the reviewed Fall revision gained maps/geometry. Other warm profiles
-    // can add the payment metadata without re-parsing campaigns or portrait art.
+    // Only the two reviewed selector revisions gained maps. Warm profiles can
+    // add rules and campaign eligibility without re-baking planetary art.
     const schema =
       id === '1125571106' && rev === thrawnRevision
         ? 'thrawn-custom-opening-1:'
@@ -146,7 +170,7 @@ export function atlasStore({ home, library, eras }) {
       const p = JSON.parse(gunzipSync(fs.readFileSync(filename)));
       if (p.sheets.every(s => /^[a-f0-9]{64}$/.test(s) && fs.existsSync(path.join(home, 'planet-portraits-v1', s + '.png')))) cached = p;
     } catch {}
-    if (cached && 'laneKit' in cached && 'payment' in cached) return cached;
+    if (cached && 'laneKit' in cached && 'payment' in cached && 'combat' in cached) return cached;
     const args = { game: library.game, home, folder: library.items.get(id)?.folder, id, language: lang };
     const p = cached
       ? {

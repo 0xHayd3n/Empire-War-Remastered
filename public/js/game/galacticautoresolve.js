@@ -278,16 +278,30 @@ function downgrade(type, budget, allowance) {
   }
   return type;
 }
+function survivors(count, loss) {
+  return Math.floor(f(f(f(1 - loss) * count) + 0.5));
+}
+// Only adjust the already-losing player's multi-transport quota. Do not
+// reroll attrition, change a winner, or touch the computer's survivors.
+export function applyTransportLosses(result, rosters, owner, loss) {
+  if (!Number.isFinite(loss) || loss < 0 || loss > 1 || result.noCombat) return;
+  const i = 1 - result.winner,
+    transports = rosters[i].filter(u => u.owner === owner && (u.transport || u.passenger));
+  if (transports.length < 2 || !db.faction(owner)?.bool('Is_Playable')) return;
+  const alive = result.sides[i].alive;
+  let quota = survivors(transports.length, loss);
+  const hero = u => (u.passenger ? u.passenger.hero : u.hero);
+  for (const u of [...transports.filter(hero), ...transports.filter(u => !hero(u))]) {
+    if (quota-- > 0) alive.add(u);
+    else alive.delete(u);
+  }
+}
 function casualties(roster, budget, won, playable, space, settings, random, enemyKiller) {
   const alive = new Set(),
     stations = new Map(),
     pending = roster.filter(u => !u.transport),
     transports = roster.filter(u => u.transport);
-  let quota = won
-    ? transports.length
-    : playable && transports.length > 1
-      ? Math.floor(f(f(f(1 - settings.transportLosses) * transports.length) + 0.5))
-      : 0;
+  let quota = won ? transports.length : playable && transports.length > 1 ? survivors(transports.length, settings.transportLosses) : 0;
   for (const u of transports.filter(u => u.hero).concat(transports.filter(u => !u.hero))) if (quota-- > 0) alive.add(u);
   const smallest = roster.filter(u => !u.transport && !u.groundBase).reduce((a, u) => (!a || u.power < a.power ? u : a), null);
   while (pending.length) {
@@ -354,6 +368,7 @@ export function resolveAutoBattle(
     killers = special.map(r => r.some(u => u.killer));
   if (initial[0][0].power <= 0 && initial[1][0].power <= 0 && space && !supers.some(Boolean))
     return {
+      noCombat: true,
       winner: attacker.length > defender.length ? 0 : 1,
       initial,
       remaining,

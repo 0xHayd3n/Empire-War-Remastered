@@ -4,6 +4,7 @@ import { parentPort, workerData } from 'node:worker_threads';
 import { openGame } from './megfs.mjs';
 import { loadPack } from './universal-library.mjs';
 import { portableRules, productionPayment } from './universal-rule-catalog.mjs';
+import { combatCatalog } from './universal-combat-catalog.mjs';
 import { parseXML } from '../public/js/xml.js';
 import { db, loadGameData, loadFileList } from '../public/js/gamedata.js';
 import { loadCampaignData, startingGalaxy } from '../public/js/game/galaxy.js';
@@ -331,6 +332,7 @@ try {
     yearLegend,
     levels: ['TEXT_DIFFICULTY_EASY_NAME', 'TEXT_DIFFICULTY_NORMAL_NAME', 'TEXT_DIFFICULTY_HARD_NAME'].map(k => db.t(k)),
     defaults: Object.fromEntries(Object.entries(ruleFields).map(([k, r]) => [k, db.constants.num(r.tag, r.fallback)])),
+    combat: combatCatalog(archive, pack, data.campaigns),
     payment: productionPayment(archive, pack),
     donor: pack ? portableRules(pack) : null
   });

@@ -9,7 +9,7 @@ const networkFetch = globalThis.fetch;
 let liveLuaRequests = 0,
   peakLuaRequests = 0;
 const archive = openGame(
-  fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)),
+  process.env.SWR_GAME || fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)),
   modArg < 0 ? [] : [process.argv[modArg + 1]]
 );
 globalThis.fetch = async input => {
@@ -148,21 +148,26 @@ if (menu) {
   assert.equal(loads.at(-1).faction, 'Empire');
   clean();
 
-  await restart();
-  click('Inf_Text');
-  click('inf_map_03');
-  click('era_01');
-  click('faction_01');
-  click('Start_GC');
-  assert(popup.opened);
-  const progressive = popup.rows.find(r => r.type.name.toUpperCase() === 'CUSTOM_GC_PROGRESSIVE_ERA');
-  assert(progressive);
-  assert.equal(popup.choose(progressive), true);
-  popup.close();
-  step(30);
-  assert.equal(loads.at(-1).campaign, 'Custom_Small_Era_1_REBEL');
-  assert.equal(loads.at(-1).startingTechLevel, 4);
-  clean();
+  for (const [opening, tech] of [['LEARNER_MODE', 5], ['STATIC_ERA', undefined], ['PROGRESSIVE_ERA', 4]]) {
+    await restart();
+    click('difficulty_select_hard');
+    click('Inf_Text');
+    click('inf_map_03');
+    click('era_01');
+    click('faction_01');
+    click('Start_GC');
+    assert(popup.opened);
+    const choice = popup.rows.find(r => r.type.name.toUpperCase() === 'CUSTOM_GC_' + opening);
+    assert(choice);
+    assert.equal(popup.choose(choice), true);
+    popup.close();
+    step(30);
+    assert.equal(loads.at(-1).campaign, 'Custom_Small_Era_1_REBEL');
+    assert.equal(loads.at(-1).faction, 'Rebel');
+    assert.equal(loads.at(-1).difficulty, 'hard');
+    assert.equal(loads.at(-1).startingTechLevel ?? undefined, tech);
+    clean();
+  }
 
   const weeks = +host.flags.get('WEEKS');
   host.update(40);

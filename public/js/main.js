@@ -1738,14 +1738,17 @@ class Game {
       return;
     }
     if (this.paused) this.togglePause();
-    const rosters = spaceRosters(w, cb),
+    const rosters = spaceRosters(w, cb, this.campaignBook),
       { winner, doomed } = resolveTactical(rosters, cb, { space: true });
     const lose = e => {
       if (e.reserve) {
         if (e.dead) return;
         e.dead = true;
         const at = e.reserve.reinforcements.indexOf(e.type);
-        if (at >= 0) e.reserve.reinforcements.splice(at, 1);
+        if (at >= 0) {
+          e.reserve.reinforcements.splice(at, 1);
+          if (e.reserveGid) (this.campaignBook.lostReserve ||= []).push(e.reserveGid);
+        }
       } else if (!e.dead) w.kill(e, null);
     };
     for (const e of doomed) lose(e);

@@ -90,6 +90,7 @@ function spaceCampaign(game, ref) {
         team: u.team,
         ...(u.companyType ? { companyType: u.companyType.name || u.companyType } : {})
       })),
+      ...(book.lostReserve?.length ? { lostReserve: book.lostReserve.slice() } : {}),
       absent: book.absent.slice(),
       station: book.station ? (!book.station.dead && ref(book.station)) || gone(book.station) : null,
       called: [...(book.called || new Map())].map(([team, list]) => [team, list.map(e => (!e.dead && ref(e)) || gone(e))])
@@ -106,6 +107,7 @@ export function restoreSpaceCampaign(game, save, refs) {
   book.waiting = c.book.waiting
     .map(u => ({ ...u, type: db.type(u.type), ...(u.companyType ? { companyType: db.type(u.companyType) } : {}) }))
     .filter(u => u.type);
+  book.lostReserve = c.book.lostReserve?.slice();
   book.absent = c.book.absent.slice();
   book.station = c.book.station ? get(c.book.station) : null;
   book.called = new Map(c.book.called.map(([team, list]) => [+team, list.map(get)]));

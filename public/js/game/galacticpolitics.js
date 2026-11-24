@@ -170,7 +170,7 @@ export function politicalFlip(planet) {
   planet.politicalChecked = -1;
 }
 
-export function changeController(planet, faction, g = null) {
+export function changeController(planet, faction, g = null, invasion = false) {
   const old = planet.owner;
   if (key(old) === key(faction)) return old;
   planet.owner = faction;
@@ -180,8 +180,9 @@ export function changeController(planet, faction, g = null) {
   politicalFlip(planet);
   const bonus = g ? captureBonus(g, planet, faction) : 0;
   if (g) {
-    const surveyed = !planet.destroyed && g.universalRules?.expedition && surveySite(g, planet.name, faction, n => adjustCredits(g, faction, n));
-    controllerListener?.(planet, old, faction, bonus, surveyed);
+    const surveyed =
+      !planet.destroyed && g.universalRules?.expedition && surveySite(g, planet.name, faction, n => adjustCredits(g, faction, n));
+    controllerListener?.(planet, old, faction, bonus, surveyed, invasion);
   }
   return old;
 }

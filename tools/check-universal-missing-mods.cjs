@@ -39,6 +39,7 @@ const { chromium } = require('playwright-core'),
       initial = await board.getAttribute('data-campaign');
     assert(initial);
     assert.equal(await board.locator('select[data-field="payment"]').count(), 0, 'Missing Remake does not offer installments');
+    assert.equal(await board.locator('select[data-field="transport"]').count(), 0, 'Missing Remake does not offer its transport attrition');
     let launches = 0;
     page.on('request', r => {
       if (r.url().includes('/api/mount/') || r.url().includes('/atlas/start') || r.isNavigationRequest()) launches++;

@@ -10,6 +10,8 @@ export const ruleFields = {
     max: 86400
   }
 };
+export const rescueCampaign = 'Sandbox_Equal_Footing_Rebel';
+export const validLoss = n => Number.isFinite(n) && n >= 0 && n <= 1;
 export const revanId = '3417277973';
 export function validValue(field, value) {
   const def = Object.hasOwn(ruleFields, field) && ruleFields[field];
@@ -19,6 +21,7 @@ export function resolvedOptions(raw) {
   const out = {};
   for (const key of Object.keys(ruleFields)) if (validValue(key, raw?.[key])) out[key] = raw[key];
   if (typeof raw?.payAsYouGo === 'boolean') out.payAsYouGo = raw.payAsYouGo;
+  if (validLoss(raw?.transportLosses)) out.transportLosses = raw.transportLosses;
   return out;
 }
 // Start from owned worlds and follow the campaign's own movement graph. Never add a planet, object, or faction.
@@ -49,6 +52,7 @@ export function expeditionSites(g, allies = []) {
 }
 export function beginUniversalRules(g, options, allies) {
   const rules = resolvedOptions(options);
+  if (options?.heroRescue === true && g.campaign?.name === rescueCampaign && g.active === 'Rebel') rules.rescue = { state: 'ready' };
   if (options?.expedition === true) {
     const sites = expeditionSites(g, allies);
     if (!sites.length) throw new Error('This campaign has no connected expedition sites. Choose the authored path instead.');
@@ -71,6 +75,10 @@ export function restoreUniversalRules(raw) {
   ) {
     rules.expedition = { owner: x.owner, sites: [...x.sites], found: x.sites.filter(s => x.found.includes(s)) };
   }
+  const hold = raw?.rescue;
+  if (['ready', 'complete'].includes(hold?.state)) rules.rescue = { state: hold.state };
+  if (hold?.state === 'captive' && typeof hold.prison === 'string' && hold.prison && typeof hold.jailer === 'string' && hold.jailer)
+    rules.rescue = { state: 'captive', prison: hold.prison, jailer: hold.jailer };
   return Object.keys(rules).length ? rules : null;
 }
 // A completed survey stays recorded if the planet changes hands again. Award exactly once, using the target campaign's credit rules.

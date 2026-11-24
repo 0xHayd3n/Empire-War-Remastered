@@ -78,6 +78,7 @@ import { GalacticStoryDialog } from './galacticstorydialog.js';
 import { GalacticMovies } from './galacticmovies.js';
 import { GalacticLog } from './galacticlog.js';
 import { Menus } from './menus.js';
+import { prisonChanged } from './universalrescue.js';
 import { beginUniversalRules } from './universalrules.js';
 import { stepIncome, orbitFleets, cycleNumber, creditCap } from './galacticeconomy.js';
 import { GalacticAI } from './galacticai.js';
@@ -442,7 +443,8 @@ export class GalacticGame {
     onLanded((g, planet, unit) => {
       if (g === this.galaxy) this.story?.unitLanded?.(planet, unit);
     });
-    onControllerChange((planet, old, now, bonus, surveyed) => {
+    onControllerChange((planet, old, now, bonus, surveyed, invasion) => {
+      if (!this.over && this.galaxy.universalRules?.rescue?.state === 'captive') prisonChanged(this, planet, old, now, invasion);
       if (!this.over) this.planetChangedHands(planet, old, now, bonus, surveyed);
     });
     g.hostSnapshot = () => ({ controlsLocked: !!this.controlsLocked, suspendAI: !!this.suspendAI, tutorialPlayer: !!this.tutorialPlayer });
@@ -2732,7 +2734,15 @@ export class GalacticGame {
   }
 
   autoResolveFor(b) {
-    return { allowed: this.pendingBattle.allowed(b), contrast: packContrast(this.ai?.plans?.autoContrast) };
+    const allowed = this.pendingBattle.allowed(b),
+      g = this.galaxy;
+    return {
+      allowed,
+      contrast: packContrast(this.ai?.plans?.autoContrast),
+      ...(allowed && !this.net && b.mode !== 'land' && g.universalRules?.transportLosses !== undefined
+        ? { transportOwner: g.active, transportLosses: g.universalRules.transportLosses }
+        : {})
+    };
   }
 
   blackMarketOwned() {
@@ -2843,6 +2853,13 @@ export class GalacticGame {
                 company = carriedCompany(u);
               return {
                 gid: fi + ':' + ui,
+                ...(g.universalRules?.transportLosses !== undefined &&
+                owner === g.active &&
+                company &&
+                !companySpaceForm(company) &&
+                !ridesFlagship(company)
+                  ? { passenger: company.name }
+                  : {}),
                 type: type.name,
                 ...(company && (companySpaceForm(company) === type || ridesFlagship(company)) ? { company: company.name } : {}),
                 pathfinder: !!u.pathfinder || u === lead

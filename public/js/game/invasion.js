@@ -202,7 +202,7 @@ export function applyInvasionResult(g, r) {
   pl.groundStructures = pl.groundStructures.filter((u, i) => retain(u, 's:' + i));
   if (won) {
     const oldOwner = pl.owner;
-    changeController(pl, attacker, g);
+    changeController(pl, attacker, g, true);
     ownerCorruption(pl, oldOwner, attacker, g);
     const capacity = db.constants.num('Max_Ground_Forces_On_Planet', 10);
     for (const u of landed) {

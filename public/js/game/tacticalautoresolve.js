@@ -1,10 +1,11 @@
 import { db } from '../gamedata.js';
 import { openDialog } from './dialogs.js';
-import { autoCombatant, resolveAutoBattle, unpackContrast } from './galacticautoresolve.js';
+import { markPassengers } from './universalpassengers.js';
+import { applyTransportLosses, autoCombatant, resolveAutoBattle, unpackContrast } from './galacticautoresolve.js';
 
 const key = s => String(s || '').toUpperCase();
 
-export function spaceRosters(world, campaign) {
+export function spaceRosters(world, campaign, book) {
   const side = teamIndex => {
     const team = world.teams[teamIndex],
       out = [];
@@ -23,7 +24,9 @@ export function spaceRosters(world, campaign) {
         }
     return out;
   };
-  return [side(campaign.attacker.team), side(campaign.defender.team)];
+  const rosters = [side(campaign.attacker.team), side(campaign.defender.team)];
+  markPassengers(rosters, book, campaign);
+  return rosters;
 }
 
 export function landRosters(world, factions, sides, waiting = []) {
@@ -50,6 +53,8 @@ export function resolveTactical(rosters, campaign, { space = true, random = Math
   const contrast = unpackContrast(campaign.autoResolve?.contrast);
   const scale = Math.fround(db.constants.num('Auto_Resolve_Tactical_Multiplier', 1));
   const result = resolveAutoBattle(rosters[0], rosters[1], contrast, { space, random, scale });
+  if (space && campaign.autoResolve?.allowed)
+    applyTransportLosses(result, rosters, campaign.autoResolve.transportOwner, campaign.autoResolve.transportLosses);
   const doomed = [];
   rosters.forEach((roster, i) => {
     for (const u of roster) if (!result.sides[i].alive.has(u)) doomed.push(u.entity);

@@ -1,5 +1,5 @@
 import { activeLanguage } from '../language.js';
-import { ruleFields } from './universalrules.js';
+import { ruleFields, rescueCampaign } from './universalrules.js';
 import { ruleChoices, rulePresets } from './universalrulemenu.js';
 import { eraTimeline, periodOf, startWithin } from './universaltimeline.js';
 import { mapStart, techCalendar } from './universalmaplist.js';
@@ -129,7 +129,11 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
       if (s.row.scripted) delete options.payAsYouGo;
       if (!s.row.eraProgression || !row?.eraProgression) delete options.progressive;
     }
-    if (s.variant !== v) delete options.expedition;
+    if (s.variant !== v) {
+      delete options.expedition;
+      delete options.heroRescue;
+      if (s.row.scripted || !next.p.combat?.transport?.allowed.includes(s.variant?.id)) delete options.transportLosses;
+    }
     family = next;
     p = next.p;
     date = selection.date;
@@ -227,25 +231,48 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
         }
       );
     } else ui.hide('payment');
+    const t = p.combat?.transport,
+      terms = new Map();
+    for (const x of data.profiles)
+      if (x.combat?.transport?.declared && x.combat.transport.native !== t?.native && !terms.has(x.combat.transport.native))
+        terms.set(x.combat.transport.native, x.name);
+    const percent = n => `${+(n * 100).toFixed(2)}%`;
+    if (!row.scripted && t?.allowed.includes(v?.id) && terms.size)
+      ui.field(
+        'transport',
+        'Your transport losses on auto-resolve',
+        [opt('', `Campaign default · ${percent(t.native)}`), ...[...terms].map(([n, name]) => opt(String(n), `${percent(n)} · ${name}`))],
+        String(options.transportLosses ?? ''),
+        value => {
+          if (value === '') delete options.transportLosses;
+          else options.transportLosses = +value;
+        }
+      );
+    else ui.hide('transport');
     const paths = [opt('', 'Authored objectives')];
+    if (p.combat?.rescue && v?.id === rescueCampaign) paths.push(opt('rescue', 'Rescue Han and Chewbacca'));
     if (p.id !== '3417277973' && v?.sites.length && data.profiles.some(p => p.donor?.hasSearch))
       paths.push(opt('expedition', 'Star Map Expedition'));
-    ui.radios('path', 'Objective', paths, options.expedition ? 'expedition' : '', value => {
-      if (value) options.expedition = true;
-      else delete options.expedition;
+    ui.radios('path', 'Objective', paths, options.heroRescue ? 'rescue' : options.expedition ? 'expedition' : '', value => {
+      delete options.expedition;
+      delete options.heroRescue;
+      if (value === 'expedition') options.expedition = true;
+      if (value === 'rescue') options.heroRescue = true;
       note();
     });
   }
   function note() {
-    ui.status.textContent = options.expedition
-      ? `Expedition: capture ${v.sites.join(', ')} for a one-time 3,000-credit grant.`
-      : row?.scripted
-        ? 'Authored setup scenario. Its script chooses the final galaxy after launch.'
-        : row?.customOpening
-          ? 'Choose Learner, Static era or Progressive era in Settings.'
-          : row?.layout
-            ? 'Choose starting locations and rosters in-game, using the mod’s own setup.'
-            : '';
+    ui.status.textContent = options.heroRescue
+      ? 'If Han and Chewbacca fall in a lost battle, conquer their prison world to bring them back once.'
+      : options.expedition
+        ? `Expedition: capture ${v.sites.join(', ')} for a one-time 3,000-credit grant.`
+        : row?.scripted
+          ? 'Authored setup scenario. Its script chooses the final galaxy after launch.'
+          : row?.customOpening
+            ? 'Choose Learner, Static era or Progressive era in Settings.'
+            : row?.layout
+              ? 'Choose starting locations and rosters in-game, using the mod’s own setup.'
+              : '';
   }
   function render() {
     ui.el.toggleAttribute('data-await-map', !family);

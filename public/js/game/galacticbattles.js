@@ -1,6 +1,7 @@
 import { retreatDestination } from './fleetretreat.js';
 import { db } from '../gamedata.js';
-import { autoCombatant, resolveAutoBattle, overrunSide, landBomber } from './galacticautoresolve.js';
+import { rescueDeath } from './universalrescue.js';
+import { applyTransportLosses, autoCombatant, resolveAutoBattle, overrunSide, landBomber } from './galacticautoresolve.js';
 import { carriedCompany, canLand, invasionForces, applyInvasionResult } from './invasion.js';
 import { enteredOrbit } from './galaxy.js';
 import { retreatFleet } from './fleets.js';
@@ -71,6 +72,14 @@ export class GalacticBattles {
         space,
         bombardment: space ? null : landBomber(this.game.galaxy, p, attacker)
       });
+    const g = this.game.galaxy;
+    if (
+      space &&
+      !this.game.net &&
+      g.universalRules?.transportLosses !== undefined &&
+      this.game.pendingBattle?.allowed({ p, attacker, defender, mode: 'space' })
+    )
+      applyTransportLosses(result, sides, g.active, g.universalRules.transportLosses);
     planet[space ? 'lastSpaceConflict' : 'lastGroundConflict'] = this.game.galaxy.time;
     const player = this.game.galaxy.players.find(p => key(p.faction) === key(defender));
     if (player) player[space ? 'lastSpaceDefense' : 'lastGroundDefense'] = this.game.galaxy.time;
@@ -126,6 +135,7 @@ export class GalacticBattles {
               }
             }
           } else if (!result.sides[i].alive.has(u)) {
+            if (i !== result.winner) rescueDeath(this.game, u.record, planet, u.owner, [attacker, defender][result.winner]);
             this.game.story?.combatDeath(u.record, planet, u.owner, [attacker, defender][1 - i]);
             u.record.dead = true;
           }
@@ -195,8 +205,11 @@ export class GalacticBattles {
     const died = () => {
       for (const i of [1, 0])
         for (const u of sides[i])
-          if (!u.groundBase && (!result.sides[i].alive.has(u) || (i === 1 && result.winner === 0 && !escaping.includes(u.record))))
+          if (!u.groundBase && (!result.sides[i].alive.has(u) || (i === 1 && result.winner === 0 && !escaping.includes(u.record)))) {
+            if (i !== result.winner && !result.sides[i].alive.has(u))
+              rescueDeath(this.game, u.record, planet, u.owner, [attacker, defender][result.winner]);
             this.game.story?.combatDeath(u.record, planet, u.owner, [attacker, defender][1 - i], !result.sides[i].alive.has(u));
+          }
     };
     if (this.game.story?.deaths) this.game.story.deaths(died);
     else died();

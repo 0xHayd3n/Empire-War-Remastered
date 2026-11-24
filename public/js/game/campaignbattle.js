@@ -597,7 +597,7 @@ export function battleResult(w, book, cb, winnerTeam) {
   }
   for (const team of [cb.attacker.team, cb.defender.team]) {
     const t = w.teams[team],
-      waiting = book.waiting.filter(u => u.team === team),
+      waiting = book.waiting.filter(u => u.team === team && !book.lostReserve?.includes(u.gid)),
       left = new Map();
     for (const p of t.players) for (const ty of p.reinforcements) left.set(ty.name, (left.get(ty.name) || 0) + 1);
     const called = new Map();

@@ -1,4 +1,4 @@
-import { takeReserve } from './campaignreserve.js';
+import { takeReserve, reserveSlot } from './campaignreserve.js';
 import { ScanAhead } from './scanjobs.js';
 import { hardpointModes, hardpointDelays, modeAllows, modeDelay, rechargeDelay } from './firemodes.js';
 import { ProjectileMods } from './projectilemods.js';
@@ -2487,8 +2487,8 @@ export class World {
     return null;
   }
 
-  deployReinforcement(player, type, x, y, heading) {
-    const i = player.reinforcements.indexOf(type);
+  deployReinforcement(player, type, x, y, heading, vesselId) {
+    const i = reserveSlot(player, type, vesselId);
     if (i < 0) return 'Not available';
     const why = this.cantReinforce(player, x, y, footprintOf(type), type, Number.isFinite(heading) ? heading : this.startFacing(player));
     if (why) return why;

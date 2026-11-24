@@ -1,6 +1,22 @@
 // The HUD may still order the first available ship of a type. Bind the *actual
 // removed slot* before spawning, not a type match inferred at battle end. New
 // tactical builds append to the pool and have no campaign ticket.
+// An explicitly selected flagship never falls back to its class (and ordinary
+// cards cannot consume it). Queue offsets can change while a ghost is on screen.
+export function reserveSlot(p, type, id) {
+  const flag = p.reserveBook?.flagship,
+    at = flag ? p.reserveTickets.indexOf(flag.gid) : -1;
+  if (id !== undefined && id !== null) return flag?.vessel.id === id && at >= 0 && p.reinforcements[at] === type ? at : -1;
+  return at < 0 ? p.reinforcements.indexOf(type) : p.reinforcements.findIndex((t, i) => t === type && i !== at);
+}
+export function reserveCounts(p) {
+  const counts = new Map(),
+    flag = p.reserveBook?.flagship,
+    at = flag ? p.reserveTickets.indexOf(flag.gid) : -1;
+  if (at >= 0) counts.set(flag, 1);
+  for (const [i, t] of p.reinforcements.entries()) if (i !== at) counts.set(t, (counts.get(t) || 0) + 1);
+  return counts;
+}
 export function takeReserve(p, i) {
   const book = p.reserveBook,
     gid = p.reserveTickets?.splice(i, 1)[0];

@@ -1286,6 +1286,20 @@ body:not(.original-hud) .heroframe {
   background: center/100% 100% no-repeat;
   pointer-events: none;
 }
+.flagship-reserve::before {
+  content: '⚑';
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  background: #172233;
+  color: #ffe19b;
+  border: 1px solid #d2ab58;
+  padding: 0 3px;
+  font: bold 13px/16px system-ui, sans-serif;
+  z-index: 1;
+  pointer-events: none;
+}
+.rslot:focus-visible, #reinforce .b:focus-visible { outline: 2px solid #ffe19b; z-index: 2; }
 .rslot:hover::after {
   background-image: var(--over);
 }

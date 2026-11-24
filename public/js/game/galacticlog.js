@@ -13,6 +13,7 @@ import {
   techTreeDialog,
   updateHistory
 } from './galacticlogdata.js';
+import { flagshipRows } from './flagshipcommission.js';
 import { objectiveRows } from './universalobjectives.js';
 import { renderHistory } from './galactichistory.js';
 import { renderTechTree } from './galactictechtree.js';
@@ -56,6 +57,7 @@ export class GalacticLog {
       else this.game.paused = true;
       this.opened = true;
     }
+    this.flagshipPrompt = null;
     this.encyclopedia?.hide();
     this.cleanup?.();
     this.cleanup = null;
@@ -173,6 +175,24 @@ export class GalacticLog {
   fillLog(d) {
     const game = this.game,
       g = game.galaxy;
+    const prompt = this.flagshipPrompt,
+      commandRows = () => {
+        if (game.me !== g.active || game.net || !g.vessels) return [];
+        return flagshipRows(g, prompt, next => {
+          this.flagshipPrompt = next;
+          this.fillLog(d);
+        }).map(row =>
+          !row.activate
+            ? row
+            : {
+                ...row,
+                activate: () => {
+                  if (this.opened && this.page === 0 && this.dialog === d && this.flagshipPrompt === prompt && game.me === g.active)
+                    row.activate();
+                }
+              }
+        );
+      };
     d.coloredTextList('IDC_DROID_LIST', () => [
       ...logRows(g),
       ...objectiveRows(g, p => {
@@ -181,7 +201,8 @@ export class GalacticLog {
         game.view.x = p.pos[0];
         game.view.y = p.pos[1];
         if (game.view.zoom === 1) game.view.planet = p.index;
-      })
+      }),
+      ...commandRows()
     ]);
   }
   async renderLog(d) {
@@ -274,6 +295,7 @@ export class GalacticLog {
   close() {
     if (!this.opened) return;
     this.opened = false;
+    this.flagshipPrompt = null;
     this.generation++;
     this.encyclopedia?.hide();
     this.cleanup?.();

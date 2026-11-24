@@ -1,4 +1,4 @@
-// Opt-in engine seam; no campaign enables the pilot. IDs are allocated on actual
+// Opt-in engine seam. IDs are allocated on actual
 // records, never reconstructed by matching an owner/type or a previous fleet slot.
 import { adjustCredits, creditCap } from './galacticeconomy.js';
 import { equalFooting } from './universaleligibility.js';
@@ -20,6 +20,29 @@ function validCondition(c) {
 export function enrollVessels(g) {
   if (!pilot(g) || g.vessels) return false;
   g.vessels = { open: null };
+  return true;
+}
+// The player-facing rule never bulk-enrolls like the adversarial engine fixture.
+export function enableFlagship(g) {
+  if (!enrollVessels(g)) return false;
+  g.vessels.flagship = null;
+  return true;
+}
+export const flagshipMode = g => pilot(g) && !!g.vessels && Object.hasOwn(g.vessels, 'flagship');
+export const eligibleCruiser = (g, f, u) => hull(g, f, u) && !u.dead && !f.leg && f.planet >= 0;
+export function designateFlagship(g, f, u) {
+  if (
+    !flagshipMode(g) ||
+    g.vessels.open ||
+    g.vessels.flagship !== null ||
+    !g.fleets.includes(f) ||
+    !f.units.includes(u) ||
+    !eligibleCruiser(g, f, u)
+  )
+    return false;
+  const id = crypto.randomUUID();
+  u.vessel = { id, rev: 0 };
+  g.vessels.flagship = id;
   return true;
 }
 export function restoreVessels(g, registry) {
@@ -44,7 +67,9 @@ export function restoreVessels(g, registry) {
         if (ok) u.vessel = structuredClone(v);
         seen.add(v?.id);
       }
-  if (ok) g.vessels = { open: registry.open };
+  const single = registry && Object.hasOwn(registry, 'flagship');
+  if (single && ((registry.flagship !== null && !uuid(registry.flagship)) || [...seen].some(id => id !== registry.flagship))) ok = false;
+  if (ok) g.vessels = { open: registry.open, ...(single ? { flagship: registry.flagship } : {}) };
   else
     for (const f of g.fleets)
       for (const u of f.units) {
@@ -59,7 +84,7 @@ export function openVesselBattle(g, planet, sides) {
   for (const f of g.fleets)
     if (f.planet === planet && !f.leg)
       for (const u of f.units)
-        if (hull(g, f, u)) {
+        if (hull(g, f, u) && (!Object.hasOwn(s, 'flagship') || (s.flagship && u.vessel?.id === s.flagship))) {
           u.vessel ||= { id: crypto.randomUUID(), rev: 0 };
           any = true;
         }
@@ -176,8 +201,8 @@ export function acceptVesselResult(g, r) {
   s.open = null;
   return true;
 }
-// Pay for one revision at a friendly yard. The caller supplies a trusted tariff,
-// not a price serialized in a command. There is no player-facing tariff yet.
+// Lower-level test and yard transaction. The player-facing order recomputes the
+// tariff and checks the quoted yard and revision before passing it here.
 export function repairVessel(g, { id, rev }, tariff) {
   if (!g.vessels || g.vessels.open || !pilot(g) || !integer(tariff) || !tariff) return false;
   for (const f of g.fleets) {

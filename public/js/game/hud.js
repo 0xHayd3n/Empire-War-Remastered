@@ -1,3 +1,4 @@
+import { reserveCards, reserveSignature, wireReserveCard } from './reservecards.js';
 import { db, loadFileList } from '../gamedata.js';
 import { fetchText, fetchBinary } from '../vfs.js';
 import { BinkPlayer } from '../bink.js';
@@ -1268,19 +1269,19 @@ export class CommandBar {
     else if (it && it.unit) this.tipOn('slot' + i, it.unit.type);
   }
 
-  tipOn(id, type, builder = null) {
+  tipOn(id, type, builder = null, reserveLabel = '') {
     const key = () => type.name + '|' + (builder ? builder.id + '|' + (this.world.cantBuild(builder, type, this.player) || '') : '');
     this.tipTarget = {
       id: id + '|' + type.name,
       get key() {
-        return key();
+        return key() + reserveLabel;
       },
-      show: () => this.showInfo(type, { builder })
+      show: () => this.showInfo(type, { builder, reserveLabel })
     };
   }
 
-  showInfo(type, { builder = null, pinned = false, flagship = false } = {}) {
-    const key = type.name + '|' + (builder ? builder.id : '') + (flagship ? '|flagship' : '');
+  showInfo(type, { builder = null, pinned = false, flagship = false, reserveLabel = '' } = {}) {
+    const key = type.name + '|' + (builder ? builder.id : '') + (flagship ? '|flagship' : '') + reserveLabel;
     this.infoPinned = pinned;
     const box = this.info;
     if (this.infoKey === key) {
@@ -1348,7 +1349,7 @@ export class CommandBar {
       q('.eabil').appendChild(i);
     }
     q('.eline').style.backgroundImage = css(iconUrl('e_line2.tga'));
-    q('.etext').textContent = text;
+    q('.etext').textContent = reserveLabel ? `${reserveLabel}\n${text}` : text;
     const fill = (sel, label, list) => {
       const d = q(sel);
       d.style.display = list.length ? '' : 'none';
@@ -2044,11 +2045,10 @@ export class CommandBar {
   refreshReinforce() {
     const win = document.getElementById('reinforceWin'),
       p = this.player;
-    const counts = new Map();
-    for (const t of p.reinforcements) counts.set(t, (counts.get(t) || 0) + 1);
+    const cards = reserveCards(p);
     const grid = (this.reinGrid ||= reinforceGrid(this.rshell));
-    const rows = Math.max(1, Math.min(grid.rows, Math.ceil(counts.size / grid.cols)));
-    const sig = (this.reinforceOpen ? 'o' : 'c') + rows + [...counts].map(([t, n]) => t.name + n).join();
+    const rows = Math.max(1, Math.min(grid.rows, Math.ceil(cards.length / grid.cols)));
+    const sig = (this.reinforceOpen ? 'o' : 'c') + rows + reserveSignature(cards);
     if (sig === this.reinSig) {
       if (this.reinPop) this.reinPop.textContent = `${p.pop}/${p.popCap}`;
       return;
@@ -2093,7 +2093,8 @@ export class CommandBar {
     pop.textContent = `${p.pop}/${p.popCap}`;
     this.reinPop = pop;
     let i = 0;
-    for (const [t, n] of counts) {
+    for (const card of cards) {
+      const { type: t, count: n } = card;
       if (i >= grid.cols * grid.rows) break;
       const r = Math.floor(i / grid.cols),
         c = i % grid.cols;
@@ -2101,27 +2102,9 @@ export class CommandBar {
       s.style.backgroundImage = css(iconUrl(iconNameFor(t)));
       s.style.setProperty('--over', css(iconAdditiveUrl('i_button_unit_frame_select.tga')));
       s.innerHTML = `<span>${n > 1 ? n : ''}</span>`;
-      s.onmouseenter = () => this.tipOn('rein' + i, t);
-      s.onmouseleave = ev => {
-        this.hideInfo();
-        if (this.reinPress === t && ev.buttons & 1) {
-          this.reinPress = null;
-          this.ui.startPlacing(t, true);
-        }
-      };
-      s.onmousedown = ev => {
-        if (ev.button === 0) {
-          ev.preventDefault();
-          if (globalThis.multiPlace === false) this.ui.startPlacing(t, true);
-          else this.reinPress = t;
-        }
-      };
-      s.onmouseup = ev => {
-        if (ev.button === 0 && this.reinPress === t) {
-          this.reinPress = null;
-          this.ui.addPlacing(t);
-        }
-      };
+      const tip = 'rein' + i;
+      s.onmouseenter = () => this.tipOn(tip, t, null, card.detail);
+      wireReserveCard(s, card, this.ui, this, db.t(t.str('Text_ID')) || t.name, () => this.hideInfo());
       i++;
     }
     const close = at(el('rclose', win), grid.closeX, grid.y[rows - 1] - grid.closeDrop, 101, 22);

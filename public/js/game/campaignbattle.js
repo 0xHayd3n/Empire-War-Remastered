@@ -516,6 +516,7 @@ export function placeCampaignBattle(w, map, teams, cb) {
       book.entity.set(u.gid, e);
     }
     if (cb.vesselBattle && !cb.linked && p.human && s.units.some(u => u.vessel)) {
+      book.flagship = s.units.find(r=>r.vessel?.designated);
       book.placeVessel = placeVessel;
       p.reserveBook = book;
       p.reserveTickets = Array(p.reinforcements.length).fill(null);

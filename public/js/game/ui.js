@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { reserveCards, reserveSignature, wireReserveCard } from './reservecards.js';
 import { db, selectionBoxColors } from '../gamedata.js';
 import { getModelData, buildModel } from '../model.js';
 import { BeaconView } from './beacons.js';
@@ -952,23 +953,25 @@ export class UI {
     this.sayMove(md.movers, p[0][1], p[0][2], attackMove);
   }
 
-  startPlacing(type, dragging) {
+  startPlacing(type, dragging, vesselId = null) {
     this.cancelPlacing();
-    this.placing = { list: [], ghosts: [], slots: [], dragging, ok: false, x: 0, y: 0, heading: 0, turned: false, why: '' };
-    this.addPlacing(type);
+    this.placing = { list: [], vessels: [], ghosts: [], slots: [], dragging, ok: false, x: 0, y: 0, heading: 0, turned: false, why: '' };
+    this.addPlacing(type, vesselId);
   }
 
-  addPlacing(type) {
+  addPlacing(type, vesselId = null) {
     const pl = this.placing;
     if (!pl || pl.dragging) {
-      if (!pl || pl.list.length) return this.startPlacing(type, false);
+      if (!pl || pl.list.length) return this.startPlacing(type, false, vesselId);
     }
-    const have = this.player.reinforcements.filter(t => t === type).length;
-    if (pl.list.filter(t => t === type).length >= have) {
+    const have = reserveCards(this.player).find(c => c.type === type && c.id === vesselId)?.count || 0;
+    if (pl.list.filter((t, i) => t === type && pl.vessels[i] === vesselId).length >= have) {
+      if (!pl.list.length) this.cancelPlacing();
       this.game.audio.play('GUI_Bad_Sound');
       return;
     }
     pl.list.push(type);
+    pl.vessels.push(vesselId);
     pl.ghosts.push(this.r.makeGhost(ghostModels(type)));
     pl.slots = formation(
       pl.ghosts.map(g => Math.max(40, g.radius || 0)),
@@ -1059,11 +1062,27 @@ export class UI {
     let r = null;
     for (let i = 0; i < pl.list.length; i++) {
       const p = pl.at[i];
-      r = this.game.command({ c: 'reinforce', type: pl.list[i].name, x: p.x, y: p.y, h: pl.face });
-      if (r && r.why) return;
+      r = this.game.command({
+        c: 'reinforce',
+        type: pl.list[i].name,
+        x: p.x,
+        y: p.y,
+        h: pl.face,
+        ...(pl.vessels[i] ? { vesselId: pl.vessels[i] } : {})
+      });
+      if (r && r.why) {
+        // A script may have consumed a ticket after the card was picked.
+        if (
+          this.player.reserveBook?.flagship &&
+          (i || !reserveCards(this.player).some(c => c.type === pl.list[i] && c.id === pl.vessels[i]))
+        )
+          this.cancelPlacing();
+        this.hudTimer = 0;
+        return;
+      }
     }
     const one = pl.list.length === 1 && pl.list[0],
-      left = one ? this.player.reinforcements.filter(t => t === one).length - (r ? 0 : 1) : 0;
+      left = one ? (reserveCards(this.player).find(c => c.type === one && c.id === pl.vessels[0])?.count || 0) - (r ? 0 : 1) : 0;
     const more = left > 0 && this.keys.has('ShiftLeft');
     if (!more) this.cancelPlacing();
     this.hudTimer = 0;
@@ -1071,20 +1090,19 @@ export class UI {
 
   refreshReinforcements() {
     const el = $('reinforce'),
-      pool = this.player.reinforcements;
-    const counts = new Map();
-    for (const t of pool) counts.set(t, (counts.get(t) || 0) + 1);
-    const sig = [...counts].map(([t, n]) => t.name + n).join();
+      cards = reserveCards(this.player);
+    const sig = reserveSignature(cards);
     if (sig === this.reinSig) return;
     this.reinSig = sig;
     el.replaceChildren();
-    if (!counts.size) return;
+    if (!cards.length) return;
     const head = document.createElement('div');
     head.className = 'head';
     head.innerHTML = '<span>Reinforcements</span><span>drag onto the map</span>';
     const grid = document.createElement('div');
     grid.className = 'grid';
-    for (const [t, n] of counts) {
+    for (const card of cards) {
+      const { type: t, count: n } = card;
       const d = document.createElement('div');
       d.className = 'b';
       const url = iconFor(t);
@@ -1094,26 +1112,7 @@ export class UI {
       c.className = 'n';
       c.textContent = n > 1 ? n : '';
       d.appendChild(c);
-      d.title = typeName(t);
-      d.onmousedown = ev => {
-        if (ev.button === 0) {
-          ev.preventDefault();
-          if (globalThis.multiPlace === false) this.startPlacing(t, true);
-          else this.reinPress = t;
-        }
-      };
-      d.onmouseleave = ev => {
-        if (this.reinPress === t && ev.buttons & 1) {
-          this.reinPress = null;
-          this.startPlacing(t, true);
-        }
-      };
-      d.onmouseup = ev => {
-        if (ev.button === 0 && this.reinPress === t) {
-          this.reinPress = null;
-          this.addPlacing(t);
-        }
-      };
+      wireReserveCard(d, card, this, this, typeName(t));
       grid.appendChild(d);
     }
     el.append(head, grid);

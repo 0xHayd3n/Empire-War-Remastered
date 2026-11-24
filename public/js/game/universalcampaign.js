@@ -1,5 +1,5 @@
 import { activeLanguage } from '../language.js';
-import { canonEligible, envoyStart } from './universaleligibility.js';
+import { canonEligible, envoyStart, equalFootingStart } from './universaleligibility.js';
 import { ruleFields, rescueCampaign } from './universalrules.js';
 import { ruleChoices, rulePresets } from './universalrulemenu.js';
 import { eraTimeline, periodOf, startWithin } from './universaltimeline.js';
@@ -133,6 +133,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     if (s.variant !== v) {
       delete options.canonUnits;
       delete options.envoy;
+      delete options.flagship;
       delete options.expedition;
       delete options.heroRescue;
       if (s.row.scripted || !next.p.combat?.transport?.allowed.includes(s.variant?.id)) delete options.transportLosses;
@@ -264,6 +265,19 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
         }
       );
     else ui.hide('canon');
+    if (equalFootingStart(p, row, v))
+      ui.field(
+        'flagship',
+        'Rebel flagship',
+        [opt('', 'Campaign default'), opt('commission', 'Designate one Mon Calamari cruiser in the galactic log')],
+        options.flagship ? 'commission' : '',
+        value => {
+          if (value) options.flagship = true;
+          else delete options.flagship;
+          note();
+        }
+      );
+    else ui.hide('flagship');
     const paths = [opt('', 'Authored objectives')];
     if (envoyStart(p, row, v)) paths.push(opt('envoy', 'Mon Mothma · diplomatic envoy'));
     if (p.combat?.rescue && v?.id === rescueCampaign) paths.push(opt('rescue', 'Rescue Han and Chewbacca'));
@@ -299,6 +313,9 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
               : row?.layout
                 ? 'Choose starting locations and rosters in-game, using the mod’s own setup.'
                 : '';
+    if (options.flagship)
+      ui.status.textContent +=
+        (ui.status.textContent ? ' ' : '') + 'Your flagship keeps battle damage. Repairs require confirmation at a friendly starbase.';
   }
   function render() {
     ui.el.toggleAttribute('data-await-map', !family);

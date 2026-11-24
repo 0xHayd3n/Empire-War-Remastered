@@ -10,5 +10,11 @@ export const canonEligible = (p, r, v) =>
   r?.id === canonStart &&
   r.faction === 'Rebel' &&
   v?.id === canonStart;
-export const envoyStart = (p, r, v) =>
-  p?.id === 'stock' && p.combat?.rescue === true && r?.id === equalFooting && r.faction === 'Rebel' && v?.id === equalFooting;
+export const equalFootingStart = (p, r, v) =>
+  !r?.scripted &&
+  p?.id === 'stock' &&
+  p.combat?.rescue === true &&
+  r?.id === equalFooting &&
+  r.faction === 'Rebel' &&
+  v?.id === equalFooting;
+export const envoyStart = equalFootingStart;

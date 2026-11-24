@@ -79,7 +79,7 @@ import { GalacticMovies } from './galacticmovies.js';
 import { GalacticLog } from './galacticlog.js';
 import { Menus } from './menus.js';
 import { envoyArrival, envoyUpdate } from './universalobjectives.js';
-import { openVesselBattle, acceptVesselResult } from './campaignvessels.js';
+import { openVesselBattle, acceptVesselResult, enableFlagship, flagshipMode } from './campaignvessels.js';
 import { stepCanonOrder } from './universalcanon.js';
 import { prisonChanged } from './universalrescue.js';
 import { beginUniversalRules } from './universalrules.js';
@@ -270,6 +270,12 @@ export class GalacticGame {
     else if (this.setup.campaignSettings) applyCampaignSettings(g, this.setup.campaignSettings, camp.str('Starting_Active_Player'));
     if (exactPath && !this.setup.restore) {
       g.universalPath = 1;
+      if (
+        this.setup.universalOptions?.flagship === true &&
+        document.querySelector('meta[name="swr-universal"]') &&
+        !document.querySelector('meta[name="swr-pack-revision"]')
+      )
+        enableFlagship(g);
       beginUniversalRules(g, this.setup.universalOptions, db.faction(g.active)?.list('Allies'));
     }
     if (this.setup.net) this.multiplayerGalaxy(g);
@@ -441,6 +447,10 @@ export class GalacticGame {
         'Star Map Expedition: survey all sites for a 3,000-credit grant. Known sites are listed in the galactic log.'
       );
     }
+    if (!this.setup.restore && flagshipMode(g))
+      this.galacticLog.message(
+        'Flagship commission available. Open the galactic droid log to designate one of your Mon Calamari cruisers.'
+      );
     if (!this.setup.restore && g.universalRules?.envoy)
       this.galacticLog.message('Diplomatic envoy: send Mon Mothma to Bespin. See the galactic log for the rendezvous.');
     onOrbit((planet, owner, units, raid) => {
@@ -2864,7 +2874,9 @@ export class GalacticGame {
                 company = carriedCompany(u);
               return {
                 gid: fi + ':' + ui,
-                ...(vesselBattle && u.vessel ? { vessel: structuredClone(u.vessel) } : {}),
+                ...(vesselBattle && u.vessel
+                  ? { vessel: { ...structuredClone(u.vessel), ...(g.vessels.flagship === u.vessel.id ? { designated: true } : {}) } }
+                  : {}),
                 ...(g.universalRules?.transportLosses !== undefined &&
                 owner === g.active &&
                 company &&

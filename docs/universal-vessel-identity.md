@@ -1,6 +1,6 @@
 # Persistent flagship damage: proceed with a limited stock pilot
 
-**Decision:** the per-vessel identity prerequisite passes for the human Rebel `Calamari_Cruiser` in stock Universal **Equal Footing**. Proceed with one opt-in flagship on this opening. Do **not** enable campaign-wide damage, migrate old saves, or overlay Thrawn’s own Executor/Lusankya rules. No launcher setting enrolls ships and no existing game levies repair charges. The stock cruiser is the test hull; these checks did not validate a mod flagship.
+**Decision:** the per-vessel identity prerequisite passes for the human Rebel `Calamari_Cruiser` in stock Universal **Equal Footing**. Proceed with one opt-in flagship on this opening. Do **not** enable campaign-wide damage, migrate old saves, or overlay Thrawn’s own Executor/Lusankya rules. The resulting [Rebel flagship setting](universal-library.md#start-a-campaign-and-choose-its-path) is off by default. It commissions only the cruiser the player confirms in a new eligible campaign. The engine prerequisite was tested with multiple tracked twins; the player-facing version persists damage for just the one designated ship. No mod flagship was validated.
 
 ## What changed the decision
 
@@ -20,8 +20,8 @@ The browser test caught something the isolated simulator did not: normal `applyG
 ## Implementation and limits
 
 - `campaignvessels.js` assigns an opaque ID to each eligible campaign record when it first participates, not to a ship type. A condition follows that record through transfers. One pending battle token authorizes one return; one vessel revision authorizes one yard debit. An unrecognized roster or duplicate ID is not repaired by guessing. Hull and named hardpoints are carried; shields are not.
-- `campaignreserve.js` binds a campaign ticket at actual dequeue and placement. The normal type-based reinforcement command still calls the first available ship of that type. A tactical save preserves exact bindings, remaining tickets and the condition of a successfully extracted ship, even when it no longer has a live entity. AI, multiplayer, linked missions and ordinary saves do not enroll.
-- Next player-facing slice: designate **one** owned ship; show its name and condition when calling reserves and before confirming a priced repair at a friendly yard. Do not advertise per-ship reserve selection until that control exists. Scripted replacements, upgrades into a different ship type, AI, multiplayer, and mod-native damage/repair systems are outside the proof.
+- `campaignreserve.js` binds a campaign ticket at actual dequeue and placement. Ordinary cards call the first ordinary ship of the class; Valiant’s card carries its vessel ID to the actual dequeue. A stale selection does not fall back to its sister. A tactical save preserves exact bindings, remaining tickets and the condition of a successfully extracted ship, even when it no longer has a live entity. AI, multiplayer, linked missions and ordinary saves do not enroll.
+- **Player-facing check:** commissioned the second of two staged stock cruisers through the native log. Called Valiant from its own reserve card after retreat, fleet split and restore (11,750 hull, one damaged hardpoint); the ordinary card brought the healthy sister. On a second branch of the same disposable save, a friendly starbase quoted 157 credits. Cancel kept the treasury at 12,000; confirmed full repair left 11,843 and the same undamaged ship after reload. Scripted replacements, upgrades into a different ship type, AI, multiplayer, and mod-native damage/repair systems are outside the proof.
 
 ## Reproduce
 
@@ -29,4 +29,4 @@ From the Universal checkout:
 
 - `node tools/test-campaign-vessels.mjs` — fast, no game install. Also included in `npm run test:universal`.
 - Set `SWR_GAME` to the stock installation and run `node tools/check-universal-vessel-identity.mjs` — control, engine pilot, reserves and repair receipts.
-- With local Universal packs, Chrome and `playwright-core` available, run `node tools/check-universal-vessel-window.cjs` — rendered stock test with two temporary browser saves. Default disposable port block starts at 8940; override with `SWR_TEST_WINDOW_PORT`. Expected final line: `PASS: rendered second battle { damaged: 11750, other: 12750, hp: 315 }`.
+- With local Universal packs, Chrome and `playwright-core` available, run `node tools/check-universal-vessel-window.cjs` — native opt-in, designation, separate reserve cards, two rendered battles and temporary tactical, galactic and repair saves. Default disposable port block starts at 8940; override with `SWR_TEST_WINDOW_PORT`. Look for both `PASS: rendered second battle, selected exact reserves` and `PASS: cancelled quote unchanged; confirmed once and reloaded`.

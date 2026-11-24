@@ -159,10 +159,10 @@ export function execute(world, player, cmd) {
     }
     case 'reinforce': {
       const type = player.reinforcements.find(t => t.name === cmd.type);
-      if (!type) return {};
+      if (!type) return cmd.vesselId ? { why: 'Flagship no longer in reserve' } : {};
       const x = clampX(cmd.x),
         y = clampY(cmd.y);
-      const why = world.deployReinforcement(player, type, x, y, num(cmd.h));
+      const why = world.deployReinforcement(player, type, x, y, num(cmd.h), cmd.vesselId);
       return why ? { why } : {};
     }
     case 'special': {

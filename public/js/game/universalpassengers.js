@@ -14,6 +14,10 @@ export function markPassengers(rosters, book, campaign) {
       if (r && t && r.owner === campaign.autoResolve.transportOwner) r.passenger = { hero: namedHero(t) };
     };
     for (const [gid, e] of book.entity) if (records.has(gid)) mark(byEntity.get(e), gid);
+    if (rows.some(r => r.entity.reserve?.reserveBook === book)) {
+      for (const r of rows) if (r.entity.reserveGid) mark(r, r.entity.reserveGid);
+      continue;
+    }
     const available = rows.filter(r => r.entity.reserve),
       called = [...(book.called?.get(side.team) || [])];
     for (const u of book.waiting.filter(u => u.team === side.team && !book.lostReserve?.includes(u.gid))) {

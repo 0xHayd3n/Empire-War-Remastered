@@ -17,9 +17,9 @@ export function spaceRosters(world, campaign, book) {
     }
     for (const p of team.players || [])
       if (p.id >= 0)
-        for (const type of p.reinforcements || []) {
+        for (const [i, type] of (p.reinforcements || []).entries()) {
           const c = autoCombatant(type, p.factionName, { space: true });
-          c.entity = { reserve: p, type, dead: false };
+          c.entity = { reserve: p, type, dead: false, ...(p.reserveTickets?.[i] ? { reserveGid: p.reserveTickets[i] } : {}) };
           out.push(c);
         }
     return out;

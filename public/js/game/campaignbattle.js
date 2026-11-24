@@ -1,3 +1,4 @@
+import { placeVessel, vesselResult } from './campaignvessels.js';
 import { isTacticalSuperweapon } from './tacticalsuperweapon.js';
 
 import { db } from '../gamedata.js';
@@ -480,6 +481,7 @@ export function placeCampaignBattle(w, map, teams, cb) {
         book.absent.push(u.gid);
         continue;
       }
+      if (u.vessel) placeVessel(e, u);
       spawned.push([u, e]);
       if (u.companyType) companies.push([u.companyType, e]);
       if (hyper && !w.tacticalSuperweapons?.record(e)) w.startHyperspace(e);
@@ -513,7 +515,13 @@ export function placeCampaignBattle(w, map, teams, cb) {
       if (!flagship && hyper && !w.tacticalSuperweapons?.record(e)) w.startHyperspace(e);
       book.entity.set(u.gid, e);
     }
+    if (cb.vesselBattle && !cb.linked && p.human && s.units.some(u => u.vessel)) {
+      book.placeVessel = placeVessel;
+      p.reserveBook = book;
+      p.reserveTickets = Array(p.reinforcements.length).fill(null);
+    }
     for (const u of waiting) {
+      p.reserveTickets?.push(u.gid);
       p.reinforcements.push(u.type);
       if (u.companyType) w.carryOnArrival?.(p, u.type, u.companyType);
       if (!p.human) (p.aiPool ||= []).push({ type: u.type, owner: null });
@@ -600,6 +608,10 @@ export function battleResult(w, book, cb, winnerTeam) {
       waiting = book.waiting.filter(u => u.team === team && !book.lostReserve?.includes(u.gid)),
       left = new Map();
     for (const p of t.players) for (const ty of p.reinforcements) left.set(ty.name, (left.get(ty.name) || 0) + 1);
+    if (t.players.some(p => p.reserveBook === book)) {
+      alive.push(...waiting.map(u => u.gid));
+      continue;
+    }
     const called = new Map();
     for (const u of waiting) {
       const n = u.type.name;
@@ -624,6 +636,7 @@ export function battleResult(w, book, cb, winnerTeam) {
     book.station && !book.station.dead ? (book.station.stationLevel ?? book.station.type.num('Base_Level', 0)) : undefined;
   return {
     planet: cb.planet,
+    ...vesselResult(cb, book, alive),
     alive,
     station: !!(book.station && !book.station.dead),
     stationLevel,

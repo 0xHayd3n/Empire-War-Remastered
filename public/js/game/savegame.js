@@ -4,6 +4,7 @@ import { useAbility, refreshMods } from './abilities.js';
 import { BUILD } from '../build.js';
 import { expansion } from '../edition.js';
 import { contentNow } from '../content.js';
+import { conditionOf } from './campaignvessels.js';
 import { snapshotGalaxy } from './galaxy.js';
 import { saveBattleScripts } from './tacticalsave.js';
 import { SpecialWeapon } from './superweapon.js';
@@ -78,13 +79,20 @@ export function campaignSetup(game) {
 
 function spaceCampaign(game, ref) {
   const book = game.campaignBook,
-    gone = e => ({ dead: true, retreated: !!e.retreated });
+    gone = e => ({ dead: true, retreated: !!e.retreated, ...(e.vesselId && e.retreated ? { savedCondition: conditionOf(e) } : {}) });
   return {
     setup: campaignSetup(game),
     destroyedBy: game.tacticalCampaign?.destroyedBy || null,
     book: {
       entity: [...book.entity].map(([gid, e]) => [gid, (!e.dead && ref(e)) || gone(e)]),
+      ...(game.setup.campaign.vesselBattle
+        ? {
+            tickets: game.world.players.filter(p => p.reserveTickets).map(p => [p.id, p.reserveTickets.slice()]),
+            vesselBindings: [...book.entity].filter(([, e]) => e.vesselId).map(([gid, e]) => [gid, e.vesselId])
+          }
+        : {}),
       waiting: book.waiting.map(u => ({
+        ...(u.vessel ? { vessel: u.vessel } : {}),
         gid: u.gid,
         type: u.type.name,
         team: u.team,
@@ -102,11 +110,37 @@ export function restoreSpaceCampaign(game, save, refs) {
   const c = save.campaign,
     book = game.campaignBook;
   if (!c || !book) return;
-  const get = r => (typeof r === 'string' ? refs.get(r) || { dead: true } : { dead: true, retreated: !!(r && r.retreated) });
+  const get = r =>
+    typeof r === 'string'
+      ? refs.get(r) || { dead: true }
+      : { dead: true, retreated: !!r?.retreated, ...(r?.savedCondition ? { savedCondition: r.savedCondition } : {}) };
   book.entity = new Map(c.book.entity.map(([gid, r]) => [gid, get(r)]));
   book.waiting = c.book.waiting
     .map(u => ({ ...u, type: db.type(u.type), ...(u.companyType ? { companyType: db.type(u.companyType) } : {}) }))
     .filter(u => u.type);
+  if (game.setup.campaign?.vesselBattle) {
+    const roster = new Map(
+      [...game.setup.campaign.attacker.units, ...game.setup.campaign.defender.units].filter(r => r.vessel).map(r => [r.gid, r.vessel.id])
+    );
+    for (const [gid, id] of c.book.vesselBindings || []) {
+      const e = book.entity.get(gid);
+      if (!e || roster.get(gid) !== id || (!e.dead && e.type?.name !== 'Calamari_Cruiser'))
+        throw new Error('Inconsistent saved vessel binding');
+      e.vesselId = id;
+    }
+    for (const p of game.world.players.filter(p => p.reserveBook === book)) {
+      const slots = c.book.tickets?.find(([id]) => id === p.id)?.[1],
+        waiting = new Map(book.waiting.filter(r => r.team === p.team.id).map(r => [r.gid, r.type]));
+      if (
+        !Array.isArray(slots) ||
+        slots.length > p.reinforcements.length ||
+        !slots.every((gid, i) => gid === null || (waiting.get(gid) === p.reinforcements[i] && waiting.delete(gid))) ||
+        waiting.size
+      )
+        throw new Error('Inconsistent saved reserve tickets');
+      p.reserveTickets = slots.slice();
+    }
+  }
   book.lostReserve = c.book.lostReserve?.slice();
   book.absent = c.book.absent.slice();
   book.station = c.book.station ? get(c.book.station) : null;

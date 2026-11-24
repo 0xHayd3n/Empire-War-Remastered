@@ -1,3 +1,4 @@
+import { takeReserve } from './campaignreserve.js';
 import { ScanAhead } from './scanjobs.js';
 import { hardpointModes, hardpointDelays, modeAllows, modeDelay, rechargeDelay } from './firemodes.js';
 import { ProjectileMods } from './projectilemods.js';
@@ -2361,10 +2362,11 @@ export class World {
         pool.pop();
         const k = p.reinforcements.indexOf(type),
           j = p.aiPool ? p.aiPool.indexOf(entry) : -1;
-        if (k >= 0) p.reinforcements.splice(k, 1);
+        const bind = k >= 0 && takeReserve(p, k);
         if (j >= 0) p.aiPool.splice(j, 1);
         this.onReinforce?.(p.factionName, type?.name ?? type);
         const e = this.spawn(type, p, x, y, th, { hyperspace: true });
+        if (bind) bind(e);
         this.bonusArrival(p, type, e);
         this.audio.playFor(p, p.faction.str('Reinforcements_Enroute_SFXEvent'));
         this.onEvent('built', { player: p, type, entity: e });
@@ -2490,9 +2492,10 @@ export class World {
     if (i < 0) return 'Not available';
     const why = this.cantReinforce(player, x, y, footprintOf(type), type, Number.isFinite(heading) ? heading : this.startFacing(player));
     if (why) return why;
-    player.reinforcements.splice(i, 1);
+    const bind = takeReserve(player, i);
     this.onReinforce?.(player.factionName, type?.name ?? type);
     const e = this.spawn(type, player, x, y, heading, { hyperspace: true });
+    bind?.(e);
     this.bonusArrival(player, type, e);
     this.audio.playFor(player, (type?.str ? type.str('SFXEvent_Fleet_Move').trim() : '') || player.faction.str('Reinforcements_Enroute_SFXEvent'));
     this.onEvent('built', { player, type, entity: e });

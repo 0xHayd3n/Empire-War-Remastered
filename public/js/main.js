@@ -79,6 +79,7 @@ import { watchForResume, pendingResume, forgetResume } from './game/resume.js';
 import { restoreBattleScripts } from './game/tacticalsave.js';
 import { orderMove } from './game/orders.js';
 import { placeSpecialWeapons, placeCampaignSpecialWeapons, specialWeaponSource } from './game/superweapon.js';
+import { loseReserve } from './game/campaignreserve.js';
 import { placeCampaignBattle, sideBeaten, battleResult, campaignIntro } from './game/campaignbattle.js';
 import { storyTypes, scriptTypes } from './game/storyart.js';
 import { openRetreatDialog, resolveTactical, spaceRosters } from './game/tacticalautoresolve.js';
@@ -1742,13 +1743,7 @@ class Game {
       { winner, doomed } = resolveTactical(rosters, cb, { space: true });
     const lose = e => {
       if (e.reserve) {
-        if (e.dead) return;
-        e.dead = true;
-        const at = e.reserve.reinforcements.indexOf(e.type);
-        if (at >= 0) {
-          e.reserve.reinforcements.splice(at, 1);
-          if (e.reserveGid) (this.campaignBook.lostReserve ||= []).push(e.reserveGid);
-        }
+        loseReserve(e, this.campaignBook);
       } else if (!e.dead) w.kill(e, null);
     };
     for (const e of doomed) lose(e);

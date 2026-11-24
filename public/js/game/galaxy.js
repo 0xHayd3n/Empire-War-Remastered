@@ -1,3 +1,4 @@
+import { restoreVessels } from './campaignvessels.js';
 import { restoreUniversalRules } from './universalrules.js';
 import { db, ObjType, loadFileList } from '../gamedata.js';
 import { fetchText } from '../vfs.js';
@@ -314,6 +315,7 @@ export function snapshotGalaxy(g) {
   return {
     campaign: g.campaign.name,
     ...(g.universalPath ? { universalPath: 1 } : {}),
+    ...(g.vessels ? { vessels: { ...g.vessels } } : {}),
     ...(g.universalRules ? { universalRules: structuredClone(g.universalRules) } : {}),
     ...(g.humans ? { humans: g.humans.slice() } : {}),
     time: g.time || 0,
@@ -454,6 +456,8 @@ export function snapshotGalaxy(g) {
         u.markerId ?? -1,
         {
           checkContestedSpace: u.checkContestedSpace,
+          ...(g.vessels && u.vessel ? { vessel: structuredClone(u.vessel) } : {}),
+          ...(g.vessels?.open && u.battleSlot ? { battleSlot: u.battleSlot } : {}),
           ...(u.raiding ? { raiding: true } : {}),
           ...(u.pathfinder ? { pathfinder: true } : {}),
           ...(Number.isInteger(u.guiIndex) ? { guiIndex: u.guiIndex } : {}),
@@ -621,4 +625,5 @@ export function applyGalaxy(g, s) {
       pos: f.pos
     }))
     .filter(f => f.units.length);
+  if (s.vessels || g.vessels) restoreVessels(g, s.vessels);
 }

@@ -79,6 +79,7 @@ import { GalacticMovies } from './galacticmovies.js';
 import { GalacticLog } from './galacticlog.js';
 import { Menus } from './menus.js';
 import { envoyArrival, envoyUpdate } from './universalobjectives.js';
+import { openVesselBattle, acceptVesselResult } from './campaignvessels.js';
 import { stepCanonOrder } from './universalcanon.js';
 import { prisonChanged } from './universalrescue.js';
 import { beginUniversalRules } from './universalrules.js';
@@ -2847,6 +2848,8 @@ export class GalacticGame {
       b = this.battle,
       pl = g.planets[b.p];
     if (b.mode === 'land') return this.landBattleSetup();
+    const vesselBattle =
+      g.vessels && !this.net && !b.linked && !this.setup.linkedTactical && openVesselBattle(g, b.p, [b.attacker, b.defender]);
     const units = owner => {
       const here = g.fleets.filter(f => f.planet === b.p && !f.leg && f.owner === owner),
         lead = aiPathfinder(
@@ -2861,6 +2864,7 @@ export class GalacticGame {
                 company = carriedCompany(u);
               return {
                 gid: fi + ':' + ui,
+                ...(vesselBattle && u.vessel ? { vessel: structuredClone(u.vessel) } : {}),
                 ...(g.universalRules?.transportLosses !== undefined &&
                 owner === g.active &&
                 company &&
@@ -2893,6 +2897,7 @@ export class GalacticGame {
       campaign: {
         planet: b.p,
         planetType: pl.type.name,
+        ...(vesselBattle ? { vesselBattle } : {}),
         campaignName: g.campaign.name,
         galaxy: snap,
         storyPlots,
@@ -2922,6 +2927,7 @@ export class GalacticGame {
   }
 
   applyResult(r) {
+    if (!acceptVesselResult(this.galaxy, r)) return;
     for (const record of r.storyDelayed || []) this.story?.queueDelayed(record);
     const host = this.galaxy.planets[r.planet];
     if (host)

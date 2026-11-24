@@ -1,3 +1,4 @@
+import { takeReserve } from './campaignreserve.js';
 import { hintedObjects } from './tacticalobjects.js';
 import { loadFengari, LuaVM, LuaRef, Multi, engineLacksMethod } from '../lua.js';
 import { db, typeHasProperty } from '../gamedata.js';
@@ -1655,13 +1656,14 @@ export class ScriptHost {
         vm.push(undefined, L);
         return 1;
       }
-      pool.splice(i, 1);
+      const bind = takeReserve(p, i);
       const book = this.game.campaignBook,
-        record = book?.waiting?.find(r => r.type === t && r.team === p.team?.id);
+        record = !p.reserveBook && book?.waiting?.find(r => r.type === t && r.team === p.team?.id);
       if (record) book.waiting.splice(book.waiting.indexOf(record), 1);
       return whenArt(L, t, () => {
         const e = w.spawn(t, p, at.x, at.y, 0);
         w.bonusArrival?.(p, t, e);
+        bind?.(e);
         if (record && e) book.entity?.set(record.gid, e);
         w.recountPop?.();
         return e ? [this.wrap(e)] : undefined;

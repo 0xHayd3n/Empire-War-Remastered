@@ -175,6 +175,37 @@ const assert = require('node:assert/strict'),
       true
     );
     const initialTarget = await board.getAttribute('data-campaign');
+    const topRows = () =>
+      table
+        .locator('tbody:visible tr[data-profile]:not(.uc-size-child)')
+        .evaluateAll(rs =>
+          rs.map(r => [
+            r.cells[0].querySelector('button').firstChild.textContent,
+            r.cells[1].textContent,
+            parseInt(r.cells[2].textContent, 10)
+          ])
+        );
+    const original = await topRows();
+    for (const [i, title] of ['Map', 'Mod', 'Planets'].entries()) {
+      const h = table.getByRole('columnheader', { name: title, exact: true }),
+        button = h.getByRole('button');
+      for (const dir of [1, -1]) {
+        await button.click();
+        assert.equal(await h.getAttribute('aria-sort'), dir === 1 ? 'ascending' : 'descending');
+        const rows = await topRows();
+        assert.deepEqual(
+          rows,
+          [...original].sort(
+            (a, b) =>
+              dir * (i === 2 ? a[i] - b[i] : new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }).compare(a[i], b[i]))
+          )
+        );
+      }
+      await button.press('Space');
+      assert.equal(await h.getAttribute('aria-sort'), null);
+      assert.deepEqual(await topRows(), original);
+    }
+    assert.equal(await board.getAttribute('data-campaign'), initialTarget);
     await setup('Faction').press('ArrowRight');
     assert(await field('faction').isHidden());
     assert(await field('difficulty').isVisible());
@@ -412,6 +443,11 @@ const assert = require('node:assert/strict'),
     assert.equal(await cwRow.locator('.uc-count-high').innerText(), '115');
     await cw.press('Space');
     assert.equal(await board.getAttribute('data-campaign'), prior);
+    const header = board.getByRole('columnheader', { name: 'Planets', exact: true }).getByRole('button');
+    await header.click();
+    assert.deepEqual(await cwChildren.allInnerTexts(), ['Small', 'Medium', 'Large']);
+    await header.click();
+    await header.click();
     assert.deepEqual(await cwChildren.allInnerTexts(), ['Large', 'Medium', 'Small']);
     assert.deepEqual(await cwChildren.locator('xpath=ancestor::tr').locator('.uc-planet-count').allInnerTexts(), ['115', '95', '80']);
     await cw.press('ArrowRight');
@@ -596,6 +632,13 @@ const assert = require('node:assert/strict'),
       await selectPeriod('6 ABY');
       const regimes = board.getByRole('group', { name: 'Starting variant' });
       await regimes.getByRole('button', { name: '6 ABY · Central Committee', exact: true }).click();
+      const selectedTarget = await board.getAttribute('data-campaign'),
+        mapSort = board.getByRole('columnheader', { name: 'Map', exact: true }).getByRole('button');
+      for (let i = 0; i < 3; i++) {
+        await mapSort.click();
+        assert(await current.evaluate(b => !!b.closest('tr').nextElementSibling?.querySelector('.uc-branches')));
+        assert.equal(await board.getAttribute('data-campaign'), selectedTarget);
+      }
       assert.equal(await field('faction').getByRole('radio').count(), 1);
     }
     const opening = process.env.SWR_TEST_FTGU;
@@ -701,16 +744,16 @@ const assert = require('node:assert/strict'),
     await setup('Faction').click();
     await field('faction').scrollIntoViewIfNeeded();
     assert(await board.locator('.uc-fields:visible').evaluate(e => e.scrollWidth === e.clientWidth));
+    const scroll = await board.locator('.uc-content').evaluate(e => ({
+      width: e.clientWidth,
+      sw: e.scrollWidth,
+      height: e.clientHeight,
+      sh: e.scrollHeight,
+      single: [...e.querySelectorAll('.uc-roster,.uc-fields')].every(n => getComputedStyle(n).overflowY !== 'auto')
+    }));
     assert(
-      await board
-        .locator('.uc-content')
-        .evaluate(
-          e =>
-            e.scrollWidth === e.clientWidth &&
-            e.scrollHeight > e.clientHeight &&
-            [...e.querySelectorAll('.uc-roster,.uc-fields')].every(n => getComputedStyle(n).overflowY !== 'auto')
-        ),
-      'One vertical sidebar scroller'
+      scroll.width === scroll.sw && scroll.sh > scroll.height && scroll.single,
+      'One vertical sidebar scroller: ' + JSON.stringify(scroll)
     );
     assert(await board.locator('.uc-roster').evaluate(e => e.scrollWidth === e.clientWidth));
     assert(await eras.evaluate(e => e.scrollWidth === e.clientWidth && [...e.children].every(b => b.getBoundingClientRect().width > 0)));

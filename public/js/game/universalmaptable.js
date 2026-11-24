@@ -1,6 +1,7 @@
 import { planetRange, countLabel } from './universalmaplist.js';
 import { mapSections, scenarioTypes } from './universalmapgroups.js';
 import { sidebarTabs } from './universalsidebartabs.js';
+import { mapOrder } from './universalmaporder.js';
 import { submodPage } from './universalmoddirectory.js';
 
 export function mapTable(pickMap, pickDate, clearChoice) {
@@ -12,14 +13,8 @@ export function mapTable(pickMap, pickDate, clearChoice) {
     expanded = new Map(),
     parents = new Map();
   table.className = 'uc-map-table';
-  for (const title of ['Map', 'Mod', 'Planets']) {
-    const th = document.createElement('th');
-    th.textContent = title;
-    th.scope = 'col';
-    if (title === 'Planets') th.title = 'Red: under 50 planets · Amber: 50–99 · Green: 100 or more';
-    head.append(th);
-  }
   const branchRow = document.createElement('tr'),
+    order = mapOrder(head, branchRow, tabStop),
     branchCell = branchRow.insertCell(),
     branches = document.createElement('div');
   branchCell.colSpan = 3;
@@ -36,8 +31,9 @@ export function mapTable(pickMap, pickDate, clearChoice) {
     b.onclick = act;
     return b;
   }
-  function row(body, p, b) {
+  function row(body, p, b, title) {
     const tr = body.insertRow();
+    order.row(tr, title, p.name);
     tr.dataset.profile = p.id;
     tr.insertCell().append(b);
     tr.insertCell().textContent = p.name;
@@ -55,6 +51,7 @@ export function mapTable(pickMap, pickDate, clearChoice) {
     const text = countLabel([lo, hi], setup);
     if (cell.title === text) return text;
     cell.title = text;
+    order.range(cell.parentNode, lo, hi);
     const tint = n => {
       const span = document.createElement('span');
       span.className = 'uc-count-' + (n < 50 ? 'low' : n < 100 ? 'mid' : 'high');
@@ -72,7 +69,7 @@ export function mapTable(pickMap, pickDate, clearChoice) {
     b.dataset.family = f.id;
     b.setAttribute('aria-pressed', 'false');
     if (!g && f.span && f.span !== period.label) subtitle(b, f.span);
-    const entry = { ...row(body, f.p, b), g, title };
+    const entry = { ...row(body, f.p, b, title), g, title };
     entries.set(f, entry);
     label(f);
     if (g) {
@@ -85,6 +82,7 @@ export function mapTable(pickMap, pickDate, clearChoice) {
     const tr = body.insertRow(),
       title = version ? `${o.title} · ${version}` : o.title,
       b = control(version || title, 'uc-locked-choice', () => submodPage({ ...o, title }, b));
+    order.row(tr, version || title, o.mod.name);
     tr.dataset.requiredMod = o.mod.id;
     tr.className = 'uc-locked-row';
     tr.title = `Requires ${o.mod.name}`;
@@ -150,7 +148,7 @@ export function mapTable(pickMap, pickDate, clearChoice) {
     const { title, children, key } = item,
       { f } = children[0];
     const b = control(title, 'uc-size-group', () => toggle(g, !g.open)),
-      g = { ...row(body, f.p, b), key, rows: [] },
+      g = { ...row(body, f.p, b, title), key, rows: [] },
       ranges = children.map(c => planetRange(c.f, period.maps.get(c.f))),
       text = setCount(
         g.number,
@@ -186,7 +184,7 @@ export function mapTable(pickMap, pickDate, clearChoice) {
     if (g && e.key === 'ArrowRight') {
       e.preventDefault();
       if (!g.open) toggle(g, true);
-      else g.rows[0].querySelector('button').focus();
+      else g.b.closest('tr').nextElementSibling.querySelector('button').focus();
       return;
     }
     if (e.key === 'ArrowLeft') {
@@ -222,6 +220,7 @@ export function mapTable(pickMap, pickDate, clearChoice) {
         branchRow.remove();
         branches.replaceChildren();
         while (table.tBodies.length) table.tBodies[0].remove();
+        order.clear();
         entries.clear();
         parents.clear();
         active = undefined;
@@ -240,9 +239,10 @@ export function mapTable(pickMap, pickDate, clearChoice) {
             const note = body.insertRow().insertCell();
             note.colSpan = 3;
             note.className = 'uc-unindexed';
-            note.textContent = 'Other mods · starting dates not indexed';
+            note.textContent = 'Unavailable mods · starting dates not indexed';
           }
           for (const o of locked.filter(o => o.section === name)) lockedRow(body, o);
+          order.capture(body);
         }
         if (period.scenario) {
           const tabs = sidebarTabs('scenario', 'Scenario type', names, i => {
@@ -286,6 +286,7 @@ export function mapTable(pickMap, pickDate, clearChoice) {
         label(family, variant);
         [...branches.children].forEach((b, i) => b.setAttribute('aria-pressed', String(period.maps.get(family)[i] === date)));
       }
+      order.update();
     }
   };
 }

@@ -1,5 +1,6 @@
 import { planetCount } from './universalmaplist.js';
 import { yearTrack } from './universalyeartrack.js';
+import { sidebarTabs } from './universalsidebartabs.js';
 const node = (tag, cls, text) => {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -26,32 +27,37 @@ const heraldry = {
   'New Republic': ['new-republic-era', 'New Republic / Imperial Remnant']
 };
 const press = (b, on) => b.setAttribute('aria-pressed', String(on));
-export function campaignRoster(host, eras, { pickEra, pickPeriod, pickStory, pickMap, pickDate }) {
+export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickDate }) {
   const cards = group('Era', 'uc-era-strip'),
-    periods = group('Time period', 'uc-periods'),
-    tabs = node('div', 'uc-story-tabs'),
-    list = node('div', 'uc-map-list'),
-    branches = group('Starting variant', 'uc-branches');
-  tabs.setAttribute('role', 'tablist');
-  tabs.setAttribute('aria-label', 'Storyline');
-  tabs.onkeydown = e => {
-    const items = [...tabs.children],
-      i = items.indexOf(e.target),
-      n = items.length;
-    const next = { ArrowLeft: (i + n - 1) % n, ArrowRight: (i + 1) % n, Home: 0, End: n - 1 }[e.key];
-    if (next === undefined || i < 0) return;
-    e.preventDefault();
-    items[next].focus();
-    items[next].click();
-  };
-  list.setAttribute('role', 'group');
-  list.setAttribute('aria-label', 'Maps');
-  const heading = node('h2', 'uc-nav-heading', 'Time period'),
-    mapHeading = node('h2', 'uc-nav-heading', 'Map'),
+    calendar = group('Starting period', 'uc-calendar'),
     readout = node('span', 'uc-year-value'),
-    dial = yearTrack(periods, readout, pickPeriod);
-  heading.append(readout);
-  host.append(cards, heading, periods, mapHeading, tabs, list);
+    track = node('div', 'uc-periods'),
+    dial = yearTrack(track, readout, pickPeriod),
+    table = node('table', 'uc-map-table'),
+    branches = group('Starting variant', 'uc-branches'),
+    branchRow = document.createElement('tr'),
+    remembered = new Map(),
+    entries = new Map();
+  let shownEra, shownPeriod, activeFamily;
+  const tabs = sidebarTabs('starts', 'Start type', ['Time-based', 'Scenario-based'], i => {
+    if (i === Number(shownPeriod.scenario)) return;
+    const next = i ? shownEra.periods.find(p => p.scenario) : remembered.get(shownEra) || shownEra.periods.find(p => !p.scenario);
+    if (next) pickPeriod(next);
+  });
+  const caption = node('div', 'uc-year-caption');
+  caption.append(node('span', '', 'Time period'), readout);
+  calendar.append(caption, track);
+  tabs.panels[0].append(calendar);
+  host.append(cards, tabs.bar, ...tabs.panels);
+  const headers = table.createTHead().insertRow();
+  for (const title of ['Map', 'Category', 'Planets']) {
+    const h = node('th', '', title);
+    h.scope = 'col';
+    headers.append(h);
+  }
+  const cell = branchRow.insertCell();
+  cell.colSpan = 3;
+  cell.append(branches);
   for (const e of eras) {
     const b = button('', () => pickEra(e), 'uc-era-card');
     b.dataset.era = e.name;
@@ -69,100 +75,101 @@ export function campaignRoster(host, eras, { pickEra, pickPeriod, pickStory, pic
     b.title = [pair, ...e.missing].join('\n');
     cards.append(b);
   }
-  let shownEra,
-    shownPeriod,
-    shownStory,
-    activeFamily,
-    entries = new Map();
-  list.onkeydown = e => {
+  table.onkeydown = e => {
     if (!e.target.matches('.uc-map-choice')) return;
-    const buttons = [...entries.values()],
-      n = buttons.indexOf(e.target);
-    const dst = { ArrowDown: Math.min(n + 1, buttons.length - 1), ArrowUp: Math.max(0, n - 1), Home: 0, End: buttons.length - 1 }[e.key];
+    const buttons = [...entries.values()].map(r => r.b),
+      n = buttons.indexOf(e.target),
+      dst = { ArrowDown: Math.min(n + 1, buttons.length - 1), ArrowUp: Math.max(0, n - 1), Home: 0, End: buttons.length - 1 }[e.key];
     if (dst !== undefined) {
       e.preventDefault();
       buttons[dst].focus();
     }
   };
+  function count(f, v) {
+    const { b, number } = entries.get(f),
+      text = planetCount(f, shownPeriod.maps.get(f), v);
+    number.textContent = text.replace(/ planets?$/, '');
+    number.title = text;
+    b.setAttribute('aria-label', [f.title, f.span, f.p.name, text].filter(Boolean).join(' · '));
+  }
+  function selectRow(f, on) {
+    const { b, tr } = entries.get(f);
+    press(b, on);
+    tr.classList.toggle('uc-selected-map', on);
+  }
   return {
     close: dial.close,
-    show(era, period, story, family, date, variant) {
+    show(era, period, family, date, variant) {
       if (era !== shownEra) {
         shownEra = era;
         [...cards.children].forEach((b, i) => press(b, eras[i] === era));
-        dial.mount(era.periods);
+        dial.mount(era.periods.filter(p => !p.scenario));
+        tabs.buttons.forEach((b, i) => (b.disabled = !era.periods.some(p => Number(p.scenario) === i)));
       }
       if (period !== shownPeriod) {
         shownPeriod = period;
-        shownStory = null;
-        dial.show(period);
-        tabs.replaceChildren();
-        for (const p of new Set([...period.maps.keys()].map(f => f.p))) {
-          const b = node('button', '', p.name);
-          b.type = 'button';
-          b.id = 'uc-story-' + p.id;
-          b.dataset.profile = p.id;
-          b.setAttribute('role', 'tab');
-          b.setAttribute('aria-controls', 'uc-story-panel');
-          b.onclick = () => {
-            if (shownStory !== p) pickStory(p);
-          };
-          tabs.append(b);
+        const mode = Number(period.scenario);
+        tabs.select(mode);
+        tabs.panels[mode].append(table);
+        if (!period.scenario) {
+          remembered.set(era, period);
+          dial.show(period);
         }
-        mapHeading.textContent = period.scenario ? 'Scenarios' : 'Maps';
-        list.setAttribute('aria-label', period.scenario ? 'Scenarios' : 'Maps');
-      }
-      if (story !== shownStory) {
-        shownStory = story;
-        activeFamily = undefined;
+        table.setAttribute('aria-label', period.scenario ? 'Scenarios' : 'Maps');
+        branchRow.remove();
+        branches.replaceChildren();
+        while (table.tBodies.length) table.tBodies[0].remove();
         entries.clear();
-        const section = node('section');
-        section.dataset.profile = story.id;
-        section.id = 'uc-story-panel';
-        section.setAttribute('role', 'tabpanel');
-        section.setAttribute('aria-labelledby', 'uc-story-' + story.id);
-        list.replaceChildren(section);
-        for (const b of tabs.children) {
-          const active = b.dataset.profile === story.id;
-          b.setAttribute('aria-selected', String(active));
-          b.tabIndex = active ? 0 : -1;
-          if (active) tabs.scrollLeft += b.getBoundingClientRect().left - tabs.getBoundingClientRect().left;
-        }
+        activeFamily = undefined;
+        // Each row closes over its exact profile-local family. Matching display names in
+        // other categories never merge launch targets, starting variants or counts.
+        const bodies = new Map();
         for (const f of period.maps.keys()) {
-          if (f.p !== story) continue;
-          const b = button('', () => pickMap(f), 'uc-map-choice');
+          let body = bodies.get(f.p);
+          if (!body) {
+            body = table.createTBody();
+            body.dataset.profile = f.p.id;
+            bodies.set(f.p, body);
+          }
+          const tr = body.insertRow(),
+            b = button(f.title, () => pickMap(f), 'uc-map-choice');
           b.dataset.family = f.id;
-          const label = node('span', '', f.title);
-          if (f.span && f.span !== period.label) label.append(node('small', 'uc-map-span', f.span));
-          b.append(label, node('small', 'uc-planet-count', planetCount(f, period.maps.get(f))));
-          entries.set(f, b);
-          section.append(b);
+          if (f.span && f.span !== period.label) b.append(node('small', 'uc-map-span', f.span));
+          tr.insertCell().append(b);
+          tr.insertCell().textContent = f.p.name;
+          const number = tr.insertCell();
+          number.className = 'uc-planet-count';
+          entries.set(f, { b, tr, number });
+          count(f);
+          tr.onclick = e => {
+            if (!b.contains(e.target)) {
+              b.focus({ preventScroll: true });
+              b.click();
+            }
+          };
         }
-        list.scrollTop = 0;
       }
       if (activeFamily !== family) {
         if (entries.has(activeFamily)) {
-          const old = entries.get(activeFamily);
-          press(old, false);
-          old.lastElementChild.textContent = planetCount(activeFamily, period.maps.get(activeFamily));
+          selectRow(activeFamily, false);
+          count(activeFamily);
         }
-        branches.remove();
+        branchRow.remove();
         branches.replaceChildren();
         activeFamily = family;
         if (family) {
-          const b = entries.get(family);
-          press(b, true);
+          selectRow(family, true);
           const dates = period.maps.get(family);
           if (dates.length > 1) {
             for (const d of dates) branches.append(button(d.label, () => pickDate(d)));
-            b.after(branches);
+            entries.get(family).tr.after(branchRow);
           }
-          b.scrollIntoView({ block: 'nearest', inline: 'nearest' });
         }
       }
-      for (const [f, b] of entries) b.tabIndex = f === (family || period.maps.keys().next().value) ? 0 : -1;
+      const tabStop = family || entries.keys().next().value;
+      for (const [f, { b }] of entries) b.tabIndex = f === tabStop ? 0 : -1;
       if (family) {
-        entries.get(family).lastElementChild.textContent = planetCount(family, period.maps.get(family), variant);
+        count(family, variant);
         [...branches.children].forEach((b, i) => press(b, period.maps.get(family)[i] === date));
       }
     },

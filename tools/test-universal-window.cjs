@@ -53,19 +53,20 @@ const assert = require('node:assert/strict'),
       radio = (k, v) => field(k).locator(`input[type=radio][value="${v}"]`),
       checkedValue = k => field(k).locator('input:checked').inputValue(),
       slider = k => field(k).getByRole('slider'),
-      group = id => board.locator(`.uc-roster section[data-profile="${id}"]`),
+      group = id => board.locator(`.uc-map-table tbody[data-profile="${id}"]`),
       current = board.locator('.uc-map-choice[aria-pressed="true"]'),
       eras = board.getByRole('group', { name: 'Era', exact: true }),
       eraCard = name => eras.getByRole('button', { name, exact: true }),
-      dates = board.getByRole('group', { name: 'Time period', exact: true }),
+      modes = board.getByRole('tablist', { name: 'Start type' }),
+      mode = name => modes.getByRole('tab', { name, exact: true }),
+      setup = name => board.getByRole('tablist', { name: 'Campaign setup' }).getByRole('tab', { name, exact: true }),
+      dates = board.getByRole('group', { name: 'Starting period', exact: true }),
       year = dates.getByRole('slider', { name: 'Starting year' }),
       selectPeriod = async label => {
+        if (label === 'Scenario starts') return mode('Scenario-based').click();
+        if ((await mode('Time-based').getAttribute('aria-selected')) !== 'true') await mode('Time-based').click();
         const tick = dates.locator(`[data-year="${label}"]`);
-        if (!(await tick.count())) {
-          if (label === 'Scenario starts' && !(await dates.getByRole('button').count())) return;
-          return dates.getByRole('button', { name: label, exact: true }).click();
-        }
-        if (await year.isDisabled()) await dates.getByRole('button', { name: 'By year' }).click();
+        if (!(await tick.count())) return dates.getByRole('button', { name: label, exact: true }).click();
         const { width, height } = await year.boundingBox();
         const x = 8 + (width - 16) * (await tick.evaluate(e => parseFloat(e.style.left) / 100));
         await year.click({ position: { x, y: height / 2 } });
@@ -156,14 +157,27 @@ const assert = require('node:assert/strict'),
     await checkCrests();
     assert.equal(await year.count(), 0, 'undated era has no synthetic year axis');
     assert.equal(await eraCard('Galactic Civil War').getAttribute('aria-pressed'), 'true');
-    const tabs = board.getByRole('tablist', { name: 'Storyline' }),
-      panel = board.getByRole('tabpanel');
-    assert.equal(await tabs.getByRole('tab').count(), 3);
-    assert.equal(await panel.count(), 1);
-    await tabs.getByRole('tab', { selected: true }).press('ArrowRight');
-    assert.equal(await board.getAttribute('data-campaign'), '');
-    assert(await board.getByRole('button', { name: 'Start campaign' }).isDisabled());
-    await tabs.getByRole('tab', { selected: true }).press('Home');
+    const panel = group('stock'),
+      table = board.getByRole('table', { name: 'Scenarios' });
+    assert.equal(await board.getByRole('tablist', { name: 'Storyline' }).count(), 0);
+    assert(await mode('Time-based').isDisabled());
+    assert.equal(await mode('Scenario-based').getAttribute('aria-selected'), 'true');
+    assert.deepEqual(await table.getByRole('columnheader').allTextContents(), ['Map', 'Category', 'Planets']);
+    assert.equal(await table.locator('tbody').count(), 3);
+    assert.equal(
+      await table
+        .locator('tr:has(.uc-map-choice)')
+        .evaluateAll(rs => rs.every(r => r.cells.length === 3 && r.cells[1].textContent.trim() && r.cells[2].textContent.trim())),
+      true
+    );
+    const initialTarget = await board.getAttribute('data-campaign');
+    await setup('Faction').press('ArrowRight');
+    assert(await field('faction').isHidden());
+    assert(await field('difficulty').isVisible());
+    await setup('Settings').press('Home');
+    assert(await field('faction').isVisible());
+    assert(await field('difficulty').isHidden());
+    assert.equal(await board.getAttribute('data-campaign'), initialTarget);
     await panel.locator('.uc-map-choice').first().click();
     const native = board.locator('.uc-canvas[data-scene="native"]');
     await native.waitFor();
@@ -336,11 +350,14 @@ const assert = require('node:assert/strict'),
       }
       const date = { 3417277973: '3964 BBY', 1976399102: '22 BBY', 1125571106: '4 ABY' }[id] || 'Scenario starts';
       await selectPeriod(date);
-      await tabs.locator(`[data-profile="${id}"]`).click();
       await group(id).locator('.uc-map-choice').first().click();
+      await setup('Faction').click();
       assert.equal(await board.getAttribute('data-profile'), id);
       const count = await board.locator('[data-planet]').count();
-      assert.match(await current.locator('.uc-planet-count').innerText(), new RegExp('^' + count + ' (setup )?planets?$'));
+      assert.match(
+        await current.locator('xpath=ancestor::tr').locator('.uc-planet-count').innerText(),
+        new RegExp('^' + count + '( setup)?$')
+      );
       assert.equal(await board.evaluate(e => e.marker), root);
       times.push(Math.round(performance.now() - t));
       if (process.env.SWR_TEST_ALL_ERAS && !checked.has(id)) {
@@ -436,18 +453,18 @@ const assert = require('node:assert/strict'),
     await fall.getByRole('button', { name: /Known Galaxy - Small/ }).click();
     assert.equal(await year.getAttribute('aria-valuetext'), '20 BBY');
     await select('3417277973');
-    assert.equal(await dates.getByRole('button').count(), 2);
+    assert.equal(await modes.getByRole('tab').count(), 2);
     assert.equal(await dates.locator('[data-year="3976 BBY"]').count(), 0);
     const stops = await dates.locator('[data-year]').evaluateAll(es => es.map(e => parseFloat(e.style.left) / 100));
     assert.equal(stops.length, 5);
     assert(stops.every((s, i) => Math.abs(s - [0, 32 / 39, 34 / 39, 37 / 39, 1][i]) < 1e-5));
     await selectPeriod('Scenario starts');
-    assert(await year.isDisabled());
-    assert.equal(await year.inputValue(), '-3964');
+    assert(await year.isHidden());
+    assert(await dates.isHidden());
     assert.equal(await current.count(), 0);
-    assert(await board.getByRole('group', { name: 'Scenarios', exact: true }).isVisible());
+    assert(await board.getByRole('table', { name: 'Scenarios', exact: true }).isVisible());
     if (process.env.SWR_TEST_SCREENSHOTS)
-      await dates.screenshot({ path: path.join(process.env.SWR_TEST_SCREENSHOTS, 'scenario-mode.png') });
+      await board.locator('.uc-panel').screenshot({ path: path.join(process.env.SWR_TEST_SCREENSHOTS, 'scenario-mode.png') });
     await group('3417277973')
       .getByRole('button', { name: /Mandalorian Onslaught/ })
       .click();
@@ -458,7 +475,7 @@ const assert = require('node:assert/strict'),
         .count(),
       1
     );
-    await dates.getByRole('button', { name: 'By year' }).press('Space');
+    await mode('Scenario-based').press('ArrowLeft');
     assert(await year.isEnabled());
     assert.equal(await year.getAttribute('aria-valuetext'), '3964 BBY');
     await year.focus();
@@ -473,21 +490,24 @@ const assert = require('node:assert/strict'),
     await page.mouse.up();
     assert.equal(await year.getAttribute('aria-valuetext'), '3959 BBY');
     assert.equal(await group('3417277973').locator('.uc-map-choice').count(), 1);
-    assert.equal(await dates.locator('button[aria-pressed="true"]').innerText(), 'By year');
+    assert.equal(await mode('Time-based').getAttribute('aria-selected'), 'true');
     const revan = group('3417277973'),
       chooseFtgu = () => revan.getByRole('button', { name: /From the Ground Up/ }).click();
     await selectPeriod('Scenario starts');
     await chooseFtgu();
+    await setup('Settings').click();
     await field('credits').selectOption('3000');
     await selectPeriod('3996 BBY');
     await chooseFtgu();
     assert.equal(await revan.locator('.uc-map-choice').count(), 1);
     assert(await field('credits').isHidden());
+    await setup('Faction').click();
     assert.equal(await field('faction').getByRole('radio').count(), 3);
+    await setup('Settings').click();
     await selectPeriod('Scenario starts');
     assert.equal(await field('credits').inputValue(), '');
     await field('credits').selectOption('2000');
-    await dates.getByRole('button', { name: 'By year' }).click();
+    await mode('Time-based').click();
     assert.equal(await year.inputValue(), '-3996');
     await selectPeriod('Scenario starts');
     assert.equal(await field('credits').inputValue(), '', 'Fixed date must discard custom era credits on the same FTGU row');
@@ -520,6 +540,7 @@ const assert = require('node:assert/strict'),
           .getByRole('button', { name: /From the Ground Up/ })
           .click();
         await radio('faction', 'Empire').check();
+        await setup('Settings').click();
         await field('progression').selectOption('on');
         await board.getByRole('button', { name: 'Reset settings' }).click();
         assert.equal(await field('progression').inputValue(), '');
@@ -561,6 +582,7 @@ const assert = require('node:assert/strict'),
     const stars = await board.locator('[data-planet]').evaluateAll(es => es.map(e => [e.dataset.planet, e.dataset.owner]));
     assert(stars.length > 10 && new Set(stars.map(p => p[1])).size > 1);
     assert.equal(await board.getByRole('button', { name: /Zoom|Fit|Configure|Back/i }).count(), 0);
+    await setup('Settings').click();
     assert.equal(await field('difficulty').getByRole('radio').count(), 3);
     assert.equal(await slider('preset').getAttribute('aria-valuetext'), 'Campaign defaults');
     await slider('preset').focus();
@@ -597,15 +619,29 @@ const assert = require('node:assert/strict'),
     assert.equal(await board.locator('.uc-canvas').getAttribute('data-scene'), 'native');
     assert(Number(await board.locator('.uc-active-globes').getAttribute('data-detailed')) > 10);
     await current.scrollIntoViewIfNeeded();
+    await setup('Faction').click();
     await field('faction').scrollIntoViewIfNeeded();
     await snap('era-map-browser');
+    await setup('Settings').click();
     await field('politics').scrollIntoViewIfNeeded();
     await snap('rule-controls');
     await page.setViewportSize({ width: 390, height: 844 });
     assert(await inline());
     assert.equal(await checkedValue('difficulty'), 'hard');
+    await setup('Faction').click();
     await field('faction').scrollIntoViewIfNeeded();
-    assert(await board.locator('.uc-fields').evaluate(e => e.scrollWidth === e.clientWidth));
+    assert(await board.locator('.uc-fields:visible').evaluate(e => e.scrollWidth === e.clientWidth));
+    assert(
+      await board
+        .locator('.uc-content')
+        .evaluate(
+          e =>
+            e.scrollWidth === e.clientWidth &&
+            e.scrollHeight > e.clientHeight &&
+            [...e.querySelectorAll('.uc-roster,.uc-fields')].every(n => getComputedStyle(n).overflowY !== 'auto')
+        ),
+      'One vertical sidebar scroller'
+    );
     assert(await board.locator('.uc-roster').evaluate(e => e.scrollWidth === e.clientWidth));
     assert(await eras.evaluate(e => e.scrollWidth === e.clientWidth && [...e.children].every(b => b.getBoundingClientRect().width > 0)));
     await checkCrests();

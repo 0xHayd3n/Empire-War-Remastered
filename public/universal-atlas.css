@@ -204,8 +204,11 @@ dialog.uc-atlas[open] {
   color: inherit;
 }
 .uc-content {
-  display: grid;
-  grid-template-rows: minmax(0, 1.42fr) minmax(0, 1fr);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scroll-padding-block: 42px;
   flex: 1;
   min-height: 0;
 }
@@ -214,24 +217,7 @@ dialog.uc-atlas[open] {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
-  scrollbar-width: thin;
-  overscroll-behavior: contain;
-  border-bottom: 1px solid #ffffff30;
-  padding: 0 8px 5px;
-}
-.uc-map-list {
-  flex: 1 0 66px;
-  min-height: 0;
-  overflow: auto;
-  scrollbar-width: thin;
-  overscroll-behavior: contain;
-}
-.uc-roster .uc-nav-heading {
-  margin: 5px 4px 4px;
-  padding: 0;
-  color: #e5e5e1;
-  font: 500 14px/1.15 var(--ui-font);
+  padding: 0 8px 8px;
 }
 .uc-era-strip {
   display: flex;
@@ -297,9 +283,8 @@ dialog.uc-atlas[open] {
 .uc-roster .uc-era-card:hover:not(:disabled) {
   filter: brightness(1.18);
 }
-.uc-atlas[data-await-map] .uc-content {
-  grid-template-rows: minmax(0, 1fr);
-}
+.uc-atlas [role='tabpanel'][hidden],
+.uc-atlas[data-await-map] .uc-setup-tabs,
 .uc-atlas[data-await-map] .uc-fields,
 .uc-atlas[data-await-map] .uc-reset {
   display: none;
@@ -307,64 +292,109 @@ dialog.uc-atlas[open] {
 .uc-atlas[data-await-map] .uc-map {
   cursor: default;
 }
-.uc-story-tabs {
-  display: flex;
-  flex: none;
-  gap: 4px;
-  overflow-x: auto;
-  scrollbar-width: thin;
-  padding: 2px 2px 4px;
+.uc-sidebar-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  padding: 4px 0;
   border-bottom: 1px solid #ffffff28;
 }
-.uc-roster .uc-story-tabs button {
-  flex: none;
-  min-height: 26px;
-  padding: 3px 7px;
+.uc-panel .uc-sidebar-tabs button {
+  min-height: 30px;
+  padding: 4px 2px;
+  font-size: 13px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+}
+.uc-panel .uc-sidebar-tabs [aria-selected='true'] {
+  color: #ffe3ae;
+  border-bottom-color: #dfb365;
+  background: #36332c;
+}
+.uc-setup-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-top: 1px solid #bb9d66;
+  padding: 5px 8px;
+  background: #242729;
+}
+.uc-calendar {
+  padding-top: 5px;
+  text-align: center;
+}
+.uc-map-table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  text-align: left;
   font-size: 13px;
 }
-.uc-roster .uc-story-tabs [aria-selected='true'] {
-  color: #ffe3ae;
-  border-color: #b99c66;
-  background: #36332c;
+.uc-map-table th {
+  position: sticky;
+  top: 0;
+  background: #242729;
+  padding: 6px 4px;
+  color: #c4cbd1;
+  font-size: 11px;
+  font-weight: 600;
+  border-bottom: 1px solid #ffffff38;
+}
+.uc-map-table th:nth-child(2) {
+  width: 32%;
+}
+.uc-map-table th:last-child {
+  width: 19%;
+  text-align: right;
+}
+.uc-map-table td {
+  padding: 4px;
+  overflow-wrap: anywhere;
+  vertical-align: middle;
+  border-bottom: 1px solid #ffffff12;
+}
+.uc-map-table td:nth-child(2) {
+  font-size: 12px;
+  color: #bcc2c8;
+}
+.uc-map-table tbody tr:has(.uc-map-choice) {
+  cursor: pointer;
+}
+.uc-map-table tbody tr:has(.uc-map-choice):hover {
+  background: #33373a;
+}
+.uc-map-table .uc-selected-map {
+  background: #34393c;
+  box-shadow: inset 2px 0 #efc372;
 }
 .uc-map-span {
   display: block;
 }
 .uc-planet-count {
   font-variant-numeric: tabular-nums;
-  flex: none;
-}
-.uc-roster .uc-map-choice > span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.uc-roster .uc-map-choice[aria-pressed='true'] {
-  background: #34393c;
-  box-shadow: inset 2px 0 #efc372;
+  text-align: right;
 }
 .uc-map-choice {
   scroll-margin-block: 32px 4px;
 }
 .uc-roster .uc-map-choice {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 6px;
+  display: block;
+  overflow-wrap: anywhere;
   text-align: left;
   border: 0;
   border-radius: 0;
   width: 100%;
   min-height: 28px;
-  padding: 4px 7px;
+  padding: 2px 1px;
   font-size: 14px;
   line-height: 1.25;
 }
 .uc-map-choice small {
   color: #bec3c6;
   font-size: 11px;
-  white-space: nowrap;
 }
-.uc-map-choice:hover,
+
 .uc-periods button:hover,
 .uc-branches button:hover {
   background: #41474b;
@@ -382,8 +412,17 @@ dialog.uc-atlas[open] {
   flex-shrink: 0;
   padding: 1px 4px 4px;
 }
+.uc-year-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 0 5px;
+  font-size: 13px;
+  color: #c4cbd1;
+}
 .uc-year-value {
-  float: right;
+  text-align: right;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   color: #f6d995;
 }
@@ -461,29 +500,6 @@ dialog.uc-atlas[open] {
   outline: 2px solid #f0f3f2;
   outline-offset: 1px;
 }
-.uc-year-scale.inactive,
-.uc-year-value.inactive {
-  filter: grayscale(1);
-  opacity: 0.56;
-}
-.uc-year-range:disabled {
-  cursor: default;
-}
-.uc-start-modes {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 3px;
-  width: 100%;
-  padding: 4px 0 0;
-  border-top: 1px solid #ffffff28;
-  color: #bdc4c8;
-}
-.uc-roster .uc-start-modes button[aria-pressed='true'] {
-  color: #fbe2ac;
-  border-color: #bc9859;
-  background: #39342b;
-}
 .uc-roster .uc-periods button,
 .uc-roster .uc-branches button {
   font-size: 12px;
@@ -496,12 +512,9 @@ dialog.uc-atlas[open] {
   color: #17191b;
 }
 .uc-fields {
-  flex: 1;
-  overflow: auto;
-  min-height: 0;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-  padding: 14px 18px;
+  min-width: 0;
+  scroll-margin-block-start: 42px;
+  padding: 12px 10px;
 }
 .uc-fields > label {
   display: grid;
@@ -756,10 +769,26 @@ dialog.uc-atlas[open] {
     width: 28px;
     height: 28px;
   }
-  .uc-periods {
-    max-height: 114px;
-    overflow-y: auto;
-    scrollbar-width: thin;
+  .uc-panel .uc-sidebar-tabs button {
+    font-size: 11px;
+    overflow-wrap: anywhere;
+  }
+  .uc-map-table th,
+  .uc-map-table td {
+    padding: 3px 2px;
+  }
+  .uc-map-table td:nth-child(2),
+  .uc-map-table .uc-planet-count {
+    font-size: 11px;
+  }
+  .uc-map-table th:last-child {
+    width: 25%;
+  }
+  .uc-roster .uc-map-choice {
+    font-size: 12px;
+  }
+  .uc-roster {
+    padding-inline: 4px;
   }
   .uc-roster .uc-periods button {
     font-size: 11px;

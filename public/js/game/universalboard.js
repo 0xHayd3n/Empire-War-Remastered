@@ -1,4 +1,5 @@
 import { settingsControls } from './universalcontrols.js';
+import { sidebarTabs } from './universalsidebartabs.js';
 import { strategicPreview } from './universalpreview.js';
 
 export function atlasBoard(back, play, reset) {
@@ -6,9 +7,21 @@ export function atlasBoard(back, play, reset) {
   el.className = 'uc-atlas';
   el.dataset.universalScreen = 'campaign';
   el.setAttribute('aria-labelledby', 'uc-heading');
-  el.innerHTML = `<div class="uc-canvas"></div><aside class="uc-panel" aria-label="Campaign settings"><h1 id="uc-heading">Galactic Conquest</h1><div class="uc-content"><div class="uc-roster" role="region" aria-label="Campaign maps"></div><div class="uc-fields"></div></div><footer><div role="status"></div><button type="button" class="uc-reset" aria-label="Reset settings">Reset</button><button type="button" class="uc-start" disabled>Start campaign</button></footer></aside>`;
-  const panel = el.querySelector('.uc-fields'),
-    start = el.querySelector('.uc-start'),
+  el.toggleAttribute('data-await-map', true);
+  el.innerHTML = `<div class="uc-canvas"></div><aside class="uc-panel" aria-label="Campaign settings"><h1 id="uc-heading">Galactic Conquest</h1><div class="uc-content"><div class="uc-roster" role="region" aria-label="Campaign maps"></div></div><footer><div role="status"></div><button type="button" class="uc-reset" aria-label="Reset settings">Reset</button><button type="button" class="uc-start" disabled>Start campaign</button></footer></aside>`;
+  const content = el.querySelector('.uc-content'),
+    setup = sidebarTabs('setup', 'Campaign setup', ['Faction', 'Settings'], i => {
+      setup.select(i);
+      if (setup.panels[i].getBoundingClientRect().top > content.getBoundingClientRect().bottom - 50)
+        setup.panels[i].scrollIntoView({ block: 'start' });
+    }),
+    [factions, panel] = setup.panels;
+  setup.bar.classList.add('uc-setup-tabs');
+  for (const pane of setup.panels) pane.className = 'uc-fields';
+  content.append(setup.bar, ...setup.panels);
+  const factionCards = settingsControls(factions),
+    controls = settingsControls(panel);
+  const start = el.querySelector('.uc-start'),
     fields = new Map();
   document.body.append(el);
   el.showModal();
@@ -22,8 +35,11 @@ export function atlasBoard(back, play, reset) {
   return {
     el,
     map,
-    ...settingsControls(panel),
-    panel: el.querySelector('.uc-content'),
+    slider: controls.slider,
+    radios(id, ...args) {
+      (id === 'faction' ? factionCards : controls).radios(id, ...args);
+    },
+    panel: content,
     roster: el.querySelector('.uc-roster'),
     status: el.querySelector('[role="status"]'),
     close(remember = false) {

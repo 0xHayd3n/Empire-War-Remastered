@@ -48,7 +48,6 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     roster,
     era,
     period,
-    story,
     difficulty,
     options,
     settings,
@@ -124,7 +123,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     }
     if (s.variant !== v) delete options.expedition;
     family = next;
-    story = p = next.p;
+    p = next.p;
     date = selection.date;
     period = era.periods.find(x => x.label === periodOf(family, date));
     row = s.row;
@@ -140,17 +139,12 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
   function pickMap(next) {
     choose(next, startWithin(next, period.maps.get(next), date, next.p === p ? faction : undefined));
   }
-  function pickStory(profile) {
-    story = profile;
-    family = row = date = v = null;
-    render();
-  }
   function pickPeriod(next) {
     period = next;
     if (family && period.maps.has(family)) pickMap(family);
     else {
-      const maps = [...period.maps.keys()];
-      pickStory(maps.find(f => f.p === story)?.p || maps[0].p);
+      family = row = date = v = null;
+      render();
     }
   }
   function pickEra(next) {
@@ -231,13 +225,13 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     // On an in-story switch start the worker before rebuilding the right panel. On
     // first entry build the form first so computing the viewport needs just one layout.
     if (family && previewProfile === p && previewMap !== v?.map) showMap();
-    roster.show(era, period, story, family, date, v);
+    roster.show(era, period, family, date, v);
     ui.el.dataset.profile = family ? p.id : '';
     ui.el.dataset.campaign = v?.id || '';
     ui.allow(!!v);
     if (!family) {
-      const first = [...period.maps.keys()].find(f => f.p === story);
-      ui.map.show(story, period.maps.get(first)[0].choices[0].variant, true);
+      const first = period.maps.keys().next().value;
+      ui.map.show(first.p, period.maps.get(first)[0].choices[0].variant, true);
       previewProfile = previewMap = null;
       ui.status.textContent = period.scenario
         ? 'Choose a scenario to preview its starting galaxy.'
@@ -303,7 +297,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     if (closed) return true;
     if (data.profiles.some(p => p.maps.length)) ui.map.setLibrary(data.profiles);
     const eras = eraTimeline(data);
-    roster = campaignRoster(ui.roster, eras, { pickEra, pickPeriod, pickStory, pickMap, pickDate });
+    roster = campaignRoster(ui.roster, eras, { pickEra, pickPeriod, pickMap, pickDate });
     const families = e => e.periods.flatMap(period => [...period.maps.keys()]);
     era = eras.find(e => families(e).some(f => f.p.id === origin)) || eras.find(e => e.first);
     if (era) {

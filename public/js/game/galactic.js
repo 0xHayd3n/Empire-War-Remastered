@@ -3812,7 +3812,7 @@ export class GalacticGame {
           if (settleConvoy(this.galaxy)) this.galacticLog?.message('Freight charter settled. See the galactic log for the outcome.');
         }
         if (this.galaxy.universalRules?.envoy) envoyUpdate(this);
-        if (this.galaxy.universalRules?.canon) stepCanonOrder(this);
+        if (this.galaxy.universalRules?.canon || this.galaxy.universalRules?.fractal) stepCanonOrder(this);
         this.warnApproaching();
         this.battles.update();
         stepVisibility(this.galaxy, this.me, dt * LOGIC_FPS);

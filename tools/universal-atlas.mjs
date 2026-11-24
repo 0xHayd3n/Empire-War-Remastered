@@ -8,7 +8,7 @@ import { assertPrivateLibrary, loadPack } from './universal-library.mjs';
 import { languageId } from '../public/js/language.js';
 import { thrawnRevision } from './universal-loader-table.mjs';
 import { fallCustomRevision } from './universal-fall-layouts.mjs';
-import { canonEligible, envoyStart, equalFootingStart } from '../public/js/game/universaleligibility.js';
+import { canonEligible, fractalEligible, envoyStart, equalFootingStart } from '../public/js/game/universaleligibility.js';
 import { validValue, validLoss, rescueCampaign } from '../public/js/game/universalrules.js';
 const digest = s => createHash('sha256').update(s).digest('hex');
 function stockStamp(game) {
@@ -96,6 +96,20 @@ export function launchPlan(atlas, q) {
   if (Object.hasOwn(q, 'flagship')) {
     if (q.flagship !== true || !equalFootingStart(p, r, v)) throw Error('Flagship commission unavailable.');
     options.flagship = true;
+  }
+  if (Object.hasOwn(q, 'fractal')) {
+    if (q.fractal !== true || !fractalEligible(p, r, v)) throw Error('Native Fractalsponge order unavailable.');
+    options.fractal = true;
+  }
+  if (Object.hasOwn(q, 'buildTime')) {
+    if (
+      r.scripted ||
+      !p.buildTime ||
+      ![1, 0.8].includes(q.buildTime) ||
+      !atlas.profiles.some(x => x.buildTime?.declared && x.buildTime.native === q.buildTime)
+    )
+      throw Error('Construction time unavailable.');
+    if (q.buildTime !== p.buildTime.native) options.buildTime = q.buildTime;
   }
   if (Object.hasOwn(q, 'canonUnits')) {
     if (q.canonUnits !== true || !canonEligible(p, r, v)) throw Error('Native Canon Units order unavailable.');
@@ -188,7 +202,7 @@ export function atlasStore({ home, library, eras }) {
       const p = JSON.parse(gunzipSync(fs.readFileSync(filename)));
       if (p.sheets.every(s => /^[a-f0-9]{64}$/.test(s) && fs.existsSync(path.join(home, 'planet-portraits-v1', s + '.png')))) cached = p;
     } catch {}
-    if (cached && 'laneKit' in cached && 'payment' in cached && 'combat' in cached) return cached;
+    if (cached && 'laneKit' in cached && 'payment' in cached && 'buildTime' in cached && 'combat' in cached) return cached;
     const args = { game: library.game, home, folder: library.items.get(id)?.folder, id, language: lang };
     const p = cached
       ? {

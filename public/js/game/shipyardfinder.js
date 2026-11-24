@@ -1,10 +1,14 @@
 import { db } from '../gamedata.js';
 import { forceKind } from './galaxy.js';
-import { availableUnits, productionBlock, productionCandidates } from './galacticproduction.js';
-import { conflictAt } from './galacticrelation.js';
+import { availableUnits, productionBlock, productionCandidates, productionCost, productionTime } from './galacticproduction.js';
 const label = t => db.t(t.str('Text_ID')) || t.name;
 const ship = t => ['starship', 'squadron'].includes(forceKind(t));
-export const finderEnabled = game => !!game.galaxy.universalPath && !game.net && game.me === game.galaxy.active;
+export const finderEnabled = game =>
+  game.galaxy.universalPath === 1 &&
+  !game.galaxy.humans &&
+  !game.net &&
+  game.me === game.galaxy.active &&
+  game.galaxy.visibility?.viewer === game.me;
 const knownPort = (g, p) =>
   g.planets[p?.index] === p &&
   p?.owner === g.active &&
@@ -30,7 +34,6 @@ export function finderShips(g) {
 export const finderType = (g, t) => t && ship(t) && productionCandidates(g.active, 'space').includes(t);
 export function checkYard(g, p, t) {
   if (!finderType(g, t) || !knownPort(g, p)) return 'Yard unavailable';
-  if (conflictAt(g, p.index, g.active)) return 'Orbit contested';
   const player = g.players.find(q => q.faction === g.active);
   if (listed(player?.disabledTypes, t)) return 'Disabled by the campaign';
   const why = productionBlock(g, p.index, g.active, t);
@@ -60,10 +63,13 @@ export function finderRows(g, view, set, jump) {
       else {
         count++;
         rows.push(
-          action(`Go to yard: ${label(p.type)}`, () => {
-            if (!checkYard(g, p, t)) jump(p);
-            else set(view);
-          })
+          action(
+            `Go to yard: ${label(p.type)} · ${productionCost(g, p, g.active, t)} credits · ${+productionTime(g, p, g.active, t).toFixed(1)} s`,
+            () => {
+              if (!checkYard(g, p, t)) jump(p);
+              else set(view);
+            }
+          )
         );
       }
     }

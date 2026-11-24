@@ -1,20 +1,22 @@
 import { db } from '../gamedata.js';
 import { availableUnits, queueUnit } from './galacticproduction.js';
-import { canonStart, thrawnRevision } from './universaleligibility.js';
+import { canonStart, fractalStart, thrawnRevision } from './universaleligibility.js';
 // Request a real local order after native initialization; never grant a tech,
 // duplicate an order, manufacture the category dummy, or force a story flag.
 export function stepCanonOrder(game) {
   const g = game.galaxy,
-    m = g.universalRules?.canon;
+    fs = !!g.universalRules?.fractal,
+    key = fs ? 'fractal' : 'canon',
+    label = fs ? 'Fractalsponge Units' : 'Canon Units',
+    m = g.universalRules?.[key];
   if (!m || !['request', 'category'].includes(m.state)) return;
   const stop = () => {
-    g.universalRules.canon = { state: 'unavailable' };
-    game.galacticLog?.message('Canon Units could not be queued. The native Options control is unchanged.');
+    g.universalRules[key] = { state: 'unavailable' };
+    game.galacticLog?.message(`${label} could not be queued. The native Options control is unchanged.`);
   };
   if (
     game.net ||
-    g.campaign.name !== canonStart ||
-    game.me !== 'Rebel' ||
+    (fs ? !fractalStart(game.me) || g.campaign.name !== fractalStart(game.me) : g.campaign.name !== canonStart || game.me !== 'Rebel') ||
     document.querySelector('meta[name="swr-pack-revision"]')?.content !== `1125571106:${thrawnRevision}`
   )
     return stop();
@@ -30,14 +32,14 @@ export function stepCanonOrder(game) {
     return;
   if (game.nextCanonCheck > g.time) return;
   game.nextCanonCheck = g.time + 0.25;
-  const t = db.type('Option_Canon_Units'),
+  const t = db.type(fs ? 'Option_FS_Units' : 'Option_Canon_Units'),
     player = g.players.find(p => p.faction === game.me);
   if (!t || !player) return stop();
   if (
     player.builtCounts?.[t.name] ||
     g.planets.some(p => Object.values(p.production).some(l => l.some(q => q.owner === game.me && q.type === t)))
   ) {
-    g.universalRules.canon = { state: 'ordered' };
+    g.universalRules[key] = { state: 'ordered' };
     return;
   }
   if (m.state === 'request') {
@@ -62,7 +64,7 @@ export function stepCanonOrder(game) {
   if (!p || p.name !== m.planet || p.owner !== game.me || g.time > m.deadline) return stop();
   if (!availableUnits(g, p.index, game.me, 'space').includes(t)) return;
   if (queueUnit(g, p.index, game.me, t)) return stop();
-  g.universalRules.canon = { state: 'ordered' };
-  game.galacticLog?.message('Enable Canon Units queued using the native Options order.');
+  g.universalRules[key] = { state: 'ordered' };
+  game.galacticLog?.message(`Enable ${label} queued using the native Options order.`);
   game.ui?.refresh();
 }

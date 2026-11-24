@@ -10,6 +10,14 @@ export const canonEligible = (p, r, v) =>
   r?.id === canonStart &&
   r.faction === 'Rebel' &&
   v?.id === canonStart;
+export const fractalStart = faction => (['Empire', 'Greater_Maldrood'].includes(faction) ? `KnownSmall_Era_1_${faction}` : null);
+export const fractalEligible = (p, r, v) =>
+  p?.id === '1125571106' &&
+  p.revision === thrawnRevision &&
+  !r?.scripted &&
+  !!fractalStart(r?.faction) &&
+  r.id === fractalStart(r.faction) &&
+  v?.id === r.id;
 export const equalFootingStart = (p, r, v) =>
   !r?.scripted &&
   p?.id === 'stock' &&

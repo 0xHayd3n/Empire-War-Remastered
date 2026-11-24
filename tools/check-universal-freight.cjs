@@ -33,6 +33,7 @@ const { chromium } = require('playwright-core'),
     await b.locator('[data-field="faction"] input[value="Rebel"]').check();
     await b.getByRole('tab', { name: 'Settings', exact: true }).click();
     await b.locator('[data-field="path"] input[value="convoy"]').check();
+    if (process.env.SWR_TEST_PACE) await b.locator('[data-field="buildTime"]').selectOption('alternate');
     await b.locator('.uc-start').click();
     await page.locator('.battle-plate').waitFor();
     await page.locator('.battle-plate').waitFor({ state: 'hidden' });
@@ -51,6 +52,23 @@ const { chromium } = require('playwright-core'),
     await yard.press('Enter');
     assert(await r.evaluate(() => !game.galacticLog.opened));
     console.log('Finder', shipName, yardName);
+    if (process.env.SWR_TEST_PACE) {
+      const order = await r.evaluate(async () => {
+        const { availableUnits, productionBlock, productionTime, queueUnit } = await import('/js/game/galacticproduction.js'),
+          g = game.galaxy,
+          p = g.planets[game.selected],
+          t = availableUnits(g, p.index, g.active, 'space').find(
+            t => t.num('Build_Time_Seconds', 0) > 10 && !productionBlock(g, p.index, g.active, t)
+          );
+        if (!t || g.universalRules?.buildTime !== 0.8) throw Error('Missing time option or build');
+        const normal = productionTime({ ...g, universalRules: {} }, p, g.active, t);
+        if (queueUnit(g, p.index, g.active, t)) throw Error('Cannot queue');
+        const job = p.production.space.at(-1);
+        return { type: t.name, normal, total: job.total, credits: job.cost };
+      });
+      assert(order.total < order.normal);
+      console.log('Ordered with alternate construction time', order);
+    }
     const proof = await r.evaluate(async () => {
       const { orderMove } = await import('/js/game/fleets.js'),
         { snapshot, putSave } = await import('/js/game/savegame.js'),
@@ -77,6 +95,7 @@ const { chromium } = require('playwright-core'),
         ships: g.fleets.flatMap(f => f.units).filter(u => u.charter).length
       };
     }, proof.id);
+    if (process.env.SWR_TEST_PACE) assert.equal(await r.evaluate(() => game.galaxy.universalRules?.buildTime), 0.8);
     assert.equal(after.ships, 0);
     assert.equal(after.credits - proof.credits, 1500);
     assert.deepEqual(errors, []);

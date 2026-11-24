@@ -10,7 +10,7 @@ export const ruleFields = {
     max: 86400
   }
 };
-import { equalFooting, canonStart } from './universaleligibility.js';
+import { equalFooting, canonStart, fractalStart } from './universaleligibility.js';
 import { envoyEligible } from './universalobjectives.js';
 export const rescueCampaign = equalFooting;
 export const validLoss = n => Number.isFinite(n) && n >= 0 && n <= 1;
@@ -22,6 +22,7 @@ export function validValue(field, value) {
 export function resolvedOptions(raw) {
   const out = {};
   for (const key of Object.keys(ruleFields)) if (validValue(key, raw?.[key])) out[key] = raw[key];
+  if ([0.8, 1].includes(raw?.buildTime)) out.buildTime = raw.buildTime;
   if (typeof raw?.payAsYouGo === 'boolean') out.payAsYouGo = raw.payAsYouGo;
   if (validLoss(raw?.transportLosses)) out.transportLosses = raw.transportLosses;
   return out;
@@ -56,6 +57,8 @@ export function beginUniversalRules(g, options, allies) {
   const rules = resolvedOptions(options);
   if (options?.heroRescue === true && g.campaign?.name === rescueCampaign && g.active === 'Rebel') rules.rescue = { state: 'ready' };
   if (options?.envoy === true && envoyEligible(g)) rules.envoy = { state: 'travel' };
+  if (options?.fractal === true && fractalStart(g.active) && g.campaign?.name === fractalStart(g.active))
+    rules.fractal = { state: 'request' };
   if (options?.canonUnits === true && g.campaign?.name === canonStart && g.active === 'Rebel') rules.canon = { state: 'request' };
   if (options?.expedition === true) {
     const sites = expeditionSites(g, allies);
@@ -79,13 +82,15 @@ export function restoreUniversalRules(raw) {
   ) {
     rules.expedition = { owner: x.owner, sites: [...x.sites], found: x.sites.filter(s => x.found.includes(s)) };
   }
-  const envoy = raw?.envoy,
-    canon = raw?.canon;
+  const envoy = raw?.envoy;
   if (['travel', 'complete', 'unavailable'].includes(envoy?.state)) rules.envoy = { state: envoy.state };
   if (envoy?.state === 'report' && Number.isFinite(envoy.until) && envoy.until >= 0) rules.envoy = { state: 'report', until: envoy.until };
-  if (['request', 'ordered', 'unavailable'].includes(canon?.state)) rules.canon = { state: canon.state };
-  if (canon?.state === 'category' && typeof canon.planet === 'string' && Number.isFinite(canon.deadline))
-    rules.canon = { state: 'category', planet: canon.planet, deadline: canon.deadline };
+  for (const key of ['canon', 'fractal']) {
+    const order = raw?.[key];
+    if (['request', 'ordered', 'unavailable'].includes(order?.state)) rules[key] = { state: order.state };
+    if (order?.state === 'category' && typeof order.planet === 'string' && Number.isFinite(order.deadline))
+      rules[key] = { state: 'category', planet: order.planet, deadline: order.deadline };
+  }
   const hold = raw?.rescue;
   if (['ready', 'complete'].includes(hold?.state)) rules.rescue = { state: hold.state };
   if (hold?.state === 'captive' && typeof hold.prison === 'string' && hold.prison && typeof hold.jailer === 'string' && hold.jailer)

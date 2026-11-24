@@ -1,5 +1,5 @@
 import { activeLanguage } from '../language.js';
-import { canonEligible, envoyStart, equalFootingStart } from './universaleligibility.js';
+import { canonEligible, fractalEligible, envoyStart, equalFootingStart } from './universaleligibility.js';
 import { ruleFields, rescueCampaign } from './universalrules.js';
 import { ruleChoices, rulePresets } from './universalrulemenu.js';
 import { eraTimeline, periodOf, startWithin } from './universaltimeline.js';
@@ -132,6 +132,8 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     }
     if (s.variant !== v) {
       delete options.canonUnits;
+      delete options.fractal;
+      delete options.buildTime;
       delete options.envoy;
       delete options.convoy;
       delete options.flagship;
@@ -254,6 +256,34 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
         }
       );
     else ui.hide('transport');
+    const altTime = p.buildTime && data.profiles.find(x => x.buildTime?.declared && x.buildTime.native !== p.buildTime.native);
+    if (altTime && !row.scripted)
+      ui.field(
+        'buildTime',
+        'Your construction time',
+        [
+          opt('', `Campaign default · ${p.buildTime.native * 100}% base time`),
+          opt('alternate', `${altTime.buildTime.native * 100}% base time · ${altTime.name}`)
+        ],
+        options.buildTime ? 'alternate' : '',
+        value => {
+          if (value) options.buildTime = altTime.buildTime.native;
+          else delete options.buildTime;
+        }
+      );
+    else ui.hide('buildTime');
+    if (fractalEligible(p, row, v))
+      ui.field(
+        'fractal',
+        'Fractalsponge Units',
+        [opt('', 'Campaign default'), opt('request', 'Queue Fractalsponge Units after the briefing')],
+        options.fractal ? 'request' : '',
+        value => {
+          if (value) options.fractal = true;
+          else delete options.fractal;
+        }
+      );
+    else ui.hide('fractal');
     if (canonEligible(p, row, v))
       ui.field(
         'canon',

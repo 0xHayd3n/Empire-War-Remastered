@@ -342,7 +342,8 @@ export function productionCost(g, p, owner, type, context = productionContext(g,
 }
 
 export function productionTime(g, p, owner, type, context = productionContext(g, p, owner)) {
-  let time = Math.trunc(type.num('Build_Time_Seconds', 0) * db.constants.num('Production_Speed_Factor', 1));
+  const factor = g.universalPath === 1 && !g.humans && owner === g.active ? g.universalRules?.buildTime : undefined;
+  let time = Math.trunc(type.num('Build_Time_Seconds', 0) * (factor ?? db.constants.num('Production_Speed_Factor', 1)));
   if (productionKind(type) === 'space') {
     const diff = p.spaceLevel - type.num('Tech_Level', 0);
     if (diff > 0) time *= db.constants.num('Production_Speed_Mod_Base_Vs_Tech_' + Math.min(4, diff - 1), 1);

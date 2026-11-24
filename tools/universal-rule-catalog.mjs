@@ -31,6 +31,14 @@ export function productionPayment(archive, pack) {
   if (raw && !/^(true|yes|1|false|no|0)$/i.test(raw)) return null;
   return { native: !raw || /^(true|yes|1)$/i.test(raw), declared: !!raw && (!pack || !!pack.entries.get(k)) };
 }
+export function constructionTime(archive, pack) {
+  const k = archive.resolve('Data/XML/GameConstants.xml'),
+    bytes = k && archive.read(k);
+  if (!bytes) return null;
+  const raw = parseXML(bytes.toString('latin1')).children[0]?.all('Production_Speed_Factor').at(-1)?.text.trim(),
+    native = raw ? Number(raw) : 1;
+  return [0.8, 1].includes(native) ? { native, declared: !!raw && (!pack || !!pack.entries.get(k)) } : null;
+}
 export function campaignRulesCatalog(home, lib) {
   const donors = [],
     unavailable = [];

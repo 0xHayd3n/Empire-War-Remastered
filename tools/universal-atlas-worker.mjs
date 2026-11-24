@@ -3,7 +3,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { openGame } from './megfs.mjs';
 import { loadPack } from './universal-library.mjs';
-import { portableRules, productionPayment } from './universal-rule-catalog.mjs';
+import { portableRules, productionPayment, constructionTime } from './universal-rule-catalog.mjs';
 import { combatCatalog } from './universal-combat-catalog.mjs';
 import { parseXML } from '../public/js/xml.js';
 import { db, loadGameData, loadFileList } from '../public/js/gamedata.js';
@@ -334,6 +334,7 @@ try {
     defaults: Object.fromEntries(Object.entries(ruleFields).map(([k, r]) => [k, db.constants.num(r.tag, r.fallback)])),
     combat: combatCatalog(archive, pack, data.campaigns),
     payment: productionPayment(archive, pack),
+    buildTime: constructionTime(archive, pack),
     donor: pack ? portableRules(pack) : null
   });
 } finally {

@@ -88,6 +88,11 @@ export function launchPlan(atlas, q) {
       throw Error('Hero rescue unavailable.');
     options.heroRescue = true;
   }
+  if (Object.hasOwn(q, 'recovery')) {
+    if (q.recovery !== true || q.convoy || q.envoy || q.heroRescue || q.expedition || !equalFootingStart(p, r, v))
+      throw Error('Derelict recovery unavailable.');
+    options.recovery = true;
+  }
   if (Object.hasOwn(q, 'convoy')) {
     if (q.convoy !== true || q.envoy || q.heroRescue || q.expedition || !equalFootingStart(p, r, v))
       throw Error('Freight charter unavailable.');

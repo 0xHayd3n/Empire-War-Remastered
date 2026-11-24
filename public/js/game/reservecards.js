@@ -4,13 +4,14 @@ import { reserveCounts } from './campaignreserve.js';
 import { flagshipName, conditionLabel } from './flagshiplabel.js';
 export function reserveCards(player) {
   return [...reserveCounts(player)].map(([key, count]) => {
-    const flag = key === player.reserveBook?.flagship;
+    const flag = key === player.reserveBook?.flagship,
+      crew = key === player.reserveBook?.boarder;
     return {
       key,
-      type: flag ? key.type : key,
+      type: flag || crew ? key.type : key,
       count,
-      id: flag ? key.vessel.id : null,
-      detail: flag ? `${flagshipName} · ${conditionLabel(key.vessel.condition)}` : ''
+      id: flag ? key.vessel.id : crew ? key.salvageId : null,
+      detail: flag ? `${flagshipName} · ${conditionLabel(key.vessel.condition)}` : crew ? 'Recovery boarding crew' : ''
     };
   });
 }
@@ -24,7 +25,7 @@ export function wireReserveCard(node, card, ui, owner, label, leave) {
   node.title = detail ? `${detail} · ${label}` : label;
   node.setAttribute('aria-label', node.title);
   if (detail) {
-    node.classList.add('flagship-reserve');
+    node.classList.add(key.salvageId ? 'boarding-reserve' : 'flagship-reserve');
     node.dataset.vessel = id;
   }
   node.onmousedown = e => {

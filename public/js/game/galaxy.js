@@ -1,3 +1,4 @@
+import { restoreRecovery } from './derelictrecovery.js';
 import { restoreConvoy } from './convoycontract.js';
 import { restoreVessels } from './campaignvessels.js';
 import { restoreUniversalRules } from './universalrules.js';
@@ -318,6 +319,7 @@ export function snapshotGalaxy(g) {
     ...(g.universalPath ? { universalPath: 1 } : {}),
     ...(g.vessels ? { vessels: { ...g.vessels } } : {}),
     ...(g.convoy ? { convoy: { ...g.convoy } } : {}),
+    ...(g.recovery ? { recovery: { ...g.recovery } } : {}),
     ...(g.universalRules ? { universalRules: structuredClone(g.universalRules) } : {}),
     ...(g.humans ? { humans: g.humans.slice() } : {}),
     time: g.time || 0,
@@ -460,7 +462,8 @@ export function snapshotGalaxy(g) {
           checkContestedSpace: u.checkContestedSpace,
           ...(g.vessels && u.vessel ? { vessel: structuredClone(u.vessel) } : {}),
           ...(g.convoy?.id && u.charter === g.convoy.id ? { charter: u.charter } : {}),
-          ...((g.vessels?.open || g.convoy?.open) && u.battleSlot ? { battleSlot: u.battleSlot } : {}),
+          ...(g.recovery?.id && u.salvageId === g.recovery.id ? { salvageId: u.salvageId } : {}),
+          ...((g.vessels?.open || g.convoy?.open || g.recovery?.open) && u.battleSlot ? { battleSlot: u.battleSlot } : {}),
           ...(u.raiding ? { raiding: true } : {}),
           ...(u.pathfinder ? { pathfinder: true } : {}),
           ...(Number.isInteger(u.guiIndex) ? { guiIndex: u.guiIndex } : {}),
@@ -629,5 +632,6 @@ export function applyGalaxy(g, s) {
     }))
     .filter(f => f.units.length);
   restoreConvoy(g, s.convoy);
+  restoreRecovery(g, s.recovery);
   if (s.vessels || g.vessels) restoreVessels(g, s.vessels);
 }

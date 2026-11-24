@@ -319,6 +319,11 @@ input[type='range'] {
   background: linear-gradient(rgba(4, 10, 18, 0.92), rgba(4, 10, 18, 0.55));
   border-bottom: 1px solid var(--line);
 }
+.recovery-beacon {
+  top: 38px; left: 50%; transform: translateX(-50%); max-width: 90vw; display: flex; align-items: center; justify-content: center; gap: 0.4rem; padding: .3rem .6rem; background: #101c28ec; color: #ffe2a6; flex-wrap: wrap; font-size: 13px;
+}
+.recovery-beacon button { font: inherit; padding: .2rem .45rem; }
+.boarding-reserve::after { content: 'R'; position: absolute; top: 1px; left: 2px; font-weight: bold; background: #14283d; color: #ffe2a6; padding: 1px 3px; pointer-events: none; }
 #topbar .stat b {
   color: var(--dim);
   font-weight: 600;

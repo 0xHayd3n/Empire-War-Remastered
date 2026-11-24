@@ -1,4 +1,5 @@
 import { allied as routeAllied } from './humanroute.js';
+import { recoveryAuto, missRecovery } from './derelictrecovery.js';
 import { db } from '../gamedata.js';
 import { setComponentText } from './componenttext.js';
 import { snapNativeText } from '../nativefont.js';
@@ -454,11 +455,16 @@ export class PendingBattle {
       return true;
     }
     if (!held) game.pauseGalactic(true);
+    const skipRecovery = game.galaxy.recovery?.state === 'search' && recoveryAuto(game.galaxy, request);
     for (const p of game.galaxy.players) p.bounty = 0;
     const outcome = game.battles.resolveFor(request);
     if (!outcome) {
       game.pauseGalactic(false);
       return this.fight(request);
+    }
+    if (skipRecovery) {
+      missRecovery(game.galaxy);
+      game.galacticLog?.message('Auto-resolve ended the recovery attempt. No prize was boarded.');
     }
     this.resolution = { request, outcome };
     this.present(request, outcome, silent)

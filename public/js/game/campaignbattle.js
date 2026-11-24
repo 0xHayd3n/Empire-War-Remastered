@@ -1,3 +1,4 @@
+import { createBoarding, recoveredPrize } from './derelicttactical.js';
 import { placeVessel, vesselResult } from './campaignvessels.js';
 import { isTacticalSuperweapon } from './tacticalsuperweapon.js';
 
@@ -517,6 +518,8 @@ export function placeCampaignBattle(w, map, teams, cb) {
     }
     if (cb.vesselBattle && !cb.linked && p.human) {
       book.flagship = s.units.find(r=>r.vessel?.designated);
+      const crew = cb.recovery && s.units.find(r => r.gid === cb.recovery.gid);
+      if (crew) book.boarder = { gid: crew.gid, type: crew.type, salvageId: cb.recovery.id };
       book.placeVessel = placeVessel;
       p.reserveBook = book;
       p.reserveTickets = Array(p.reinforcements.length).fill(null);
@@ -558,6 +561,7 @@ export function placeCampaignBattle(w, map, teams, cb) {
       const at = t === teams[d.team] ? defend : entry;
       t.spawnPoints.push({ x: at.x, y: at.y, heading: Number.isFinite(at.heading) ? at.heading : Math.atan2(-at.y, -at.x) });
     }
+  if (cb.recovery) createBoarding(cb, book);
   w.recountPop();
   return book;
 }
@@ -638,6 +642,7 @@ export function battleResult(w, book, cb, winnerTeam) {
   return {
     planet: cb.planet,
     ...vesselResult(cb, book, alive),
+    ...(cb.recovery ? recoveredPrize(cb, book, winnerTeam, alive) : {}),
     alive,
     station: !!(book.station && !book.station.dead),
     stationLevel,

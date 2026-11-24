@@ -15,6 +15,8 @@ import { db, loadGameData, skirmishStation, skirmishFactions, autoColors, switch
 import { findFiles, fetchText, fromInstall, pendingFiles } from './vfs.js';
 import { gfx, storeGfx, pixelRatio } from './gfx.js';
 import { loadMap, loadMapHeader, startEnvironment, skirmishMaps, mapTitle } from './ted.js';
+import { wreckType, stepBoarding } from './game/derelicttactical.js';
+import { recoveryHUD } from './game/derelicthud.js';
 import { preloadModels, getModelData, buildModel, resetLighting, prebuildModel, dropPrebuilt } from './model.js';
 import { loadALA, animName } from './ala.js';
 import { loadIcons, iconUrl } from './icons.js';
@@ -402,6 +404,7 @@ class Game {
     if (cb)
       for (const n of [
         cb.defender.station,
+        ...(cb.recovery ? [wreckType] : []),
         ...(cb.defender.orbital || []),
         ...(cb.planetWeapons || []),
         ...cb.attacker.units.map(u => u.type),
@@ -690,6 +693,7 @@ class Game {
     this.menus = new Menus(this);
     this.advisor = new Advisor(this);
     this.ui = new UI(this);
+    if (this.campaignBook?.boarding) this.recoveryHud = recoveryHUD(this, $('hud'));
     if (this.hudAssets) this.superweaponHUD = new TacticalSuperweaponHUD(this, this.hudAssets);
     if (this.ui.bar && this.superweaponHUD) this.ui.bar.covers = [{ node: this.superweaponHUD.button, build: false }];
 
@@ -837,6 +841,7 @@ class Game {
     this.front?.dispose();
     this.cine?.stop();
     if (this.menus) while (this.menus.stack.length) this.menus.stack.pop().close();
+    this.recoveryHud?.dispose();
     this.ui?.destroy();
     this.spectatorView?.destroy();
     this.spectatorView = null;
@@ -1739,6 +1744,7 @@ class Game {
       return;
     }
     if (this.paused) this.togglePause();
+    if (this.campaignBook?.boarding) this.campaignBook.boarding.void = true;
     const rosters = spaceRosters(w, cb, this.campaignBook),
       { winner, doomed } = resolveTactical(rosters, cb, { space: true });
     const lose = e => {
@@ -1776,6 +1782,11 @@ class Game {
 
   campaignVictoryStep() {
     if (!this.campaignBook || this.over) return;
+    if (this.campaignBook.boarding) {
+      const frozen = this.paused || this.cine?.on || this.controlsLocked || this.tacticalCinematics?.on || this.retreat?.active || this.tacticalVictory.winner;
+      stepBoarding(this.setup.campaign, this.campaignBook, frozen);
+      this.recoveryHud?.update();
+    }
     const result = this.tacticalVictory.update(this.world.tacticalSuperweapons.disableDepth, () => this.campaignCheck());
     if (!result) return;
     this.world.winner = result.team;

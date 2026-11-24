@@ -4,17 +4,27 @@
 // An explicitly selected flagship never falls back to its class (and ordinary
 // cards cannot consume it). Queue offsets can change while a ghost is on screen.
 export function reserveSlot(p, type, id) {
-  const flag = p.reserveBook?.flagship,
-    at = flag ? p.reserveTickets.indexOf(flag.gid) : -1;
-  if (id !== undefined && id !== null) return flag?.vessel.id === id && at >= 0 && p.reinforcements[at] === type ? at : -1;
-  return at < 0 ? p.reinforcements.indexOf(type) : p.reinforcements.findIndex((t, i) => t === type && i !== at);
+  const book = p.reserveBook;
+  if (!book?.flagship && !book?.boarder) return id == null ? p.reinforcements.indexOf(type) : -1;
+  const flag = book.flagship,
+    crew = book.boarder;
+  if (id != null) {
+    const named = id === flag?.vessel.id ? flag : id === crew?.salvageId ? crew : null;
+    const i = named ? p.reserveTickets.indexOf(named.gid) : -1;
+    return i >= 0 && p.reinforcements[i] === type ? i : -1;
+  }
+  const protectedSlots = [flag, crew].filter(Boolean).map(r => p.reserveTickets.indexOf(r.gid));
+  return p.reinforcements.findIndex((t, i) => t === type && !protectedSlots.includes(i));
 }
 export function reserveCounts(p) {
   const counts = new Map(),
     flag = p.reserveBook?.flagship,
-    at = flag ? p.reserveTickets.indexOf(flag.gid) : -1;
-  if (at >= 0) counts.set(flag, 1);
-  for (const [i, t] of p.reinforcements.entries()) if (i !== at) counts.set(t, (counts.get(t) || 0) + 1);
+    crew = p.reserveBook?.boarder;
+  const fi = flag ? p.reserveTickets.indexOf(flag.gid) : -1,
+    ci = crew ? p.reserveTickets.indexOf(crew.gid) : -1;
+  if (fi >= 0) counts.set(flag, 1);
+  if (ci >= 0) counts.set(crew, 1);
+  for (const [i, t] of p.reinforcements.entries()) if (i !== fi && i !== ci) counts.set(t, (counts.get(t) || 0) + 1);
   return counts;
 }
 export function takeReserve(p, i) {

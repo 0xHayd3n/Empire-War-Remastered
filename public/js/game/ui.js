@@ -1073,7 +1073,7 @@ export class UI {
       if (r && r.why) {
         // A script may have consumed a ticket after the card was picked.
         if (
-          this.player.reserveBook?.flagship &&
+          (this.player.reserveBook?.flagship || this.player.reserveBook?.boarder) &&
           (i || !reserveCards(this.player).some(c => c.type === pl.list[i] && c.id === pl.vessels[i]))
         )
           this.cancelPlacing();

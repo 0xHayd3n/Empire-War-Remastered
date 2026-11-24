@@ -14,6 +14,7 @@ import {
   updateHistory
 } from './galacticlogdata.js';
 import { finderEnabled, finderRows } from './shipyardfinder.js';
+import { assignCrew, recoveryRows, settlePrize } from './derelictrecovery.js';
 import { acceptConvoy, convoyRows } from './convoycontract.js';
 import { flagshipRows } from './flagshipcommission.js';
 import { objectiveRows } from './universalobjectives.js';
@@ -60,6 +61,7 @@ export class GalacticLog {
       this.opened = true;
     }
     this.flagshipPrompt = null;
+    this.salvagePrompt = null;
     this.yardView = yardType ? { type: yardType, page: 0 } : null;
     this.encyclopedia?.hide();
     this.cleanup?.();
@@ -231,6 +233,25 @@ export class GalacticLog {
                     game.mergeFleets();
                     for (const f of g.fleets) if (!game.fleetViews.has(f)) game.fleetView(f);
                     game.ui?.refresh();
+                    this.fillLog(d);
+                  },
+                  locate
+                )
+              : []),
+            ...(!game.net && g.recovery && game.me === g.active
+              ? recoveryRows(
+                  g,
+                  this.salvagePrompt,
+                  action => {
+                    if (!this.opened || this.page !== 0 || this.dialog !== d || game.over || game.busy || game.me !== g.active) return;
+                    if (action.kind === 'confirm' && this.salvagePrompt === action.prompt) {
+                      if (settlePrize(g, action.prompt.q, action.prompt.kind === 'release')) {
+                        game.mergeFleets();
+                        for (const f of g.fleets) if (!game.fleetViews.has(f)) game.fleetView(f);
+                        game.ui?.refresh();
+                      }
+                    } else if (action.kind === 'assign') assignCrew(g, action.f, action.u);
+                    this.salvagePrompt = ['refit', 'release'].includes(action.kind) ? action : null;
                     this.fillLog(d);
                   },
                   locate

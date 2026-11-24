@@ -78,6 +78,7 @@ import { GalacticStoryDialog } from './galacticstorydialog.js';
 import { GalacticMovies } from './galacticmovies.js';
 import { GalacticLog } from './galacticlog.js';
 import { Menus } from './menus.js';
+import { enableConvoy, settleConvoy } from './convoycontract.js';
 import { envoyArrival, envoyUpdate } from './universalobjectives.js';
 import { openVesselBattle, acceptVesselResult, enableFlagship, flagshipMode } from './campaignvessels.js';
 import { stepCanonOrder } from './universalcanon.js';
@@ -276,6 +277,7 @@ export class GalacticGame {
         !document.querySelector('meta[name="swr-pack-revision"]')
       )
         enableFlagship(g);
+      if (this.setup.universalOptions?.convoy === true && document.querySelector('meta[name="swr-universal"]') && !document.querySelector('meta[name="swr-pack-revision"]')) enableConvoy(g);
       beginUniversalRules(g, this.setup.universalOptions, db.faction(g.active)?.list('Allies'));
     }
     if (this.setup.net) this.multiplayerGalaxy(g);
@@ -447,6 +449,7 @@ export class GalacticGame {
         'Star Map Expedition: survey all sites for a 3,000-credit grant. Known sites are listed in the galactic log.'
       );
     }
+    if (!this.setup.restore && g.convoy) this.galacticLog.message('A merchant has offered a freight charter. Review the route and payment in the galactic log.');
     if (!this.setup.restore && flagshipMode(g))
       this.galacticLog.message(
         'Flagship commission available. Open the galactic droid log to designate one of your Mon Calamari cruisers.'
@@ -2859,7 +2862,7 @@ export class GalacticGame {
       pl = g.planets[b.p];
     if (b.mode === 'land') return this.landBattleSetup();
     const vesselBattle =
-      g.vessels && !this.net && !b.linked && !this.setup.linkedTactical && openVesselBattle(g, b.p, [b.attacker, b.defender]);
+      (g.vessels || g.convoy?.id) && !this.net && !b.linked && !this.setup.linkedTactical && openVesselBattle(g, b.p, [b.attacker, b.defender]);
     const units = owner => {
       const here = g.fleets.filter(f => f.planet === b.p && !f.leg && f.owner === owner),
         lead = aiPathfinder(
@@ -3804,6 +3807,10 @@ export class GalacticGame {
           }
           if (raid) this.raidLanding(raid, p);
         });
+        if (this.galaxy.convoy?.id && !this.battle && !this.pendingBattle?.request && this.galaxy.time >= (this.nextFreightCheck || 0)) {
+          this.nextFreightCheck = this.galaxy.time + 0.5;
+          if (settleConvoy(this.galaxy)) this.galacticLog?.message('Freight charter settled. See the galactic log for the outcome.');
+        }
         if (this.galaxy.universalRules?.envoy) envoyUpdate(this);
         if (this.galaxy.universalRules?.canon) stepCanonOrder(this);
         this.warnApproaching();

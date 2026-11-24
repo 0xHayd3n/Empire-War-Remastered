@@ -78,13 +78,14 @@ export function restoreVessels(g, registry) {
       }
 }
 export function openVesselBattle(g, planet, sides) {
-  const s = g.vessels;
+  const cargoHere = g.convoy?.id && g.fleets.some(f => f.owner === g.active && !f.leg && f.planet === planet && f.units.some(u => !u.dead && u.charter === g.convoy.id));
+  const s = g.vessels || (cargoHere && g.convoy);
   if (!s || !pilot(g) || !sides.includes(g.active)) return null;
-  let any = false;
+  let any = !!cargoHere;
   for (const f of g.fleets)
     if (f.planet === planet && !f.leg)
       for (const u of f.units)
-        if (hull(g, f, u) && (!Object.hasOwn(s, 'flagship') || (s.flagship && u.vessel?.id === s.flagship))) {
+        if (g.vessels && hull(g, f, u) && (!Object.hasOwn(s, 'flagship') || (s.flagship && u.vessel?.id === s.flagship))) {
           u.vessel ||= { id: crypto.randomUUID(), rev: 0 };
           any = true;
         }
@@ -148,8 +149,8 @@ export function vesselResult(cb, book, alive) {
 // Translate the entire survivor list to current roster slots
 // before the native casualty/victory code runs. A repeated result has no effects.
 export function acceptVesselResult(g, r) {
-  if (!r.vesselBattle) return !g.vessels?.open;
-  const s = g.vessels;
+  const s = g.vessels || g.convoy;
+  if (!r.vesselBattle) return !s?.open;
   if (!s?.open || s.open !== r.vesselBattle || !Array.isArray(r.vesselOutcomes)) return false;
   if (!Array.isArray(r.battleSlots) || !Array.isArray(r.alive) || !Array.isArray(r.sides) || r.vesselOutcomes.some(o => !o || !uuid(o.id)))
     return false;

@@ -1,3 +1,4 @@
+import { finderEnabled, finderType } from './shipyardfinder.js';
 import { db } from '../gamedata.js';
 export async function renderTechTree(owner, d) {
   const game = owner.game,
@@ -35,10 +36,16 @@ export async function renderTechTree(owner, d) {
     ctl.onpointermove = e => owner.moveLinked(e);
     ctl.onmouseleave = () => owner.hideLinked();
     ctl.onfocus = () => owner.showType(type);
+    const find = finderEnabled(game) && finderType(game.galaxy, type);
+    if (find) {
+      ctl.title = 'Where can I build this?';
+      ctl.onclick = () => owner.show(0, { yardType: type });
+    }
     ctl.onkeydown = e => {
       if (e.code === 'Enter' || e.code === 'Space') {
         e.preventDefault();
-        owner.showType(type);
+        if (find) owner.show(0, { yardType: type });
+        else owner.showType(type);
       }
     };
   }

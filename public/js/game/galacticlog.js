@@ -13,6 +13,8 @@ import {
   techTreeDialog,
   updateHistory
 } from './galacticlogdata.js';
+import { finderEnabled, finderRows } from './shipyardfinder.js';
+import { acceptConvoy, convoyRows } from './convoycontract.js';
 import { flagshipRows } from './flagshipcommission.js';
 import { objectiveRows } from './universalobjectives.js';
 import { renderHistory } from './galactichistory.js';
@@ -50,7 +52,7 @@ export class GalacticLog {
     if (this.opened) this.close();
     else this.show();
   }
-  async show(page = this.page, { summary = null } = {}) {
+  async show(page = this.page, { summary = null, yardType = null } = {}) {
     if (!this.opened) {
       this.wasPaused = !!this.game.paused;
       if (this.game.pauseGalactic) this.game.pauseGalactic(true);
@@ -58,6 +60,7 @@ export class GalacticLog {
       this.opened = true;
     }
     this.flagshipPrompt = null;
+    this.yardView = yardType ? { type: yardType, page: 0 } : null;
     this.encyclopedia?.hide();
     this.cleanup?.();
     this.cleanup = null;
@@ -193,17 +196,50 @@ export class GalacticLog {
               }
         );
       };
-    d.coloredTextList('IDC_DROID_LIST', () => [
-      ...logRows(g),
-      ...objectiveRows(g, p => {
-        this.close();
-        game.select(p.index);
-        game.view.x = p.pos[0];
-        game.view.y = p.pos[1];
-        if (game.view.zoom === 1) game.view.planet = p.index;
-      }),
-      ...commandRows()
-    ]);
+    const locate = p => {
+      if (!this.opened || this.dialog !== d || this.page !== 0) return;
+      this.close();
+      game.select(p.index);
+      game.view.x = p.pos[0];
+      game.view.y = p.pos[1];
+      if (game.view.zoom === 1) game.view.planet = p.index;
+    };
+    const yards = () =>
+      finderEnabled(game)
+        ? finderRows(
+            g,
+            this.yardView,
+            view => {
+              if (!this.opened || this.dialog !== d || this.page !== 0) return;
+              this.yardView = view;
+              this.fillLog(d);
+            },
+            locate
+          )
+        : [];
+    d.coloredTextList('IDC_DROID_LIST', () =>
+      this.yardView
+        ? yards()
+        : [
+            ...logRows(g),
+            ...objectiveRows(g, locate),
+            ...(!game.net && g.convoy && game.me === g.active
+              ? convoyRows(
+                  g,
+                  () => {
+                    if (!this.opened || this.dialog !== d || this.page !== 0 || game.over || game.busy || !acceptConvoy(g)) return;
+                    game.mergeFleets();
+                    for (const f of g.fleets) if (!game.fleetViews.has(f)) game.fleetView(f);
+                    game.ui?.refresh();
+                    this.fillLog(d);
+                  },
+                  locate
+                )
+              : []),
+            ...commandRows(),
+            ...yards()
+          ]
+    );
   }
   async renderLog(d) {
     this.fillLog(d);

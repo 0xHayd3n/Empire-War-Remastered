@@ -88,6 +88,11 @@ export function launchPlan(atlas, q) {
       throw Error('Hero rescue unavailable.');
     options.heroRescue = true;
   }
+  if (Object.hasOwn(q, 'convoy')) {
+    if (q.convoy !== true || q.envoy || q.heroRescue || q.expedition || !equalFootingStart(p, r, v))
+      throw Error('Freight charter unavailable.');
+    options.convoy = true;
+  }
   if (Object.hasOwn(q, 'flagship')) {
     if (q.flagship !== true || !equalFootingStart(p, r, v)) throw Error('Flagship commission unavailable.');
     options.flagship = true;

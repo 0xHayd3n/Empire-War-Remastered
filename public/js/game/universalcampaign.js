@@ -133,6 +133,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     if (s.variant !== v) {
       delete options.canonUnits;
       delete options.envoy;
+      delete options.convoy;
       delete options.flagship;
       delete options.expedition;
       delete options.heroRescue;
@@ -279,6 +280,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
       );
     else ui.hide('flagship');
     const paths = [opt('', 'Authored objectives')];
+    if (equalFootingStart(p, row, v)) paths.push(opt('convoy', 'Freight charter · Hoth to Bespin'));
     if (envoyStart(p, row, v)) paths.push(opt('envoy', 'Mon Mothma · diplomatic envoy'));
     if (p.combat?.rescue && v?.id === rescueCampaign) paths.push(opt('rescue', 'Rescue Han and Chewbacca'));
     if (p.id !== '3417277973' && v?.sites.length && data.profiles.some(p => p.donor?.hasSearch))
@@ -287,9 +289,11 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
       'path',
       'Objective',
       paths,
-      options.envoy ? 'envoy' : options.heroRescue ? 'rescue' : options.expedition ? 'expedition' : '',
+      options.convoy ? 'convoy' : options.envoy ? 'envoy' : options.heroRescue ? 'rescue' : options.expedition ? 'expedition' : '',
       value => {
         delete options.envoy;
+        delete options.convoy;
+        if (value === 'convoy') options.convoy = true;
         if (value === 'envoy') options.envoy = true;
         delete options.expedition;
         delete options.heroRescue;
@@ -300,19 +304,21 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     );
   }
   function note() {
-    ui.status.textContent = options.envoy
-      ? 'Bring Mon Mothma to friendly Bespin for a 60-second report on the fleet at Sullust. Campaign time pauses in the log.'
-      : options.heroRescue
-        ? 'If Han and Chewbacca fall in a lost battle, conquer their prison world to bring them back once.'
-        : options.expedition
-          ? `Expedition: capture ${v.sites.join(', ')} for a one-time 3,000-credit grant.`
-          : row?.scripted
-            ? 'Authored setup scenario. Its script chooses the final galaxy after launch.'
-            : row?.customOpening
-              ? 'Choose Learner, Static era or Progressive era in Settings.'
-              : row?.layout
-                ? 'Choose starting locations and rosters in-game, using the mod’s own setup.'
-                : '';
+    ui.status.textContent = options.convoy
+      ? 'Review a 1,500-credit charter in the log. Escort the loaned freighter to collect; a lost ship earns nothing.'
+      : options.envoy
+        ? 'Bring Mon Mothma to friendly Bespin for a 60-second report on the fleet at Sullust. Campaign time pauses in the log.'
+        : options.heroRescue
+          ? 'If Han and Chewbacca fall in a lost battle, conquer their prison world to bring them back once.'
+          : options.expedition
+            ? `Expedition: capture ${v.sites.join(', ')} for a one-time 3,000-credit grant.`
+            : row?.scripted
+              ? 'Authored setup scenario. Its script chooses the final galaxy after launch.'
+              : row?.customOpening
+                ? 'Choose Learner, Static era or Progressive era in Settings.'
+                : row?.layout
+                  ? 'Choose starting locations and rosters in-game, using the mod’s own setup.'
+                  : '';
     if (options.flagship)
       ui.status.textContent +=
         (ui.status.textContent ? ' ' : '') + 'Your flagship keeps battle damage. Repairs require confirmation at a friendly starbase.';

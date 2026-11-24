@@ -515,7 +515,7 @@ export function placeCampaignBattle(w, map, teams, cb) {
       if (!flagship && hyper && !w.tacticalSuperweapons?.record(e)) w.startHyperspace(e);
       book.entity.set(u.gid, e);
     }
-    if (cb.vesselBattle && !cb.linked && p.human && s.units.some(u => u.vessel)) {
+    if (cb.vesselBattle && !cb.linked && p.human) {
       book.flagship = s.units.find(r=>r.vessel?.designated);
       book.placeVessel = placeVessel;
       p.reserveBook = book;

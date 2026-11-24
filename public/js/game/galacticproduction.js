@@ -512,7 +512,7 @@ export const groundProduced = t =>
 const spaceProduced = t =>
   t.num('Build_Cost_Credits', 0) > 0 &&
   (t.num('Required_Star_Base_Level', 0) !== 0 || (hasBehavior(t, 'DUMMY_STAR_BASE') && t.num('Base_Level', 0) === 1));
-export function availableUnits(g, planet, owner, kind) {
+export function productionCandidates(owner, kind) {
   const key = owner + ':' + kind;
   if (!candidates.has(key))
     candidates.set(
@@ -527,8 +527,11 @@ export function availableUnits(g, planet, owner, kind) {
           (groundProduced(t) ? 'ground' : 'space') === kind
       )
     );
+  return candidates.get(key);
+}
+export function availableUnits(g, planet, owner, kind) {
   const p = g.planets[planet];
-  return candidates.get(key).filter(t => !prerequisite(g, p, owner, t));
+  return productionCandidates(owner, kind).filter(t => !prerequisite(g, p, owner, t));
 }
 
 export function productionBlock(g, planet, owner, type, context) {

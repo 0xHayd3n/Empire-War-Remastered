@@ -1,6 +1,6 @@
 // Presentation only. A period already contains the exact playable families and
 // dates. Group within that set; never construct a campaign or infer a start.
-const sections = ['Story', 'Random', 'Sandbox', 'Miscellaneous'];
+export const scenarioTypes = ['Story', 'Random', 'Sandbox', 'Miscellaneous'];
 const tag = /^(Story|Random|Sandbox)\s*(?:--?|[–—:])\s*(?=\S)/i;
 function sizes(leaf) {
   const { f } = leaf;
@@ -27,11 +27,11 @@ export function mapSections(period) {
   const by = new Map();
   for (const f of period.maps.keys()) {
     const match = period.scenario && tag.exec(f.title),
-      section = period.scenario ? sections.find(s => s.toLowerCase() === match?.[1]?.toLowerCase()) || 'Miscellaneous' : '';
+      section = period.scenario ? scenarioTypes.find(s => s.toLowerCase() === match?.[1]?.toLowerCase()) || 'Miscellaneous' : '';
     if (!by.has(section)) by.set(section, []);
     by.get(section).push({ f, title: match ? f.title.slice(match[0].length) : f.title });
   }
-  return (period.scenario ? sections : [''])
+  return (period.scenario ? scenarioTypes : [''])
     .filter(s => by.has(s))
     .map(name => {
       const leaves = by.get(name),

@@ -1,3 +1,4 @@
+import { browsePeriods, discoveryRows } from './universalmoddirectory.js';
 import { calendarYear } from './universalyeartrack.js';
 import { chronology, periods as eraNames } from './universalmodes.js';
 import { mapFamilies, mapStart, techCalendar } from './universalmaplist.js';
@@ -16,13 +17,16 @@ export function eraTimeline(data) {
   const profiles = new Map(data.profiles.map(p => [p.id, p]));
   return chronology.map(name => {
     const by = new Map(),
-      missing = [];
+      missing = [],
+      offers = [];
     let first;
     for (const e of data.eras.filter(e => eraNames[e.id] === name)) {
       const p = profiles.get(e.id),
         maps = e.ready && p ? mapFamilies(p).filter(f => f.dates.length) : [];
       if (!maps.length) {
-        missing.push(`${e.name} · ${!e.ready ? 'Not built' : !p ? 'Unavailable' : 'No listed maps'}`);
+        const reason = !e.ready ? 'Local pack not ready' : !p ? 'Campaign catalog unavailable' : 'No listed maps';
+        missing.push(`${e.name} · ${reason}`);
+        if (!e.ready || !p) offers.push(...discoveryRows(e, reason));
         continue;
       }
       for (const family of maps) {
@@ -41,7 +45,7 @@ export function eraTimeline(data) {
     const periods = [...by.values()].sort(
       (a, b) => (a.label === scenario) - (b.label === scenario) || time(a) - time(b) || a.label.localeCompare(b.label)
     );
-    return { name, periods, missing, first };
+    return { name, periods, views: browsePeriods(periods, offers), missing, offers, first };
   });
 }
 // Only choose within the selected map and the filtered subset. Keep faction keys profile-local.

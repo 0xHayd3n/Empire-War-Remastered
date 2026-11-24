@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { completeOfflinePack } from './universal-atlas.mjs';
 import { openGame } from './megfs.mjs';
 import { buildPack, loadPack, listPacks } from './universal-library.mjs';
 
@@ -49,6 +50,7 @@ try {
     mb = buildPack(home, b, folder(b));
   assert.equal(listPacks(home).filter(p => p.ready).length, 2);
   assert(!fs.existsSync(path.join(home, 'objects')), 'thin build stores no assets');
+  assert(!completeOfflinePack(home, a), 'A thin pack cannot use its cached atlas after its parent disappears');
   const shared = ma.rows.find(r => r[0] === 'DATA\\ONE.DDS')[1];
   assert.equal(shared, mb.rows.find(r => r[0] === 'DATA\\TWO.DDS')[1]);
   for (const id of [a, b]) {
@@ -81,6 +83,7 @@ try {
   assert.throws(() => loadPack(home, a, folder(a)).entries.get('DATA\\NEW.TXT').ensure(), /content changed/);
   buildPack(home, a, folder(a), { materialize: true });
   fs.rmSync(parents, { recursive: true });
+  assert(completeOfflinePack(home, a), 'Materialized packs remain available without their parent');
   const packed = openGame(game, [], { packedLayer: loadPack(home, a).entries });
   assert.equal(packed.read('DATA\\NEW.TXT').toString(), 'edited');
   packed.close();

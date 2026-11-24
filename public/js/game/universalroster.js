@@ -19,18 +19,18 @@ const heraldry = {
   'Galactic Civil War': ['galactic-civil-war', 'Rebel Alliance / Galactic Empire'],
   'New Republic': ['new-republic-era', 'New Republic / Imperial Remnant']
 };
-export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickDate }) {
+export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickDate, clearChoice }) {
   const cards = group('Era', 'uc-era-strip'),
     calendar = group('Starting period', 'uc-calendar'),
     readout = node('span', 'uc-year-value'),
     track = node('div', 'uc-periods'),
     dial = yearTrack(track, readout, pickPeriod),
-    maps = mapTable(pickMap, pickDate),
+    maps = mapTable(pickMap, pickDate, clearChoice),
     remembered = new Map();
   let shownEra, shownPeriod;
   const tabs = sidebarTabs('starts', 'Start type', ['Time-based', 'Scenario-based'], i => {
     if (i === Number(shownPeriod.scenario)) return;
-    const next = i ? shownEra.periods.find(p => p.scenario) : remembered.get(shownEra) || shownEra.periods.find(p => !p.scenario);
+    const next = i ? shownEra.views.find(p => p.scenario) : remembered.get(shownEra) || shownEra.views.find(p => !p.scenario);
     if (next) pickPeriod(next);
   });
   const caption = node('div', 'uc-year-caption');
@@ -53,7 +53,8 @@ export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickD
     use.setAttribute('href', '/art/era-crests.svg#' + id);
     art.append(use);
     b.append(art, node('span', '', e.name));
-    b.disabled = !e.periods.length;
+    b.disabled = !e.views.length;
+    b.classList.toggle('uc-discovery-era', !e.first && e.offers.length > 0);
     b.title = [pair, ...e.missing].join('\n');
     cards.append(b);
   }
@@ -64,19 +65,20 @@ export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickD
         shownEra = era;
         [...cards.children].forEach((b, i) => b.setAttribute('aria-pressed', String(eras[i] === era)));
         dial.mount(era.periods.filter(p => !p.scenario));
-        tabs.buttons.forEach((b, i) => (b.disabled = !era.periods.some(p => Number(p.scenario) === i)));
+        tabs.buttons.forEach((b, i) => (b.disabled = !era.views.some(p => Number(p.scenario) === i)));
       }
       if (period !== shownPeriod) {
         shownPeriod = period;
         const mode = Number(period.scenario);
         tabs.select(mode);
-        tabs.panels[mode].append(maps.table);
+        tabs.panels[mode].append(maps.host);
+        calendar.hidden = !!period.discovery;
         if (!period.scenario) {
           remembered.set(era, period);
-          dial.show(period);
+          if (!period.discovery) dial.show(period);
         }
       }
-      maps.show(period, family, date, variant);
+      maps.show(period, family, date, variant, era.offers);
     },
     focus() {
       cards.querySelector('[aria-pressed="true"]')?.focus({ preventScroll: true });

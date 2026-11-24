@@ -94,6 +94,13 @@ export function launchPlan(atlas, q) {
   }
   return { profile: p.id, revision: p.revision, setup };
 }
+// Without the parent install a lazy manifest (even with a warm preview atlas)
+// is not playable. A fully materialized pack remains usable offline. Byte/hash
+// verification still happens in loadPack.ensure before an asset is served.
+export function completeOfflinePack(home, id) {
+  const { entries } = loadPack(home, id);
+  return [...entries.values()].every(e => !e || fs.statSync(e.file, { throwIfNoEntry: false })?.size === e.size);
+}
 export function atlasStore({ home, library, eras }) {
   assertPrivateLibrary(home, library);
   const directory = path.join(home, 'campaign-atlas-v1'),
@@ -103,6 +110,9 @@ export function atlasStore({ home, library, eras }) {
   let stamp,
     queue = Promise.resolve();
   async function one(id, lang) {
+    const folder = library.items.get(id)?.folder;
+    if (id !== 'stock' && (!folder || !fs.existsSync(folder)) && !completeOfflinePack(home, id))
+      throw Error('Local parent or a complete offline pack required.');
     stamp ??= stockStamp(library.game);
     const rev = id === 'stock' ? 'stock' : JSON.parse(fs.readFileSync(path.join(home, 'profiles', id + '.json'))).revision;
     const filename = path.join(directory, `${id}-${lang}-${digest('planet-portraits-2:' + stamp + ':' + rev)}.gz`);
@@ -142,7 +152,7 @@ export function atlasStore({ home, library, eras }) {
             unavailable.push(e.id);
           }
         }
-        if (!profiles.length) throw Error('No campaign catalogs available.');
+        // An empty playable set can still describe the supported mods for discovery.
         for (const p of profiles) for (const s of p.sheets) allowedSheets.add(s);
         const atlas = { profiles, eras: eras(), unavailable, language: lang };
         return { atlas, bytes: gzipSync(JSON.stringify(atlas)) };

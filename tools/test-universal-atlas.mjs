@@ -201,7 +201,9 @@ assert.equal(mapStart(revanFtgu).date, dated);
 assert.equal(dated.choices[0].variant, custom.maps.get(revanFtgu)[0].choices[0].variant);
 assert.equal(timeline.length, 4);
 assert.equal(timeline[3].periods.length, 0);
-assert.match(timeline[3].missing[0], /Not built/);
+assert.match(timeline[3].missing[0], /not ready/i);
+assert(timeline[3].offers.some(o => o.mod.name === 'Thrawn' && o.title === 'Known Galaxy'));
+assert(timeline[3].views.every(v => v.discovery && v.maps.size === 0 && !v.label));
 assert.deepEqual(
   clone.periods.map(p => p.label),
   ['22 BBY', '21 BBY', '20 BBY', '19 BBY', '6 ABY', 'Scenario starts']

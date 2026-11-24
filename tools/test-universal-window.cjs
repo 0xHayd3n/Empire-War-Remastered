@@ -59,6 +59,8 @@ const assert = require('node:assert/strict'),
       eraCard = name => eras.getByRole('button', { name, exact: true }),
       modes = board.getByRole('tablist', { name: 'Start type' }),
       mode = name => modes.getByRole('tab', { name, exact: true }),
+      genres = board.getByRole('tablist', { name: 'Scenario type' }),
+      genre = name => genres.getByRole('tab', { name, exact: true }),
       setup = name => board.getByRole('tablist', { name: 'Campaign setup' }).getByRole('tab', { name, exact: true }),
       dates = board.getByRole('group', { name: 'Starting period', exact: true }),
       year = dates.getByRole('slider', { name: 'Starting year' }),
@@ -162,9 +164,10 @@ const assert = require('node:assert/strict'),
     assert.equal(await board.getByRole('tablist', { name: 'Storyline' }).count(), 0);
     assert(await mode('Time-based').isDisabled());
     assert.equal(await mode('Scenario-based').getAttribute('aria-selected'), 'true');
-    assert.deepEqual(await table.getByRole('columnheader').allTextContents(), ['Map', 'Category', 'Planets']);
+    assert.deepEqual(await table.getByRole('columnheader').allTextContents(), ['Map', 'Mod', 'Planets']);
     assert.equal(await table.locator('tr[data-profile]').evaluateAll(rs => new Set(rs.map(r => r.dataset.profile)).size), 3);
-    assert.deepEqual(await table.locator('.uc-scenario-heading').allTextContents(), ['Story', 'Random', 'Sandbox', 'Miscellaneous']);
+    assert.deepEqual(await genres.getByRole('tab').allTextContents(), ['Story', 'Random', 'Sandbox', 'Miscellaneous']);
+    assert.equal(await table.getByRole('rowheader').count(), 0);
     assert.equal(
       await table
         .locator('tr:has(.uc-map-choice)')
@@ -352,6 +355,7 @@ const assert = require('node:assert/strict'),
       const date = { 3417277973: '3964 BBY', 1976399102: '22 BBY', 1125571106: '4 ABY' }[id] || 'Scenario starts';
       await selectPeriod(date);
       const first = group(id).locator('.uc-map-choice').first();
+      if (date === 'Scenario starts') await genre(await first.locator('xpath=ancestor::tbody').getAttribute('data-section')).click();
       if (!(await first.isVisible())) {
         const rowId = await first.locator('xpath=ancestor::tr').getAttribute('id');
         await group(id).locator(`[aria-controls~="${rowId}"]`).click();
@@ -404,6 +408,8 @@ const assert = require('node:assert/strict'),
     assert.equal(await cw.getAttribute('aria-expanded'), 'false');
     assert(await cwChildren.first().isHidden());
     assert.equal(await cwRow.locator('.uc-planet-count').innerText(), '80–115');
+    assert.equal(await cwRow.locator('.uc-count-mid').innerText(), '80');
+    assert.equal(await cwRow.locator('.uc-count-high').innerText(), '115');
     await cw.press('Space');
     assert.equal(await board.getAttribute('data-campaign'), prior);
     assert.deepEqual(await cwChildren.allInnerTexts(), ['Large', 'Medium', 'Small']);
@@ -422,7 +428,7 @@ const assert = require('node:assert/strict'),
     await selectPeriod('22 BBY');
     await selectPeriod('Scenario starts');
     if (process.env.SWR_TEST_ALL_ERAS || (await group('3387971722').count())) {
-      assert.deepEqual(await board.locator('.uc-scenario-heading').allTextContents(), ['Story', 'Random', 'Sandbox', 'Miscellaneous']);
+      assert.deepEqual(await genres.getByRole('tab').allTextContents(), ['Story', 'Random', 'Sandbox', 'Miscellaneous']);
       assert.equal(await group('3387971722').locator('.uc-map-choice').count(), 8);
       const story = group('3387971722').locator('[data-size-group="Awakening of the Clone Wars"]');
       await story.click();
@@ -434,7 +440,14 @@ const assert = require('node:assert/strict'),
       ]);
       if (process.env.SWR_TEST_SCREENSHOTS)
         await board.locator('.uc-panel').screenshot({ path: path.join(process.env.SWR_TEST_SCREENSHOTS, 'clone-wars-sections.png') });
-      const random = board.getByRole('rowheader', { name: 'Random', exact: true }).locator('xpath=ancestor::tbody');
+      const child = story.locator('xpath=ancestor::tbody').locator('.uc-map-choice:visible').first();
+      assert(await child.evaluate(b => parseFloat(getComputedStyle(b).paddingInlineStart) >= 29));
+      await child.click();
+      await genre('Story').press('ArrowRight');
+      assert(await child.isHidden());
+      assert.equal(await board.getAttribute('data-campaign'), '');
+      assert(await board.locator('.uc-start').isDisabled());
+      const random = board.locator('tbody[data-section="Random"]');
       await random.locator('.uc-size-group').click();
       const big = random.locator('[data-family="Awakening_of_the_Clone_Wars_Big_Campaign_Random_CIS"]');
       assert.equal(await big.innerText(), 'Full Random · Big');

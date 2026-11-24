@@ -4,6 +4,7 @@ import { useAbility, refreshMods } from './abilities.js';
 import { BUILD } from '../build.js';
 import { expansion } from '../edition.js';
 import { contentNow } from '../content.js';
+import { restoreStationOrder } from './stationsupport.js';
 import { restoreBoarding } from './derelicttactical.js';
 import { conditionOf } from './campaignvessels.js';
 import { snapshotGalaxy } from './galaxy.js';
@@ -85,6 +86,7 @@ function spaceCampaign(game, ref) {
     setup: campaignSetup(game),
     destroyedBy: game.tacticalCampaign?.destroyedBy || null,
     book: {
+      ...(book.support ? { support: { ...book.support } } : {}),
       ...(book.boarding ? { boarding: { ...game.setup.campaign.recovery, ticks: book.boarding.ticks, void: book.boarding.void } } : {}),
       entity: [...book.entity].map(([gid, e]) => [gid, (!e.dead && ref(e)) || gone(e)]),
       ...(game.setup.campaign.vesselBattle
@@ -143,6 +145,7 @@ export function restoreSpaceCampaign(game, save, refs) {
       p.reserveTickets = slots.slice();
     }
   }
+  if (book.support) book.support = restoreStationOrder(c.book.support);
   if (book.boarding) restoreBoarding(game.setup.campaign, book, c.book.boarding);
   book.lostReserve = c.book.lostReserve?.slice();
   book.absent = c.book.absent.slice();

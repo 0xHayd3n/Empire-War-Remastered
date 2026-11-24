@@ -14,6 +14,7 @@ import {
   updateHistory
 } from './galacticlogdata.js';
 import { finderEnabled, finderRows } from './shipyardfinder.js';
+import { hireRows, hireEscort } from './mercenarycontract.js';
 import { assignCrew, recoveryRows, settlePrize } from './derelictrecovery.js';
 import { acceptConvoy, convoyRows } from './convoycontract.js';
 import { flagshipRows } from './flagshipcommission.js';
@@ -256,6 +257,24 @@ export class GalacticLog {
                   },
                   locate
                 )
+              : []),
+            ...(!game.net && g.hire && game.me === g.active
+              ? hireRows(g, offer => {
+                  if (
+                    !this.opened ||
+                    this.page !== 0 ||
+                    this.dialog !== d ||
+                    game.over ||
+                    game.busy ||
+                    game.me !== g.active ||
+                    !hireEscort(g, offer)
+                  )
+                    return;
+                  game.mergeFleets();
+                  for (const f of g.fleets) if (!game.fleetViews.has(f)) game.fleetView(f);
+                  game.ui?.refresh();
+                  this.fillLog(d);
+                })
               : []),
             ...commandRows(),
             ...yards()

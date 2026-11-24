@@ -16,6 +16,7 @@ import { findFiles, fetchText, fromInstall, pendingFiles } from './vfs.js';
 import { gfx, storeGfx, pixelRatio } from './gfx.js';
 import { loadMap, loadMapHeader, startEnvironment, skirmishMaps, mapTitle } from './ted.js';
 import { wreckType, stepBoarding } from './game/derelicttactical.js';
+import { hasStationOrder, tickStationOrder, supportHUD } from './game/stationsupport.js';
 import { recoveryHUD } from './game/derelicthud.js';
 import { preloadModels, getModelData, buildModel, resetLighting, prebuildModel, dropPrebuilt } from './model.js';
 import { loadALA, animName } from './ala.js';
@@ -647,6 +648,7 @@ class Game {
         }
       }
     }
+    if (this.campaignBook && hasStationOrder(this)) this.campaignBook.support = { phase: 'ready' };
     const loaded = this.setup.restore ? restore(this, this.setup.restore) : null;
     if (loaded && this.campaignBook) restoreSpaceCampaign(this, this.setup.restore, loaded.refs);
     this.savedThing =
@@ -693,6 +695,7 @@ class Game {
     this.menus = new Menus(this);
     this.advisor = new Advisor(this);
     this.ui = new UI(this);
+    if (this.campaignBook?.support) this.stationSupportHud = supportHUD(this, $('hud'));
     if (this.campaignBook?.boarding) this.recoveryHud = recoveryHUD(this, $('hud'));
     if (this.hudAssets) this.superweaponHUD = new TacticalSuperweaponHUD(this, this.hudAssets);
     if (this.ui.bar && this.superweaponHUD) this.ui.bar.covers = [{ node: this.superweaponHUD.button, build: false }];
@@ -842,6 +845,7 @@ class Game {
     this.cine?.stop();
     if (this.menus) while (this.menus.stack.length) this.menus.stack.pop().close();
     this.recoveryHud?.dispose();
+    this.stationSupportHud?.dispose();
     this.ui?.destroy();
     this.spectatorView?.destroy();
     this.spectatorView = null;
@@ -1745,6 +1749,7 @@ class Game {
     }
     if (this.paused) this.togglePause();
     if (this.campaignBook?.boarding) this.campaignBook.boarding.void = true;
+    if (this.campaignBook?.support) this.campaignBook.support = { phase: 'closed' };
     const rosters = spaceRosters(w, cb, this.campaignBook),
       { winner, doomed } = resolveTactical(rosters, cb, { space: true });
     const lose = e => {
@@ -1782,6 +1787,10 @@ class Game {
 
   campaignVictoryStep() {
     if (!this.campaignBook || this.over) return;
+    if (this.campaignBook.support) {
+      tickStationOrder(this);
+      this.stationSupportHud?.update();
+    }
     if (this.campaignBook.boarding) {
       const frozen = this.paused || this.cine?.on || this.controlsLocked || this.tacticalCinematics?.on || this.retreat?.active || this.tacticalVictory.winner;
       stepBoarding(this.setup.campaign, this.campaignBook, frozen);

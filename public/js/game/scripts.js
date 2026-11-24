@@ -1,3 +1,4 @@
+import { tacticalPaint } from './appearancechoices.js';
 import { takeReserve } from './campaignreserve.js';
 import { hintedObjects } from './tacticalobjects.js';
 import { loadFengari, LuaVM, LuaRef, Multi, engineLacksMethod } from '../lua.js';
@@ -88,7 +89,7 @@ export class ScriptHost {
     this.errors = new Map();
     this.inert = new Set();
     this.instances = [];
-    this.values = new Map();
+    this.values = tacticalPaint(game.setup);
     this.wrapped = new WeakMap();
     this.brains = new Map();
     this.current = null;

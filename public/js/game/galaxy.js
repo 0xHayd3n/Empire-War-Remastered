@@ -1,3 +1,5 @@
+import { restorePaint } from './appearancechoices.js';
+import { localRebels, restoreHire } from './mercenarycontract.js';
 import { restoreRecovery } from './derelictrecovery.js';
 import { restoreConvoy } from './convoycontract.js';
 import { restoreVessels } from './campaignvessels.js';
@@ -320,6 +322,9 @@ export function snapshotGalaxy(g) {
     ...(g.vessels ? { vessels: { ...g.vessels } } : {}),
     ...(g.convoy ? { convoy: { ...g.convoy } } : {}),
     ...(g.recovery ? { recovery: { ...g.recovery } } : {}),
+    ...(g.hire ? { hire: { ...g.hire } } : {}),
+    ...(g.fighterSupport ? { fighterSupport: true } : {}),
+    ...(g.paintKeys ? { paintPolicy: { keys: [...g.paintKeys], ...(g.paint ? { orders: structuredClone(g.paint) } : {}) } } : {}),
     ...(g.universalRules ? { universalRules: structuredClone(g.universalRules) } : {}),
     ...(g.humans ? { humans: g.humans.slice() } : {}),
     time: g.time || 0,
@@ -463,7 +468,8 @@ export function snapshotGalaxy(g) {
           ...(g.vessels && u.vessel ? { vessel: structuredClone(u.vessel) } : {}),
           ...(g.convoy?.id && u.charter === g.convoy.id ? { charter: u.charter } : {}),
           ...(g.recovery?.id && u.salvageId === g.recovery.id ? { salvageId: u.salvageId } : {}),
-          ...((g.vessels?.open || g.convoy?.open || g.recovery?.open) && u.battleSlot ? { battleSlot: u.battleSlot } : {}),
+          ...(g.hire?.id && u.hireId === g.hire.id ? { hireId: u.hireId } : {}),
+          ...((g.vessels?.open || g.convoy?.open || g.recovery?.open || g.hire?.open) && u.battleSlot ? { battleSlot: u.battleSlot } : {}),
           ...(u.raiding ? { raiding: true } : {}),
           ...(u.pathfinder ? { pathfinder: true } : {}),
           ...(Number.isInteger(u.guiIndex) ? { guiIndex: u.guiIndex } : {}),
@@ -633,5 +639,9 @@ export function applyGalaxy(g, s) {
     .filter(f => f.units.length);
   restoreConvoy(g, s.convoy);
   restoreRecovery(g, s.recovery);
+  restoreHire(g, s.hire);
+  if (s.paintPolicy || g.paintKeys) restorePaint(g, s.paintPolicy);
+  if (localRebels(g) && s.fighterSupport === true) g.fighterSupport = true;
+  else delete g.fighterSupport;
   if (s.vessels || g.vessels) restoreVessels(g, s.vessels);
 }

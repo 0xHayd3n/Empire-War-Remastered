@@ -8,6 +8,7 @@ import { assertPrivateLibrary, loadPack } from './universal-library.mjs';
 import { languageId } from '../public/js/language.js';
 import { thrawnRevision } from './universal-loader-table.mjs';
 import { fallCustomRevision } from './universal-fall-layouts.mjs';
+import { appearances, appearanceEligible, validPaint } from '../public/js/game/appearancechoices.js';
 import { canonEligible, fractalEligible, envoyStart, equalFootingStart } from '../public/js/game/universaleligibility.js';
 import { validValue, validLoss, rescueCampaign } from '../public/js/game/universalrules.js';
 const digest = s => createHash('sha256').update(s).digest('hex');
@@ -98,6 +99,16 @@ export function launchPlan(atlas, q) {
       throw Error('Freight charter unavailable.');
     options.convoy = true;
   }
+  for (const key of ['mercenaries', 'fighterSupport'])
+    if (Object.hasOwn(q, key)) {
+      if (q[key] !== true || !equalFootingStart(p, r, v)) throw Error('Station services unavailable.');
+      options[key] = true;
+    }
+  for (const [key, d] of Object.entries(appearances))
+    if (Object.hasOwn(q, key)) {
+      if (!appearanceEligible(d, p, r, v) || !validPaint(d, q[key])) throw Error('Starting appearance unavailable.');
+      options[key] = q[key];
+    }
   if (Object.hasOwn(q, 'flagship')) {
     if (q.flagship !== true || !equalFootingStart(p, r, v)) throw Error('Flagship commission unavailable.');
     options.flagship = true;

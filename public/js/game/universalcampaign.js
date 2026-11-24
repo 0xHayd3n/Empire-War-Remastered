@@ -1,4 +1,5 @@
 import { activeLanguage } from '../language.js';
+import { appearances, appearanceEligible } from './appearancechoices.js';
 import { canonEligible, fractalEligible, envoyStart, equalFootingStart } from './universaleligibility.js';
 import { ruleFields, rescueCampaign } from './universalrules.js';
 import { ruleChoices, rulePresets } from './universalrulemenu.js';
@@ -137,6 +138,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
       delete options.envoy;
       delete options.convoy;
       delete options.recovery;
+      for (const k of ['mercenaries', 'fighterSupport', ...Object.keys(appearances)]) delete options[k];
       delete options.flagship;
       delete options.expedition;
       delete options.heroRescue;
@@ -310,6 +312,31 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
         }
       );
     else ui.hide('flagship');
+    for (const [k, title, label] of [
+      ['mercenaries', 'Mercenary contracts', 'Bespin corvette hire · 750 credits / 120s'],
+      ['fighterSupport', 'Emergency fighter support', 'Station defense · 1,500 credits / 20s']
+    ]) {
+      if (equalFootingStart(p, row, v))
+        ui.field(k, title, [opt('', 'Campaign default'), opt('offer', label)], options[k] ? 'offer' : '', value => {
+          if (value) options[k] = true;
+          else delete options[k];
+        });
+      else ui.hide(k);
+    }
+    for (const [k, d] of Object.entries(appearances)) {
+      if (appearanceEligible(d, p, row, v))
+        ui.field(
+          k,
+          d.title,
+          [opt('', 'Campaign default'), ...d.choices.map((v, i) => opt(String(i), v))],
+          options[k] === undefined ? '' : String(options[k]),
+          value => {
+            if (value === '') delete options[k];
+            else options[k] = Number(value);
+          }
+        );
+      else ui.hide(k);
+    }
     const paths = [opt('', 'Authored objectives')];
     if (equalFootingStart(p, row, v))
       paths.push(opt('convoy', 'Freight charter · Hoth to Bespin'), opt('recovery', 'Derelict recovery · Sullust'));

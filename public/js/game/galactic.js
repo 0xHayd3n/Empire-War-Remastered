@@ -78,6 +78,9 @@ import { GalacticStoryDialog } from './galacticstorydialog.js';
 import { GalacticMovies } from './galacticmovies.js';
 import { GalacticLog } from './galacticlog.js';
 import { Menus } from './menus.js';
+import { battlePaint } from './appearancechoices.js';
+import { beginAppearance, stepAppearance } from './startingappearance.js';
+import { localRebels, updateHire } from './mercenarycontract.js';
 import { enableRecovery, recoveryBattle, finishRecoveryBattle, checkRecovery } from './derelictrecovery.js';
 import { enableConvoy, settleConvoy } from './convoycontract.js';
 import { envoyArrival, envoyUpdate } from './universalobjectives.js';
@@ -279,9 +282,12 @@ export class GalacticGame {
       )
         enableFlagship(g);
       if (document.querySelector('meta[name="swr-universal"]') && !document.querySelector('meta[name="swr-pack-revision"]')) {
+        if (localRebels(g) && this.setup.universalOptions?.mercenaries === true) g.hire = { state: 'ready', next: 0 };
+        if (localRebels(g) && this.setup.universalOptions?.fighterSupport === true) g.fighterSupport = true;
         if (this.setup.universalOptions?.convoy === true) enableConvoy(g);
         if (this.setup.universalOptions?.recovery === true && !g.convoy) enableRecovery(g);
       }
+      beginAppearance(g, this.setup.universalOptions);
       beginUniversalRules(g, this.setup.universalOptions, db.faction(g.active)?.list('Allies'));
     }
     if (this.setup.net) this.multiplayerGalaxy(g);
@@ -2867,7 +2873,10 @@ export class GalacticGame {
       pl = g.planets[b.p];
     if (b.mode === 'land') return this.landBattleSetup();
     const vesselBattle =
-      (g.vessels || g.convoy?.id || g.recovery?.id) && !this.net && !b.linked && !this.setup.linkedTactical &&
+      (g.vessels || g.convoy?.id || g.recovery?.id || g.hire?.id) &&
+      !this.net &&
+      !b.linked &&
+      !this.setup.linkedTactical &&
       openVesselBattle(g, b.p, [b.attacker, b.defender]);
     const units = owner => {
       const here = g.fleets.filter(f => f.planet === b.p && !f.leg && f.owner === owner),
@@ -2921,6 +2930,20 @@ export class GalacticGame {
         planetType: pl.type.name,
         ...(vesselBattle ? { vesselBattle } : {}),
         ...(recovery ? { recovery } : {}),
+        ...(g.paintKeys && !b.linked && !storyMap && !this.net && !this.setup.linkedTactical ? battlePaint(g, this.story?.values) : {}),
+        ...(g.fighterSupport &&
+        localRebels(g) &&
+        !this.net &&
+        !b.linked &&
+        !this.setup.linkedTactical &&
+        !storyMap &&
+        !storyPlots.length &&
+        b.defender === g.active &&
+        pl.owner === g.active &&
+        pl.station &&
+        (pl.stationOwner || pl.owner) === g.active
+          ? { stationSupport: true }
+          : {}),
         campaignName: g.campaign.name,
         galaxy: snap,
         storyPlots,
@@ -3181,6 +3204,7 @@ export class GalacticGame {
         storyPlots,
         galacticPerceptions: this.galacticPerceptions(b),
         treasury: this.tacticalTreasury(b),
+        ...(g.paintKeys && !b.linked && !storyMap && !this.net && !this.setup.linkedTactical ? battlePaint(g, this.story?.values) : {}),
         orbitOwners: [...new Set(g.fleets.filter(f => f.planet === b.p && !f.leg && f.units.length).map(f => f.owner))],
         bombingRun: orbitBombingRun(g, b.p, b.attacker),
         sides: [b.attacker, b.defender],
@@ -3823,6 +3847,22 @@ export class GalacticGame {
         if (this.galaxy.convoy?.id && !this.battle && !this.pendingBattle?.request && this.galaxy.time >= (this.nextFreightCheck || 0)) {
           this.nextFreightCheck = this.galaxy.time + 0.5;
           if (settleConvoy(this.galaxy)) this.galacticLog?.message('Freight charter settled. See the galactic log for the outcome.');
+        }
+        if (this.galaxy.paint) stepAppearance(this);
+        if (this.galaxy.hire?.id && !this.busy && !this.pendingBattle?.request && this.galaxy.time >= (this.nextHireCheck || 0)) {
+          this.nextHireCheck = this.galaxy.time + 0.5;
+          if (
+            updateHire(this.galaxy, f => {
+              const view = this.fleetViews.get(f);
+              if (view) {
+                this.scene.remove(view.inst.root);
+                this.fleetViews.delete(f);
+              }
+            })
+          ) {
+            this.ui?.refresh();
+            this.galacticLog?.message('Mercenary service ended. Check the galactic log for the next hiring date.');
+          }
         }
         if (this.galaxy.universalRules?.envoy) envoyUpdate(this);
         if (this.galaxy.universalRules?.canon || this.galaxy.universalRules?.fractal) stepCanonOrder(this);

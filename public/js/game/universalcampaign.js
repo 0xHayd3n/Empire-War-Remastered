@@ -84,6 +84,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
       busy = false;
       ui.panel.inert = false;
       ui.allow(!!v);
+      window.universalLaunch?.end();
       ui.status.textContent = e.data.error;
     }
   }
@@ -93,6 +94,10 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     busy = ui.panel.inert = true;
     ui.allow(false);
     ui.status.textContent = 'Opening ' + p.name + '…';
+    window.universalLaunch?.begin(
+      family.title,
+      [p.name, period.scenario ? 'Scenario' : period.label, p.facts[faction]?.label || faction].join(' · ')
+    );
     try {
       const plan = await request('/start', { profile: p.id, language, row: row.id, target: v.id, difficulty, ...options, settings });
       if (p.id === origin) {
@@ -105,6 +110,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     } catch (e) {
       busy = ui.panel.inert = false;
       ui.allow(true);
+      window.universalLaunch?.end();
       ui.status.textContent = e.message;
     }
   }

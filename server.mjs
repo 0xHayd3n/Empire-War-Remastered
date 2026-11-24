@@ -163,7 +163,7 @@ const server = http.createServer(async (req, res) => {
       res.setHeader('Cross-Origin-Resource-Policy','cross-origin');
       res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${session.library}`);
       const html = fs.readFileSync(path.join(PUBLIC, 'play.html'), 'utf8')
-        .replace('</head>', `<meta name="swr-universal" content="${session.library}"><link rel="stylesheet" href="universal-modes.css">${session.pack ? `<meta name="swr-pack-revision" content="${session.pack.mounted.workshop}:${session.pack.revision}">` : ''}</head>`);
+        .replace('</head>', `<meta name="swr-universal" content="${session.library}"><script defer src="js/universallaunch.js"></script><link rel="stylesheet" href="universal-modes.css">${session.pack ? `<meta name="swr-pack-revision" content="${session.pack.mounted.workshop}:${session.pack.revision}">` : ''}</head>`);
       return send(res, 200, html, MIME['.html'], { 'Cache-Control':'no-store', 'Document-Policy':'js-profiling' });
     }
     if (p === '/api/battle-photo') {

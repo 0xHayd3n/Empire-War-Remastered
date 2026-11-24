@@ -1,5 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
+import { artRoot } from './workshop-battle-art.mjs';
 import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { atlasStore } from './universal-atlas.mjs';
@@ -7,7 +9,28 @@ import { readLibrary } from './workshop-library.mjs';
 import { libraryHome, listPacks, loadPack, primaries } from './universal-library.mjs';
 
 const order = ['stock', ...primaries.keys()]; // stable save origins: append new IDs, never reorder
-const hostJS = fs.readFileSync(new URL('../public/js/universalhost.js', import.meta.url));
+const hostFiles = new Map(
+  [
+    ['/', 'universal-host.html', 'text/html; charset=utf-8'],
+    ['/universalhost.js', 'js/universalhost.js', 'text/javascript'],
+    ['/briefing.css', 'briefing.css', 'text/css'],
+    ['/art/briefings.svg', 'art/briefings.svg', 'image/svg+xml'],
+    ['/fonts/aurebesh-af/AurebeshAF-Canon.otf', 'fonts/aurebesh-af/AurebeshAF-Canon.otf', 'font/otf']
+  ].map(([route, file, type]) => [route, { url: new URL('../public/' + file, import.meta.url), type }])
+);
+// Decorative Coruscant orbit, not a claim about the selected campaign's map.
+// Serve just this approved local picture, never arbitrary collection files.
+const orbitSHA = 'e65d0ea67ba6dcbcd386bd7883d7e8bddcd77b872fa802d5224331d8a5905f73';
+async function campaignOrbit() {
+  try {
+    const root = artRoot();
+    if (!root) return null;
+    const bytes = await fs.promises.readFile(path.join(root, orbitSHA + '.jpg'));
+    return createHash('sha256').update(bytes).digest('hex') === orbitSHA ? bytes : null;
+  } catch {
+    return null;
+  }
+}
 function openWindowsURL(url) {
   if (process.platform === 'win32')
     execFile(
@@ -68,24 +91,25 @@ export async function serveUniversal(
     res.setHeader('Permissions-Policy', `cross-origin-isolated=(self ${origins.map(o => '"' + o + '"').join(' ')})`);
     res.setHeader(
       'Content-Security-Policy',
-      `default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; frame-src ${origins.join(' ')}; frame-ancestors 'none'; base-uri 'none'`
+      `default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'; connect-src 'self'; frame-src ${origins.join(' ')}; frame-ancestors 'none'; base-uri 'none'`
     );
     const send = (status, body, type = 'text/plain; charset=utf-8') => {
       res.writeHead(status, { 'Content-Type': type });
       res.end(body);
     };
     if (req.headers.host !== `127.0.0.1:${port}`) return send(403, 'Use the printed loopback address.');
-    if (req.method === 'GET' && req.url === '/universalhost.js') return send(200, hostJS, 'text/javascript');
+    if (req.method === 'GET' && hostFiles.has(req.url)) {
+      const { url, type } = hostFiles.get(req.url);
+      return send(200, fs.readFileSync(url), type);
+    }
+    if (req.method === 'GET' && req.url === '/campaign-orbit.jpg') {
+      const bytes = await campaignOrbit();
+      return send(bytes ? 200 : 204, bytes, 'image/jpeg');
+    }
     if (req.method === 'HEAD' && req.url === '/') {
       res.setHeader('X-EaW-Universal', '1');
       return send(200, '');
     }
-    if (req.method === 'GET' && req.url === '/')
-      return send(
-        200,
-        `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Empire War Remastered · Universal</title><style>html,body{margin:0;background:#10161d;color:#e3edf2;font:16px system-ui}iframe{display:block;position:fixed;inset:0;width:100%;height:100%;border:0}aside{position:fixed;inset:0;display:grid;place-content:center;background:#10161d}aside[hidden]{display:none}button{font:inherit}</style><iframe id="game" title="Empire War Remastered" allow="autoplay; fullscreen; gamepad; cross-origin-isolated" allowfullscreen></iframe><aside><p role="status">Opening Empire War Remastered…</p><button hidden>Try again</button></aside><script type="module" src="/universalhost.js"></script></html>`,
-        'text/html; charset=utf-8'
-      );
     if (req.method !== 'POST' || req.headers.origin !== origin) return send(403, 'Use the running game.');
     const id = /^\/api\/mount\/(stock|\d+)$/.exec(req.url)?.[1];
     if (!order.includes(id)) return send(404, 'Unknown era');

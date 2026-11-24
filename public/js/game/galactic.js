@@ -477,7 +477,17 @@ export class GalacticGame {
     startStrategicMusic(this);
     if (this.setup.net) await this.startNet();
     this.last = performance.now();
-    requestAnimationFrame(this.frame);
+    // The host owns a single plate across profile navigation. Do not reveal a
+    // ready renderer before it has actually presented the opening galaxy/UI.
+    if (exactPath && window.universalLaunch?.pending) {
+      requestAnimationFrame(now => {
+        try {
+          this.frame(now);
+        } finally {
+          window.universalLaunch.end();
+        }
+      });
+    } else requestAnimationFrame(this.frame);
   }
 
   get noSave() {

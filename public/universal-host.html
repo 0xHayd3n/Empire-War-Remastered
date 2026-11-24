@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>
+    Empire War Remastered · Universal</title
+  ><link rel="stylesheet" href="/briefing.css" /><style>
+    :root {
+      --ui-font: system-ui, sans-serif;
+    }
+    html,
+    body {
+      margin: 0;
+      background: #10161d;
+      color: #e3edf2;
+      font: 16px var(--ui-font);
+    }
+    iframe {
+      display: block;
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+    }
+    #host-status {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-content: center;
+      background: #10161d;
+    }
+    [hidden] {
+      display: none !important;
+    }
+    button {
+      font: inherit;
+    }
+    .battle-scene {
+      background: #101821 url('/art/briefings.svg#chart') center/cover no-repeat;
+    }
+    .battle-copy h2 {
+      font-family: var(--ui-font);
+    }
+    #expose {
+      position: absolute;
+      right: var(--inset);
+      bottom: 4%;
+      background: #10161d;
+      color: white;
+      border: 1px solid #aaa;
+      padding: 0.5em 1em;
+    }
+  </style>
+  <iframe id="game" title="Empire War Remastered" allow="autoplay; fullscreen; gamepad; cross-origin-isolated" allowfullscreen></iframe>
+  <aside id="host-status">
+    <p role="status">Opening Empire War Remastered…</p>
+    <button hidden>Try again</button>
+  </aside>
+  <section class="battle-plate" data-kind="campaign" aria-label="Campaign deployment" hidden>
+    <div class="battle-scene"></div>
+    <div class="battle-copy">
+      <span class="battle-aurebesh" aria-hidden="true"></span>
+      <h2></h2>
+      <div class="battle-subtitle"></div>
+    </div>
+    <footer>
+      <progress aria-label="Campaign loading"></progress
+      ><span class="loading-caption"><i aria-hidden="true"></i><span role="status"></span></span>
+    </footer>
+    <button id="expose" hidden>Show game window</button>
+  </section>
+  <script type="module" src="/universalhost.js"></script>
+</html>

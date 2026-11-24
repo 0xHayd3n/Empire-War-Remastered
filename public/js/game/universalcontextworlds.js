@@ -1,9 +1,7 @@
-// Screen-space context, not gameplay objects. Never attach routes, owners or hit actions
-// to these worlds. At wide zoom prioritize active labels; hover can name a crowded dot.
+// Screen-space context, never gameplay objects or hit targets. Compose the entire layer
+// at 20% in CSS so overlapping marker, name and hover ink cannot build up opacity.
 export function inactiveWorlds(catalog, excluded, activeNames) {
-  // Regional variants (e.g. a separate Mandalore_Big) may have the same display name.
-  // Never show a second gray Mandalore next to the active one. Only background labels
-  // coalesce here; exact active IDs, positions, routes and counts stay untouched.
+  // Different regional IDs can share a display name. Never put a gray copy next to the active one.
   const seen = new Set(activeNames.map(n => n.trim().toLowerCase()));
   return catalog.filter(p => {
     const name = p.name.trim().toLowerCase();
@@ -12,13 +10,14 @@ export function inactiveWorlds(catalog, excluded, activeNames) {
     return true;
   });
 }
-export function contextWorlds(canvas) {
+export function contextWorlds(canvas, labels) {
   const ctx = canvas.getContext('2d');
   let points = [],
-    active = [],
+    centers = [],
+    models = [],
     index = [],
     raf = 0,
-    hover = null,
+    hover,
     view;
   function draw() {
     raf = 0;
@@ -34,90 +33,114 @@ export function contextWorlds(canvas) {
     ctx.setTransform(d, 0, 0, d, 0, 0);
     ctx.clearRect(0, 0, w, h);
     index = [];
-    if (!points.length) return;
-    const occupied = new Set(),
-      foreground = new Set();
-    function cells(s, l, t, width, height, mark) {
-      for (let i = Math.floor(l / 8); i <= Math.floor((l + width) / 8); i++)
-        for (let j = Math.floor(t / 9); j <= Math.floor((t + height) / 9); j++) {
-          const k = i + ',' + j;
-          if (mark) s.add(k);
-          else if (s.has(k)) return true;
+    if (!points.length || !W || !H) return;
+    // Reserve active footprints first. The native still contains opaque sky pixels and cannot
+    // simply be layered over this canvas. Never paint a context pixel in a foreground box.
+    const cols = Math.ceil(w / 8),
+      rows = Math.ceil(h / 8),
+      grid = new Uint8Array(rows * cols),
+      ACTIVE = 2,
+      NAME = 1;
+    function cells(left, top, right, bottom, mask, write = false) {
+      const i0 = Math.max(0, Math.floor(left / 8)),
+        i1 = Math.min(cols - 1, Math.floor(right / 8)),
+        j0 = Math.max(0, Math.floor(top / 8)),
+        j1 = Math.min(rows - 1, Math.floor(bottom / 8));
+      for (let j = j0; j <= j1; j++)
+        for (let i = i0; i <= i1; i++) {
+          const n = j * cols + i;
+          if (write) grid[n] |= mask;
+          else if (grid[n] & mask) return true;
         }
       return false;
     }
-    for (const [u, v, width] of active) {
-      const X = u * w * z + x,
-        Y = v * h * z + y;
-      cells(occupied, X - 4, Y - 6, width + 12, 12, true);
-      cells(foreground, X - 4, Y - 6, width + 12, 12, true);
+    const rect = canvas.getBoundingClientRect();
+    for (const el of labels.children) {
+      const r = el.getBoundingClientRect();
+      cells(r.left - rect.left - 2, r.top - rect.top - 2, r.right - rect.left + 2, r.bottom - rect.top + 2, ACTIVE, true);
     }
+    for (const [u, v] of centers) {
+      const X = x + u * w * z,
+        Y = y + v * h * z;
+      cells(X - 7, Y - 7, X + 7, Y + 7, ACTIVE, true); // Includes the fallback marker while native art loads.
+    }
+    for (const [l, t, r, b] of models) cells(x + l * w * z - 2, y + t * h * z - 2, x + r * w * z + 2, y + b * h * z + 2, ACTIVE, true);
     ctx.font = '10px system-ui';
     ctx.textBaseline = 'middle';
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 2;
+    function nameAt(p, left, Y) {
+      if (left < 2 || left + p.width > w - 2 || Y < 8 || Y > h - 8 || cells(left - 2, Y - 8, left + p.width + 2, Y + 8, ACTIVE | NAME))
+        return false;
+      cells(left - 2, Y - 8, left + p.width + 2, Y + 8, NAME, true);
+      ctx.fillStyle = '#eee';
+      ctx.strokeText(p.name, left, Y);
+      ctx.fillText(p.name, left, Y);
+      return true;
+    }
     for (const p of points) {
-      const X = p.u * w * z + x,
-        Y = p.v * h * z + y;
-      if (X < 0 || Y < 0 || X > w || Y > h || cells(foreground, X - 1, Y - 1, 2, 2, false)) continue;
-      index.push([X, Y, p.name]);
-      ctx.fillStyle = '#434951';
+      const X = x + p.u * w * z,
+        Y = y + p.v * h * z;
+      if (X < 0 || Y < 0 || X > w || Y > h || cells(X - 3, Y - 3, X + 3, Y + 3, ACTIVE)) continue;
+      index.push([X, Y, p]);
+      ctx.fillStyle = '#aaa';
       ctx.beginPath();
       ctx.arc(X, Y, 2, 0, 2 * Math.PI);
       ctx.fill();
-      ctx.fillStyle = '#858b91';
+      ctx.fillStyle = '#eee';
       ctx.fillRect(X - 1, Y - 1, 1.4, 1.4);
-      const left = X + 4,
-        width = p.width;
-      if (!cells(occupied, left, Y - 5, width, 10, false)) {
-        cells(occupied, left, Y - 5, width, 10, true);
-        ctx.fillStyle = '#92959a';
-        ctx.strokeStyle = 'rgba(10,13,17,.72)';
-        ctx.lineWidth = 2;
-        ctx.strokeText(p.name, left, Y);
-        ctx.fillText(p.name, left, Y);
+    }
+    // Hover has priority only among *inactive* names. Try the other side or above/below;
+    // if no slot fits, do not cover an active name, ring or model with a tooltip.
+    for (const [X, Y, p] of index)
+      if (p === hover) {
+        if (!nameAt(p, X + 4, Y) && !nameAt(p, X - p.width - 4, Y) && !nameAt(p, X - p.width / 2, Y - 10))
+          nameAt(p, X - p.width / 2, Y + 10);
       }
-    }
-    if (hover) {
-      const [X, Y, name] = hover,
-        width = ctx.measureText(name).width;
-      const left = Math.max(3, Math.min(w - width - 5, X + 6));
-      ctx.fillStyle = '#14171c';
-      ctx.fillRect(left - 2, Y - 8, width + 4, 16);
-      ctx.fillStyle = '#c3c6cb';
-      ctx.fillText(name, left, Y);
-    }
+    for (const [X, Y, p] of index) if (p !== hover) nameAt(p, X + 4, Y);
   }
   function schedule() {
-    if (!raf) raf = requestAnimationFrame(draw);
+    if (view && !raf) raf = requestAnimationFrame(draw);
   }
+  // A pack font can finish loading without a map resize. Re-read the actual label boxes.
+  document.fonts.addEventListener('loadingdone', schedule);
   return {
-    set(catalog, excluded, labels, names) {
+    set(catalog, excluded, positions, names) {
       ctx.font = '10px system-ui';
-      points = inactiveWorlds(catalog, excluded, names.slice(0, labels.length));
+      points = inactiveWorlds(catalog, excluded, positions.length ? names : []);
       for (const p of points) p.width ??= ctx.measureText(p.name).width;
-      active = labels.map(([u, v], i) => [u, v, Math.min(260, 12 + names[i].length * 7)]);
-      hover = null;
+      centers = positions;
+      models = [];
+      hover = undefined;
       canvas.dataset.inactive = String(points.length);
+      schedule();
+    },
+    protectModels(bounds) {
+      models = bounds;
       schedule();
     },
     move(w, h, x, y, z) {
       view = { w, h, x, y, z };
-      hover = null;
+      hover = undefined;
       schedule();
     },
     point(x, y) {
-      const next = index.find(([X, Y]) => Math.abs(X - x) < 5 && Math.abs(Y - y) < 5);
-      if (hover?.[2] !== next?.[2]) {
-        hover = next;
+      const p = index.find(([X, Y]) => Math.abs(X - x) < 5 && Math.abs(Y - y) < 5)?.[2];
+      if (hover !== p) {
+        hover = p;
         schedule();
       }
     },
     clear() {
       cancelAnimationFrame(raf);
       raf = 0;
-      view = hover = null;
-      points = active = index = [];
+      view = hover = undefined;
+      points = centers = models = index = [];
       canvas.dataset.inactive = '0';
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+    },
+    dispose() {
+      document.fonts.removeEventListener('loadingdone', schedule);
     }
   };
 }

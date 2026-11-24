@@ -167,6 +167,54 @@ const assert = require('node:assert/strict'),
     await panel.locator('.uc-map-choice').first().click();
     const native = board.locator('.uc-canvas[data-scene="native"]');
     await native.waitFor();
+    async function checkContext() {
+      const stats = await native.evaluate(async e => {
+        await new Promise(ok => requestAnimationFrame(() => requestAnimationFrame(ok)));
+        const c = e.querySelector('.uc-context'),
+          labels = e.querySelector('.uc-worlds'),
+          rect = c.getBoundingClientRect(),
+          css = getComputedStyle(c),
+          sx = c.width / rect.width,
+          sy = c.height / rect.height,
+          image = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+        let ink = 0,
+          colored = false,
+          clashes = 0;
+        for (let i = 0; i < image.length; i += 4)
+          if (image[i + 3]) {
+            ink++;
+            if (image[i] !== image[i + 1] || image[i] !== image[i + 2]) colored = true;
+          }
+        const check = (l, t, r, b) => {
+          for (let y = Math.max(0, Math.ceil(t * sy)); y < Math.min(c.height, Math.floor(b * sy)); y++)
+            for (let x = Math.max(0, Math.ceil(l * sx)); x < Math.min(c.width, Math.floor(r * sx)); x++)
+              if (image[4 * (y * c.width + x) + 3]) clashes++;
+        };
+        const map = labels.getBoundingClientRect();
+        for (const label of labels.children) {
+          const r = label.getBoundingClientRect();
+          check(r.left - rect.left, r.top - rect.top, r.right - rect.left, r.bottom - rect.top);
+          const X = map.left - rect.left + (parseFloat(label.style.left) * map.width) / 100,
+            Y = map.top - rect.top + (parseFloat(label.style.top) * map.height) / 100;
+          check(X - 5, Y - 5, X + 5, Y + 5);
+        }
+        return {
+          ink,
+          colored,
+          clashes,
+          opacity: css.opacity,
+          filter: css.filter,
+          activeOpacity: getComputedStyle(labels).opacity,
+          top: !!(c.compareDocumentPosition(labels) & Node.DOCUMENT_POSITION_FOLLOWING)
+        };
+      });
+      assert(stats.ink > 0, 'Inactive planets should still be visible');
+      assert.deepEqual(
+        { ...stats, ink: 0 },
+        { ink: 0, colored: false, clashes: 0, opacity: '0.2', filter: 'grayscale(1)', activeOpacity: '1', top: true }
+      );
+    }
+    await checkContext();
     const firstPlate = await native.getAttribute('data-backdrop-renders');
     assert(Number(await native.locator('.uc-context').getAttribute('data-inactive')) > 0, 'Missing inactive worlds');
     assert(await native.locator('.uc-context-note').isVisible());
@@ -214,6 +262,7 @@ const assert = require('node:assert/strict'),
     const labelSize = await label.boundingBox();
     await label.dispatchEvent('dblclick');
     assert.equal(await mapZoomed(), true);
+    await checkContext();
     assert(Math.abs((await label.boundingBox()).width - labelSize.width) < 0.05, 'Zoom must not enlarge names over neighboring planets');
     async function mapZoomed() {
       return galaxy.evaluate(e => e.hasAttribute('data-zoomed'));

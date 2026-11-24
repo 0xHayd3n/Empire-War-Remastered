@@ -43,7 +43,7 @@ function save(cache, id, result) {
   }
 }
 export function strategicPreview(host) {
-  host.innerHTML = `<div class="uc-map" role="group" aria-label="Starting galaxy map" tabindex="0"><div class="uc-plane"><canvas class="uc-backplate"></canvas><canvas class="uc-planets"></canvas><div class="uc-worlds"></div></div><canvas class="uc-context" role="img" aria-label="Other charted worlds, outside this map"></canvas></div><span class="uc-context-note">Gray worlds · outside this map</span><div class="uc-key" aria-label="Faction key"></div>`;
+  host.innerHTML = `<div class="uc-map" role="group" aria-label="Starting galaxy map" tabindex="0"><div class="uc-plane"><canvas class="uc-backplate"></canvas><canvas class="uc-planets"></canvas></div><canvas class="uc-context" role="img" aria-label="Other charted worlds, outside this map"></canvas><div class="uc-worlds"></div></div><span class="uc-context-note">Gray worlds · outside this map</span><div class="uc-key" aria-label="Faction key"></div>`;
   const map = host.querySelector('.uc-map'),
     plane = host.querySelector('.uc-plane'),
     sky = host.querySelector('.uc-backplate'),
@@ -54,7 +54,7 @@ export function strategicPreview(host) {
     key = host.querySelector('.uc-key'),
     plates = new Map(),
     shots = new Map(),
-    ghosts = contextWorlds(host.querySelector('.uc-context')),
+    ghosts = contextWorlds(host.querySelector('.uc-context'), labels),
     pool = planetPool();
   let contextKey, contextProjection;
   let chart,
@@ -75,8 +75,8 @@ export function strategicPreview(host) {
     y = Math.min(0, Math.max(map.clientHeight * (1 - zoom), y));
     map.toggleAttribute('data-zoomed', zoom > 1);
     ghosts.move(map.clientWidth, map.clientHeight, x, y, zoom);
-    plane.style.setProperty('--label-scale', 1 / zoom);
-    plane.style.transform = `translate(${x}px,${y}px) scale(${zoom})`;
+    labels.style.setProperty('--label-scale', 1 / zoom);
+    labels.style.transform = plane.style.transform = `translate(${x}px,${y}px) scale(${zoom})`;
   }
   function scale(f, px, py) {
     if (!selection || selection.onlySky) return;
@@ -248,6 +248,7 @@ export function strategicPreview(host) {
     delete host.dataset.models;
     const paint = result => {
       ctx.drawImage(result.bitmap, 0, 0);
+      ghosts.protectModels(result.bounds);
       host.dataset.scene = 'native';
       host.dataset.models = String(result.placed);
       host.dataset.reused = String(result.reused);
@@ -310,6 +311,7 @@ export function strategicPreview(host) {
     dispose() {
       clear();
       observer.disconnect();
+      ghosts.dispose();
       for (const c of [shots, plates]) {
         for (const r of c.values()) r.bitmap.close();
         c.clear();

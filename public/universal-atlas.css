@@ -48,6 +48,9 @@ dialog.uc-atlas[open] {
   user-select: none;
 }
 .uc-context {
+  /* Composite once: an overlapping inactive dot, name and outline still have only 20% opacity. */
+  opacity: 0.2;
+  filter: grayscale(1);
   position: absolute;
   inset: 0;
   width: 100%;
@@ -71,10 +74,16 @@ dialog.uc-atlas[open] {
 .uc-map[data-zoomed]:active {
   cursor: grabbing;
 }
-.uc-plane {
+.uc-plane,
+.uc-worlds {
   transform-origin: 0 0;
 }
+.uc-worlds {
+  /* The last map layer: context can never cover or intercept an active name. */
+  pointer-events: none;
+}
 .uc-worlds span {
+  pointer-events: auto;
   position: absolute;
   white-space: nowrap;
   transform-origin: 0 0;

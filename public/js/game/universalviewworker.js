@@ -8,6 +8,19 @@ import { GalacticModelFade } from './galacticfade.js';
 let renderer, canvas, quad, namespace;
 const planets = new Map(),
   ringStyles = new Map();
+// Normalized screen-space bounds of the visible mesh parts, including billboards. These
+// travel with the cached still so zoom and pan only transform rectangles, not models.
+function modelRect(root, camera) {
+  root.updateMatrixWorld(true);
+  const vp = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
+    mvp = new THREE.Matrix4(),
+    box = new THREE.Box3(),
+    screen = new THREE.Box3();
+  root.traverseVisible(o => {
+    if (o.geometry?.boundingBox) screen.union(box.copy(o.geometry.boundingBox).applyMatrix4(mvp.multiplyMatrices(vp, o.matrixWorld)));
+  });
+  if (!screen.isEmpty()) return [(1 + screen.min.x) / 2, (1 - screen.max.y) / 2, (1 + screen.max.x) / 2, (1 - screen.min.y) / 2];
+}
 self.onmessage = async ({ data: q }) => {
   let batch;
   const attached = [];
@@ -43,7 +56,8 @@ self.onmessage = async ({ data: q }) => {
     for (const key of Object.keys(planetLighting)) planetLighting[key].value.copy(lighting[key].value);
     let placed = 0,
       reused = 0;
-    const materials = [];
+    const materials = [],
+      bounds = [];
     await Promise.all(
       [...q.worlds, ...q.scenery].map(async (p, i) => {
         const [, , , , , file, scale, layer, excluded] = p;
@@ -67,7 +81,11 @@ self.onmessage = async ({ data: q }) => {
         inst.root.traverse(o => {
           if (o.material?.userData.ready) materials.push(o.material.userData.ready);
         });
-        if (i < q.worlds.length) placed++;
+        if (world) {
+          const box = modelRect(inst.root, cam);
+          if (box) bounds.push(box);
+          placed++;
+        }
       })
     );
     // Seed the native background pass with the opaque, pre-rendered pixels. Blit them
@@ -153,12 +171,15 @@ self.onmessage = async ({ data: q }) => {
         s.position.set(u * q.w, (1 - v) * q.h, 0);
         s.scale.set(ring.image.width * scale, ring.image.height * scale, 1);
         hud.add(s);
+        const du = s.scale.x / (2 * q.w),
+          dv = s.scale.y / (2 * q.h);
+        bounds.push([u - du, v - dv, u + du, v + dv]);
       });
       renderer.autoClear = false;
       renderer.render(hud, screen);
     }
     const bitmap = canvas.transferToImageBitmap();
-    self.postMessage({ bitmap, placed, reused, routes: routes.length }, [bitmap]);
+    self.postMessage({ bitmap, placed, reused, routes: routes.length, bounds }, [bitmap]);
   } catch (e) {
     self.postMessage({ error: e.message });
   } finally {

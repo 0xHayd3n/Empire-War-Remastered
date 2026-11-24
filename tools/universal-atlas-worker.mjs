@@ -129,8 +129,11 @@ try {
       idx = new Map(),
       scenery = [];
     for (const p of g.planets) {
-      if (!planetKeys.has(p.name)) {
-        planetKeys.set(p.name, planets.length);
+      // Keep differing placements if a loader supplies one. Owner/route rows already
+      // refer to these exact indices; the shared chart is presentation, never topology.
+      const location = JSON.stringify([p.name, ...p.pos]);
+      if (!planetKeys.has(location)) {
+        planetKeys.set(location, planets.length);
         const t = p.type;
         planets.push([
           p.name,
@@ -143,11 +146,11 @@ try {
         ]);
       }
       if (p.background) {
-        scenery.push(planetKeys.get(p.name));
+        scenery.push(planetKeys.get(location));
         continue;
       }
       idx.set(p.index, worlds.length);
-      worlds.push([planetKeys.get(p.name), p.owner]);
+      worlds.push([planetKeys.get(location), p.owner]);
     }
     for (const r of g.routes)
       if (idx.has(r.a) && idx.has(r.b)) {

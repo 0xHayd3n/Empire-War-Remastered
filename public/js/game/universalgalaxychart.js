@@ -10,7 +10,7 @@ const worldIds = p => [...new Set(p.maps.flatMap(m => m.worlds.map(([i]) => i)))
 function registration(matches) {
   const xs = [],
     ys = [];
-  // Deterministic, bounded sampling; exact shared planets need no approximation at all.
+  // Bounded sampling. Anchors estimate a transform; they never override a map's positions.
   const stride = Math.max(1, Math.ceil(matches.length / 48)),
     sample = matches.filter((_, i) => i % stride === 0);
   for (let i = 0; i < sample.length; i++)
@@ -25,9 +25,14 @@ function registration(matches) {
       xs.push((dx * X + dy * Y) / d);
       ys.push((dx * Y - dy * X) / d);
     }
-  const a = xs.length ? median(xs) : 1,
-    b = ys.length ? median(ys) : 0,
-    tx = matches.length ? median(matches.map(([p, r]) => r[0] - a * p[2] + b * p[3])) : 0,
+  let a = xs.length ? median(xs) : 1,
+    b = ys.length ? median(ys) : 0;
+  // Inconsistent anchors can cancel out. Fall back to translation, not zero map area.
+  if (Math.hypot(a, b) < 1e-6) {
+    a = 1;
+    b = 0;
+  }
+  const tx = matches.length ? median(matches.map(([p, r]) => r[0] - a * p[2] + b * p[3])) : 0,
     ty = matches.length ? median(matches.map(([p, r]) => r[1] - b * p[2] - a * p[3])) : 0;
   return { scale: Math.hypot(a, b) || 1, xy: p => [a * p[2] - b * p[3] + tx, b * p[2] + a * p[3] + ty] };
 }
@@ -40,39 +45,53 @@ export function galaxyChart(profiles) {
     sky = full.scenery.map(i => reference.planets[i]).filter(p => p[7] === 1),
     coordinates = new Map(),
     rows = new Map(),
+    catalog = new Map(),
+    ambiguous = new Set(),
     frame = [];
+  for (const p of ordered) {
+    const seen = new Map();
+    for (const i of worldIds(p)) {
+      const w = p.planets[i],
+        k = key(p, w);
+      if (seen.has(k) && seen.get(k) !== w[0]) ambiguous.add(k);
+      seen.set(k, w[0]);
+    }
+  }
+  const identity = (p, w) => (ambiguous.has(key(p, w)) ? p.id + ':' + w[0] : key(p, w));
   const anchors = worldIds(reference).map(i => reference.planets[i]);
   const extent = Math.max(1, ...anchors.map(p => Math.hypot(p[2], p[3])));
   for (const p of ordered) {
     const indices = worldIds(p),
-      matches = indices.map(i => [p.planets[i], coordinates.get(key(p, p.planets[i]))]).filter(([, r]) => r);
+      context = new Set(p.maps.filter(m => m.worlds.length > 1).flatMap(m => m.worlds.map(([i]) => i))),
+      matches = indices.map(i => [p.planets[i], coordinates.get(identity(p, p.planets[i]))]).filter(([, r]) => r);
     const { scale, xy } = registration(matches),
       locations = new Map();
-    // Compute the transform from the prior charts, then resolve exact anchors. Preserve
-    // native model, scale ratio and faction-local row indices; never key launches on names.
+    // Place all active worlds with the same transform, preserving their formation.
+    // The first ordinary placement for an identity supplies its inactive chart marker.
     for (const i of indices) {
       const world = p.planets[i],
-        k = key(p, world),
+        k = identity(p, world),
         shared = coordinates.get(k);
-      let pos = shared || xy(world),
+      let pos = xy(world),
         uncharted = false;
-      // Some packs park a tutorial/selector thousands of units off the authored galaxy.
-      // Center its preview marker rather than stretching every real sector around a dummy.
-      if (!shared && Math.hypot(...pos) > extent * 2.5) {
-        pos = [0, 0];
+      // AotR parks this setup placeholder at (10000,10000). Distance by itself is
+      // not evidence of a dummy: never relocate an ordinary outlying campaign world.
+      if (p.id === '1397421866' && world[0] === 'Tutorial_Planet' && Math.hypot(...pos) > extent * 2.5) {
+        pos = shared || [0, 0];
         uncharted = true;
       }
       const placed = [...world];
       [placed[2], placed[3]] = pos;
-      placed[4] = shared?.[2] ?? reference.camera.plane + (world[4] - p.camera.plane) * scale;
+      placed[4] = reference.camera.plane + (world[4] - p.camera.plane) * scale;
       if (!shared && !uncharted) coordinates.set(k, placed.slice(2, 5));
       placed[6] *= scale;
-      locations.set(i, { placed, uncharted });
+      locations.set(i, { id: k, placed, uncharted });
+      if (!uncharted && context.has(i) && !catalog.has(k)) catalog.set(k, { id: k, planet: placed });
       frame.push(placed);
     }
     rows.set(p, locations);
   }
-  return { reference, sky, frame, world: (p, i) => rows.get(p).get(i) };
+  return { reference, sky, frame, catalog: [...catalog.values()], world: (p, i) => rows.get(p).get(i) };
 }
 export function sectorView(labels) {
   if (!labels.length) return { zoom: 1, u: 0.5, v: 0.5 };

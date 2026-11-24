@@ -1,21 +1,28 @@
-// A single still of the game's overview. No galaxy, Lua, ticks, fleets or gameplay document.
-// Each worker gets one immutable VFS namespace; terminating it also discards model and texture caches.
+// Still previews only. The worker owns one immutable profile/revision/viewport and keeps
+// its loaded planet instances between selections. The caller serializes requests.
 import * as THREE from '../../vendor/three/build/three.module.js';
 import { renderGalacticScenes, placeGalacticModel } from './galacticscenes.js';
 import { RouteBatches } from './routebatch.js';
 import { routeAxes } from './galacticroutes.js';
 import { GalacticModelFade } from './galacticfade.js';
+let renderer, canvas, quad, namespace;
+const planets = new Map(),
+  ringStyles = new Map();
 self.onmessage = async ({ data: q }) => {
-  let renderer;
+  let batch;
+  const attached = [];
   try {
+    const ns = [q.profile, q.revision, q.w, q.h].join(':');
+    if (namespace && namespace !== ns) throw Error('Preview mount changed');
+    namespace = ns;
     globalThis.SWR_BASE = `${location.origin}/api/universal/art/${q.profile}/${q.revision}/`;
     globalThis.SWR_OVERLAY = { read: async () => undefined };
     const [{ loadModel, updateBillboards, lighting, planetLighting }, { loadTexture, texturesReady }] = await Promise.all([
       import('../model.js'),
       import('../dds.js')
     ]);
-    const canvas = new OffscreenCanvas(q.w, q.h);
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    canvas ??= new OffscreenCanvas(q.w, q.h);
+    renderer ??= new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     const scenes = Array.from({ length: 4 }, () => new THREE.Scene()),
       cam = new THREE.PerspectiveCamera(45, q.w / q.h, 1, 20000),
@@ -34,19 +41,27 @@ self.onmessage = async ({ data: q }) => {
     lighting.fillColor.value.setScalar(0);
     lighting.fillColor2.value.setScalar(0);
     for (const key of Object.keys(planetLighting)) planetLighting[key].value.copy(lighting[key].value);
-    let placed = 0;
+    let placed = 0,
+      reused = 0;
     const materials = [];
     await Promise.all(
       [...q.worlds, ...q.scenery].map(async (p, i) => {
         const [, , , , , file, scale, layer, excluded] = p;
         if (!file) return;
-        const inst = await loadModel(file, { alts: i < q.worlds.length ? [0, 1, 2] : false });
-        if (!inst) return;
-        const type = { num: () => scale, bool: () => excluded };
+        const world = i < q.worlds.length,
+          type = { num: () => scale, bool: () => excluded };
+        let inst = world && planets.get(p[0]);
+        if (inst) reused++;
+        else {
+          inst = await loadModel(file, { alts: world ? [0, 1, 2] : false });
+          if (!inst) return;
+          new GalacticModelFade(inst, type, layer === 1);
+          for (const [n, meshes] of (inst.alts || []).entries())
+            if (meshes) for (const m of meshes) m.visible = n === 0 && !m.userData.hiddenByDefault;
+          if (world) planets.set(p[0], inst);
+        }
         placeGalacticModel(inst.root, { pos: p.slice(2, 5), type });
-        new GalacticModelFade(inst, type, layer === 1);
-        for (const [n, meshes] of (inst.alts || []).entries())
-          if (meshes) for (const m of meshes) m.visible = n === 0 && !m.userData.hiddenByDefault;
+        attached.push(inst.root);
         scenes[layer].add(inst.root);
         if (inst.billboards.length) updateBillboards(inst, cam);
         inst.root.traverse(o => {
@@ -62,7 +77,7 @@ self.onmessage = async ({ data: q }) => {
       texture.generateMipmaps = false;
       texture.minFilter = texture.magFilter = THREE.NearestFilter;
       texture.needsUpdate = true;
-      const quad = new THREE.Mesh(
+      quad = new THREE.Mesh(
         new THREE.PlaneGeometry(2, 2),
         new THREE.RawShaderMaterial({
           uniforms: { plate: { value: texture } },
@@ -74,8 +89,8 @@ self.onmessage = async ({ data: q }) => {
         })
       );
       quad.frustumCulled = false;
-      scenes[1].add(quad);
     }
+    if (quad) scenes[1].add(quad);
     if (q.pass === 'backdrop') {
       await Promise.all(materials);
       await texturesReady();
@@ -84,7 +99,7 @@ self.onmessage = async ({ data: q }) => {
       self.postMessage({ bitmap }, [bitmap]);
       return;
     }
-    const batch = new RouteBatches(
+    batch = new RouteBatches(
       scenes[0],
       n => loadTexture(n, { repeat: false }),
       l =>
@@ -119,7 +134,7 @@ self.onmessage = async ({ data: q }) => {
         screen = new THREE.OrthographicCamera(0, q.w, q.h, 0, 0.1, 10);
       screen.position.z = 1;
       const scale = Math.min(q.w / 1024, q.h / 768) * q.overlay.scale,
-        styles = new Map();
+        styles = ringStyles;
       view.labels.forEach(([u, v], i) => {
         const color = q.colors[i];
         if (!styles.has(color))
@@ -143,12 +158,18 @@ self.onmessage = async ({ data: q }) => {
       renderer.render(hud, screen);
     }
     const bitmap = canvas.transferToImageBitmap();
-    self.postMessage({ bitmap, placed }, [bitmap]);
+    self.postMessage({ bitmap, placed, reused, routes: routes.length }, [bitmap]);
   } catch (e) {
     self.postMessage({ error: e.message });
   } finally {
-    q.backplate?.close();
-    renderer?.dispose();
-    renderer?.forceContextLoss();
+    for (const root of attached) root.removeFromParent();
+    quad?.removeFromParent();
+    batch?.clear();
+    // The quad texture retains its source for the life of this worker. Terminating the
+    // worker releases the renderer, model caches and bitmap together.
+    if (q.pass === 'backdrop') {
+      renderer?.dispose();
+      renderer?.forceContextLoss();
+    }
   }
 };

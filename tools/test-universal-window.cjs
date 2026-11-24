@@ -168,15 +168,22 @@ const assert = require('node:assert/strict'),
     const native = board.locator('.uc-canvas[data-scene="native"]');
     await native.waitFor();
     const firstPlate = await native.getAttribute('data-backdrop-renders');
+    assert(Number(await native.locator('.uc-context').getAttribute('data-inactive')) > 0, 'Missing inactive worlds');
+    assert(await native.locator('.uc-context-note').isVisible());
     await panel.locator('.uc-map-choice').nth(1).click();
     await native.waitFor();
+    // The first row may have been served entirely from the still cache before changing back to stock.
+    await panel.getByRole('button', { name: /Equal Footing/ }).click();
+    await native.waitFor();
+    assert(Number(await native.getAttribute('data-reused')) > 0, 'Shared planets should keep their native instances');
+    assert(Number(await native.getAttribute('data-routes')) > 0);
     assert(
       firstPlate && (await native.getAttribute('data-backdrop-renders')) === firstPlate,
       'Second stock map reuses the prerendered backdrop'
     );
     assert(
       await native.evaluate(e => {
-        const [a, b] = [...e.querySelectorAll('canvas')].map(c => c.getContext('2d').getImageData(0, 0, c.width, c.height).data);
+        const [a, b] = [...e.querySelectorAll('.uc-plane canvas')].map(c => c.getContext('2d').getImageData(0, 0, c.width, c.height).data);
         let lit = 0,
           match = 0;
         for (let i = 0; i < a.length; i += 64)

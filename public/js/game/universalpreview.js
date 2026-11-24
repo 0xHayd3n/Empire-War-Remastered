@@ -1,3 +1,5 @@
+import { contextWorlds } from './universalcontextworlds.js';
+import { planetPool } from './universalplanetpool.js';
 import { crest } from './universalcontrols.js';
 import { overviewView } from './universalviewcamera.js';
 
@@ -41,7 +43,7 @@ function save(cache, id, result) {
   }
 }
 export function strategicPreview(host) {
-  host.innerHTML = `<div class="uc-map" role="group" aria-label="Starting galaxy map" tabindex="0"><div class="uc-plane"><canvas class="uc-backplate"></canvas><canvas class="uc-planets"></canvas><div class="uc-worlds"></div></div></div><div class="uc-key" aria-label="Faction key"></div>`;
+  host.innerHTML = `<div class="uc-map" role="group" aria-label="Starting galaxy map" tabindex="0"><div class="uc-plane"><canvas class="uc-backplate"></canvas><canvas class="uc-planets"></canvas><div class="uc-worlds"></div></div><canvas class="uc-context" role="img" aria-label="Other charted worlds, outside this map"></canvas></div><span class="uc-context-note">Gray worlds · outside this map</span><div class="uc-key" aria-label="Faction key"></div>`;
   const map = host.querySelector('.uc-map'),
     plane = host.querySelector('.uc-plane'),
     sky = host.querySelector('.uc-backplate'),
@@ -51,7 +53,10 @@ export function strategicPreview(host) {
     labels = host.querySelector('.uc-worlds'),
     key = host.querySelector('.uc-key'),
     plates = new Map(),
-    shots = new Map();
+    shots = new Map(),
+    ghosts = contextWorlds(host.querySelector('.uc-context')),
+    pool = planetPool();
+  let contextKey, contextProjection;
   let chart,
     selection,
     timer,
@@ -69,6 +74,7 @@ export function strategicPreview(host) {
     x = Math.min(0, Math.max(map.clientWidth * (1 - zoom), x));
     y = Math.min(0, Math.max(map.clientHeight * (1 - zoom), y));
     map.toggleAttribute('data-zoomed', zoom > 1);
+    ghosts.move(map.clientWidth, map.clientHeight, x, y, zoom);
     plane.style.setProperty('--label-scale', 1 / zoom);
     plane.style.transform = `translate(${x}px,${y}px) scale(${zoom})`;
   }
@@ -92,12 +98,17 @@ export function strategicPreview(host) {
     }
   };
   map.onpointermove = e => {
+    if (!drag && !selection?.onlySky) {
+      const r = map.getBoundingClientRect();
+      ghosts.point(e.clientX - r.left, e.clientY - r.top);
+    }
     if (drag?.[2] === e.pointerId) {
       x = e.clientX - drag[0];
       y = e.clientY - drag[1];
       move();
     }
   };
+  map.onpointerleave = () => ghosts.point(-100, -100);
   map.onlostpointercapture = () => (drag = null);
   map.ondblclick = e => {
     if (!selection || selection.onlySky) return;
@@ -127,13 +138,18 @@ export function strategicPreview(host) {
   function clear() {
     stopScene();
     skyJob?.abort();
+    pool.close();
+    ghosts.clear();
     selection = skyJob = skyReady = skyKey = requestKey = null;
     labels.replaceChildren();
     key.replaceChildren();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     skyCtx.clearRect(0, 0, sky.width, sky.height);
+    host.querySelector('.uc-context-note').hidden = true;
     delete host.dataset.scene;
     delete host.dataset.models;
+    delete host.dataset.reused;
+    delete host.dataset.routes;
   }
   function layout() {
     move();
@@ -147,6 +163,8 @@ export function strategicPreview(host) {
       ref = chart.reference,
       plateId = [ref.id, ref.revision, w, h, W, H].join(':'),
       id = [p.id, p.revision, variant.map, plateId, onlySky].join(':');
+    const mount = [p.id, p.revision, plateId].join(':');
+    pool.retain(mount);
     if (requestKey === id) return;
     requestKey = id;
     stopScene();
@@ -158,6 +176,29 @@ export function strategicPreview(host) {
     y = h * (0.5 - zoom * sector.v);
     move();
     host.dataset.sectorZoom = String(zoom);
+    if (contextKey !== plateId) {
+      const projected = overviewView(
+        chart.catalog.map(e => e.planet),
+        ref.camera,
+        w,
+        h,
+        chart.frame
+      ).labels;
+      contextProjection = chart.catalog.map(({ id, planet }, i) => ({
+        id,
+        name: planet[1] || planet[0],
+        u: projected[i][0],
+        v: projected[i][1]
+      }));
+      contextKey = plateId;
+    }
+    ghosts.set(
+      contextProjection,
+      new Set(onlySky ? [] : m.worlds.map(([i]) => chart.world(p, i).id)),
+      onlySky ? [] : view.labels,
+      worlds.map(p => p[1] || p[0])
+    );
+    host.querySelector('.uc-context-note').hidden = onlySky;
     if (!onlySky)
       view.labels.forEach(([u, v], i) => {
         labels.children[i].style.left = u * 100 + '%';
@@ -209,6 +250,8 @@ export function strategicPreview(host) {
       ctx.drawImage(result.bitmap, 0, 0);
       host.dataset.scene = 'native';
       host.dataset.models = String(result.placed);
+      host.dataset.reused = String(result.reused);
+      host.dataset.routes = String(result.routes);
     };
     if (onlySky) {
       host.dataset.scene = 'backdrop';
@@ -227,7 +270,8 @@ export function strategicPreview(host) {
         const backplate = await ready;
         signal.throwIfAborted();
         if (chart.sky.length && !backplate) throw Error('Native backdrop unavailable');
-        const result = await renderPass(
+        const result = await pool.request(
+          mount,
           {
             ...base,
             pass: 'worlds',
@@ -253,7 +297,7 @@ export function strategicPreview(host) {
           host.dataset.scene = 'unavailable';
         }
       }
-    }, 120);
+    }, 32);
   }
   const observer = new ResizeObserver(layout);
   observer.observe(map);
@@ -261,6 +305,7 @@ export function strategicPreview(host) {
     clear,
     setLibrary(profiles) {
       chart = galaxyChart(profiles);
+      contextKey = null;
     },
     dispose() {
       clear();

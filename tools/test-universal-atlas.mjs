@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { planetPool } from '../public/js/game/universalplanetpool.js';
+import { inactiveWorlds } from '../public/js/game/universalcontextworlds.js';
 import { galaxyChart, sectorView } from '../public/js/game/universalgalaxychart.js';
 import { overviewView } from '../public/js/game/universalviewcamera.js';
 import { mapFamilies, mapStart, planetCount } from '../public/js/game/universalmaplist.js';
@@ -263,6 +265,62 @@ assert.equal(chart.reference, ref);
 assert.deepEqual(chart.sky, [ref.planets[3]]);
 for (let i = 0; i < 3; i++) assert.deepEqual(chart.world(ref, i).placed.slice(2, 5), chart.world(moved, i).placed.slice(2, 5));
 assert.deepEqual(chart.world(moved, 3).placed.slice(2, 4), [-20, 20]);
+assert.equal(chart.catalog.length, 4, 'Shared worlds have one inactive identity, not one per profile');
+assert.deepEqual(
+  inactiveWorlds(
+    [
+      { id: 'A', name: 'A' },
+      { id: 'A_WEB', name: 'A' },
+      { id: 'B', name: 'B' },
+      { id: 'B_BIG', name: 'B' }
+    ],
+    new Set(['A']),
+    ['A']
+  ),
+  [{ id: 'B', name: 'B' }]
+);
+// Two maps with the same planet type but different authored placements and topology.
+const shifted = structuredClone(ref);
+shifted.planets.push([...shifted.planets[0]]);
+shifted.planets.at(-1)[2] = 65;
+shifted.maps.push({
+  worlds: [
+    [4, 'Blue'],
+    [1, 'Gray']
+  ],
+  routes: [[1, 0, 3]],
+  scenery: [3]
+});
+const alternate = galaxyChart([shifted]);
+assert.equal(alternate.catalog.length, 3);
+assert.equal(alternate.world(shifted, 4).id, alternate.world(shifted, 0).id);
+assert.deepEqual(alternate.world(shifted, 4).placed.slice(2, 5), [65, 0, 10]);
+assert.equal(alternate.world(shifted, 0).placed[2], 0);
+assert.deepEqual(shifted.maps[1].routes, [[1, 0, 3]]);
+const aliases = mkChart(
+  '1770851727',
+  ['X', 'X_WW', 'X-II', 'X_II'],
+  [
+    [10, 20],
+    [40, 30],
+    [0, 30],
+    [100, 10]
+  ]
+);
+assert.equal(galaxyChart([aliases]).catalog.length, 4, 'Do not collapse distinct IDs inside one pack');
+const disjoint = mkChart(
+  'other',
+  ['Island', 'Edge'],
+  [
+    [0, 0],
+    [1234, -4321]
+  ]
+);
+assert.deepEqual(
+  galaxyChart([ref, disjoint]).world(disjoint, 1).placed.slice(2, 4),
+  [1234, -4321],
+  'A remote authored world is not a setup marker'
+);
 assert.equal(JSON.stringify([ref, moved]), prior);
 const all = overviewView(chart.frame, ref.camera, 960, 700, chart.frame),
   sector = overviewView([chart.world(moved, 3).placed], ref.camera, 960, 700, chart.frame);
@@ -273,6 +331,69 @@ const ff = { members: [{}], p: { maps: [{ worlds: [1, 2] }, { worlds: [1, 2, 3] 
 assert.equal(planetCount(ff, variations), '2–3 planets');
 assert.equal(planetCount(ff, variations, { map: 0 }), '2 planets');
 assert.throws(() => assertPrivateLibrary(process.cwd(), { items: new Map() }), /private library/);
+// A -> B -> C during upload must never paint A, waste an upload on B, or lose C.
+{
+  const jobs = [],
+    workers = [],
+    original = globalThis.Worker;
+  globalThis.Worker = class {
+    constructor() {
+      workers.push(this);
+    }
+    postMessage(q) {
+      jobs.push(q);
+    }
+    terminate() {
+      this.closed = true;
+    }
+  };
+  const pool = planetPool(),
+    request = (id, signal, ns = 'P@rev') => pool.request(ns, { worlds: [[id]], backplate: 'sky' }, signal);
+  try {
+    const a = new AbortController(),
+      b = new AbortController(),
+      c = new AbortController();
+    const discarded = assert.rejects(request('a', a.signal), { name: 'AbortError' });
+    a.abort();
+    const skipped = assert.rejects(request('b', b.signal), { name: 'AbortError' });
+    b.abort();
+    const latest = request('c', c.signal);
+    let closed = false;
+    workers[0].onmessage({
+      data: {
+        bitmap: {
+          close() {
+            closed = true;
+          }
+        }
+      }
+    });
+    assert(closed);
+    assert.deepEqual(
+      jobs.map(q => [q.worlds[0][0], q.backplate]),
+      [
+        ['a', 'sky'],
+        ['c', null]
+      ]
+    );
+    workers[0].onmessage({ data: { placed: 1 } });
+    assert.deepEqual(await latest, { placed: 1 });
+    await Promise.all([discarded, skipped]);
+    const interrupted = assert.rejects(request('d', c.signal), { name: 'AbortError' });
+    pool.retain('P@new');
+    await interrupted;
+    assert(workers[0].closed);
+    const fresh = request('a', c.signal, 'P@new');
+    assert.equal(workers.length, 2);
+    assert.equal(jobs.at(-1).backplate, 'sky');
+    workers[1].onmessage({ data: { placed: 1 } });
+    await fresh;
+  } finally {
+    pool.close();
+    if (original) globalThis.Worker = original;
+    else delete globalThis.Worker;
+  }
+}
 console.log(
   'PASS: exact atlas targets, fixed starts, donor allowlist, literal-only selector tables, faction restriction, regime variants and private cache guard.'
 );

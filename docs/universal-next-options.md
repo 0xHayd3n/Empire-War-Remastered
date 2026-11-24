@@ -1,6 +1,6 @@
 # Next Galactic Conquest setup options
 
-Follow-up to [the first setup audit](universal-setup-candidates.md), after Fall’s layouts and production payment shipped (`acb1b49`). This note records the original proposals and their source evidence. Workshop paths below are relative to that item’s `Data/`. The initial audit was source and simulation only. The subsequent implementation and player-facing limits for Thrawn openings, transport losses and stock Equal Footing hero rescue are documented in [the library guide](universal-library.md#start-a-campaign-and-choose-its-path); flagship repairs and diplomacy remain proposals.
+Follow-up to [the first setup audit](universal-setup-candidates.md), after Fall’s layouts and production payment shipped (`acb1b49`). This note records the original proposals and their source evidence. Workshop paths below are relative to that item’s `Data/`. The initial audit was source and simulation only. The subsequent implementation and player-facing limits for Thrawn openings, transport losses and stock Equal Footing hero rescue are documented in [the library guide](universal-library.md#start-a-campaign-and-choose-its-path); the stock envoy mission and exact New Republic Canon Units order have since shipped as well. Persistent flagship damage was tested and not enabled; see [the vessel identity check](universal-vessel-identity.md).
 
 ## Bring forward: Thrawn’s custom campaign opening
 

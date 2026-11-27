@@ -25,6 +25,7 @@ const assert = require('node:assert/strict'),
       page.setDefaultTimeout(90000);
       await page.goto(`http://127.0.0.1:${port}`);
       const f = page.frameLocator('#game');
+      await f.locator('[data-id="TITLE_PLAY"]').click();
       await f.locator('[data-id="IDC_MAIN_MENU_SINGLE_PLAYER_GAMES"]').click();
       await f.locator('[data-id="IDC_CUSTOM_CAMPAIGN_BUTTON"]').click();
       const board = f.locator('.uc-atlas'),

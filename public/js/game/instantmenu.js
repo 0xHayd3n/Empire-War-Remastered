@@ -17,6 +17,9 @@ import {
 } from './instantbattle.js';
 import { SPECTATOR_TEAM } from './lobby.js';
 import { paintCrest } from './spectator.js';
+import { presetKey, readPresets, readCards, planCard, checkFleet } from './fleetpresets.js';
+import { armoryStyle } from './armorystyle.js';
+import { stagingInvite } from './staginginvite.js';
 
 const KEY = 'swr-instant-setup';
 const AI_KINDS = [
@@ -60,6 +63,13 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
     myId = () => (net ? net.id : null);
   const fLabel = f => db.t(db.faction(f)?.str('Text_ID')) || f;
   const saved = load() || {};
+  const key = mp ? null : await presetKey();
+  let libraryWarning = '';
+  const warn = message => {
+    libraryWarning = message;
+  };
+  const blueprints = key ? readPresets(key, warn) : [],
+    cards = key ? readCards(key, warn) : [];
   const st = {
     mapFile: maps.includes(saved.mapFile) || isDynamic(saved.mapFile) ? saved.mapFile : maps.find(m => /KUAT/i.test(m)) || maps[0],
     fog: typeof saved.fog === 'boolean' ? saved.fog : false,
@@ -286,6 +296,8 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
   };
   budgetBox.append(budgetIn, applyAll);
   head.append(titleBox, budgetBox);
+  if (net && host) st.invitable = !mp.password;
+  const invite = net && stagingInvite(head, net, mp.kind, () => st.invitable && players.some(p => p.kind === 'open'), text => say('', text));
 
   const body = el('div', 'ib-body');
   const fleetsCol = el('section', 'ib-col ib-fleets');
@@ -383,7 +395,15 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
   meter.append(meterFill, meterText);
   const chips = el('div', 'ib-chips');
   const catalog = el('div', 'ib-list ib-catalog');
-  armyCol.append(armyHead, meter, chips, catalog);
+  const orders = el('div', 'ib-saved-orders'),
+    orderFeedback = el('div', 'ib-preset-message');
+  orderFeedback.setAttribute('role', 'status');
+  armyCol.append(armyHead, meter);
+  if (blueprints.length || cards.length || libraryWarning) {
+    armoryStyle();
+    armyCol.append(orders, orderFeedback);
+  }
+  armyCol.append(chips, catalog);
 
   const mapHead = el('div', 'ib-colhead');
   mapHead.append(el('h2', '', 'Battlefield'));
@@ -444,14 +464,14 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
         ? 'You'
         : p.name || 'Player'
       : p.kind === 'you'
-      ? 'Your fleet'
-      : p.kind === 'human'
-        ? mine(p)
-          ? 'Your fleet'
-          : `${p.name}'s fleet`
-        : p.kind === 'open'
-          ? 'Open slot'
-          : `${AI_KINDS.find(k => k[0] === p.kind)[1]} ${i}`;
+        ? 'Your fleet'
+        : p.kind === 'human'
+          ? mine(p)
+            ? 'Your fleet'
+            : `${p.name}'s fleet`
+          : p.kind === 'open'
+            ? 'Open slot'
+            : `${AI_KINDS.find(k => k[0] === p.kind)[1]} ${i}`;
 
   const fleetRows = [];
   const typing = e => document.activeElement === e;
@@ -461,7 +481,11 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
       edit = canEdit(p);
     const row = el(
       'div',
-      'ib-fleet' + (i === view.sel ? ' sel' : '') + (p.kind === 'open' ? ' open' : '') + (mine(p) ? ' mine' : '') + (watching(p) ? ' watch' : '')
+      'ib-fleet' +
+        (i === view.sel ? ' sel' : '') +
+        (p.kind === 'open' ? ' open' : '') +
+        (mine(p) ? ' mine' : '') +
+        (watching(p) ? ' watch' : '')
     );
     row.style.setProperty('--pc', colorOf(p, i));
     row.onclick = () => {
@@ -658,6 +682,8 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
     armyKey = key;
     armyCol.style.setProperty('--pc', colorOf(p, i));
     armyCol.classList.toggle('watch', watching(p));
+    orders.replaceChildren();
+    orderFeedback.textContent = libraryWarning;
     if (watching(p)) {
       armyTitle.textContent = `${nameOf(p, i)} — Spectator`;
       rollOne.disabled = clearOne.disabled = true;
@@ -682,6 +708,61 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
     meterFill.style.width = Math.min(100, (100 * spent) / Math.max(1, p.budget)) + '%';
     meterText.textContent = `${money(spent)} of ${money(p.budget)} · ${money(p.budget - spent)} left`;
     chips.replaceChildren();
+    if (!mp && edit) {
+      // Blueprint = replace. Card = append to the current fleet. Validate the
+      // entire proposed result both on selection and on commit; no partial add.
+      const drawOrder = (list, isCard) => {
+        if (!list.length) return;
+        const heading = isCard ? 'Flight card' : 'Fleet preset',
+          row = el('div', 'ib-tools'),
+          label = el('label', 'ib-preset', heading + ' ');
+        const choose = el('select', 'ib-select');
+        choose.setAttribute('aria-label', heading);
+        choose.add(new Option(isCard ? 'Choose a card…' : 'Choose a preset…', ''));
+        const by = new Map(roster.map(r => [r.name, r.label]));
+        for (const b of list) choose.add(new Option(isCard ? by.get(b.lead) || b.lead : b.name, isCard ? b.lead : b.id));
+        const chosen = () => list.find(b => (isCard ? b.lead : b.id) === choose.value);
+        const plan = b => (isCard ? planCard(b, p.faction, roster, p.army, p.budget) : checkFleet(b, p.faction, roster, p.budget));
+        const apply = button(isCard ? 'Add flight card' : 'Apply preset', () => {
+          const b = chosen(),
+            result = plan(b);
+          if (result.error) {
+            orderFeedback.textContent = result.error;
+            return;
+          }
+          p.army = isCard ? [...p.army, ...result.units] : [...b.units];
+          changed(p);
+          orderFeedback.textContent = isCard
+            ? `Added ${result.units.length} units from the flight card.`
+            : `Applied ${b.name} to ${nameOf(p, i)}.`;
+          orders.querySelector(`[aria-label="${heading}"]`)?.focus({ preventScroll: true });
+        });
+        apply.disabled = true;
+        choose.onchange = () => {
+          const b = chosen(),
+            result = b && plan(b);
+          apply.disabled = !b || !!result.error;
+          orderFeedback.textContent =
+            result?.error ||
+            (!b
+              ? ''
+              : isCard
+                ? `Append ${b.copies} × ${by.get(b.lead)}${b.wing ? ` + ${b.wing} × ${by.get(b.support)}` : ''} · fleet total ${money(result.cost)}`
+                : `Replace this fleet with ${b.units.length} units · ${money(result.cost)}`);
+        };
+        label.append(choose);
+        row.append(label, apply);
+        orders.append(row);
+      };
+      drawOrder(
+        blueprints.filter(b => b.faction === p.faction),
+        false
+      );
+      drawOrder(
+        cards.filter(c => c.faction === p.faction),
+        true
+      );
+    }
     for (const f of FILTERS) {
       const has = f.key === 'all' || roster.some(r => (f.key === 'hero' ? r.hero : !r.hero && f.of?.(r.cls)));
       if (!has) continue;
@@ -868,6 +949,7 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
     }
   };
   const draw = () => {
+    invite?.update();
     error.textContent = '';
     drawOpts();
     drawHost();
@@ -894,6 +976,7 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
   function close(started, why = null) {
     if (ended) return;
     ended = true;
+    invite?.close();
     removeEventListener('keydown', onKey, true);
     clearInterval(beat);
     for (const off of offs) off();

@@ -1,9 +1,9 @@
 import http from 'node:http';
 import fs from 'node:fs';
-import { createHash } from 'node:crypto';
-import { artRoot } from './workshop-battle-art.mjs';
+import { campaignOrbit } from './workshop-battle-art.mjs';
 import { execFile } from 'node:child_process';
 import path from 'node:path';
+import { titleWorkshop } from './title-workshop.mjs';
 import { atlasStore } from './universal-atlas.mjs';
 import { readLibrary } from './workshop-library.mjs';
 import { libraryHome, listPacks, loadPack, primaries } from './universal-library.mjs';
@@ -13,24 +13,12 @@ const hostFiles = new Map(
   [
     ['/', 'universal-host.html', 'text/html; charset=utf-8'],
     ['/universalhost.js', 'js/universalhost.js', 'text/javascript'],
+    ['/socialidentity.js', 'js/socialidentity.js', 'text/javascript'],
     ['/briefing.css', 'briefing.css', 'text/css'],
     ['/art/briefings.svg', 'art/briefings.svg', 'image/svg+xml'],
     ['/fonts/aurebesh-af/AurebeshAF-Canon.otf', 'fonts/aurebesh-af/AurebeshAF-Canon.otf', 'font/otf']
   ].map(([route, file, type]) => [route, { url: new URL('../public/' + file, import.meta.url), type }])
 );
-// Decorative Coruscant orbit, not a claim about the selected campaign's map.
-// Serve just this approved local picture, never arbitrary collection files.
-const orbitSHA = 'e65d0ea67ba6dcbcd386bd7883d7e8bddcd77b872fa802d5224331d8a5905f73';
-async function campaignOrbit() {
-  try {
-    const root = artRoot();
-    if (!root) return null;
-    const bytes = await fs.promises.readFile(path.join(root, orbitSHA + '.jpg'));
-    return createHash('sha256').update(bytes).digest('hex') === orbitSHA ? bytes : null;
-  } catch {
-    return null;
-  }
-}
 function openWindowsURL(url) {
   if (process.platform === 'win32')
     execFile(
@@ -58,6 +46,7 @@ export async function serveUniversal(
     ...listPacks(home).map(e => ({ ...e, ready: e.ready && !library.ambiguous?.has(e.id) }))
   ];
   const atlas = atlasStore({ home, library, eras });
+  const workshop = titleWorkshop({ home, library, eras, startGame });
   // A mount is immutable within this run. Opening another era never remounts or disconnects an existing game/tab.
   async function mount(id) {
     if (!mounts.has(id)) {
@@ -72,6 +61,7 @@ export async function serveUniversal(
           pack,
           eras,
           atlas,
+          workshop,
           profileId: id
         })
       );
@@ -146,6 +136,7 @@ export async function serveUniversal(
         server.closeAllConnections();
       });
       for (const s of mounts.values()) await (await s).close();
+      await workshop.close();
       atlas.closeArt();
     }
   };

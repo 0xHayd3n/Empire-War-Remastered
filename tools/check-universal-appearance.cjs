@@ -42,7 +42,7 @@ const { chromium } = require('playwright-core'),
       page.on('pageerror', e => errors.push(e.message));
       await page.goto(`http://127.0.0.1:${port}`);
       const fl = page.frameLocator('#game');
-      await fl.locator('[data-id="IDC_MAIN_MENU_SINGLE_PLAYER_GAMES"]').waitFor({ timeout: 85000 });
+      await fl.locator('[data-id="TITLE_PLAY"]').click({ timeout: 85000 });
       const r = page.frames().find(x => x.parentFrame() === page.mainFrame());
       await fl.locator('[data-id="IDC_MAIN_MENU_SINGLE_PLAYER_GAMES"]').click();
       await fl.locator('[data-id="IDC_CUSTOM_CAMPAIGN_BUTTON"]').click();

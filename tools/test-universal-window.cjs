@@ -29,6 +29,7 @@ const assert = require('node:assert/strict'),
     });
     await page.goto(url);
     const f = page.frameLocator('#game');
+    await f.locator('[data-id="TITLE_PLAY"]').click();
     await f.locator('[data-id="IDC_MAIN_MENU_SINGLE_PLAYER_GAMES"]').click();
     if (process.env.SWR_TEST_ALL_ERAS) {
       const eras = f.locator('[data-universal-screen="eras"]');

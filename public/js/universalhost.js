@@ -1,4 +1,5 @@
 // Browsing uses only the setup catalog. Mount a runtime on confirmed Start or on entry to another mode.
+import { deviceKey } from './socialidentity.js';
 const frame = document.querySelector('#game'),
   veil = document.querySelector('aside'),
   status = veil.querySelector('p'),
@@ -6,6 +7,9 @@ const frame = document.querySelector('#game'),
 const plate = document.querySelector('.battle-plate'),
   stage = plate.querySelector('[role="status"]'),
   expose = plate.querySelector('#expose');
+let currentProfile = 'stock';
+let recents = {};
+try { recents = JSON.parse(localStorage.getItem('universal-conquest-checkpoints') || '{}') || {}; } catch {}
 let current = '',
   busy = false,
   presentation = '',
@@ -64,6 +68,7 @@ async function enter(id, mode, ticket) {
       }
     } else if (mode !== 'title') u.searchParams.set('universal-mode', mode);
     current = u.origin;
+    currentProfile = id;
     veil.hidden = true;
     frame.src = u.href;
     if (!presentation) frame.focus();
@@ -82,13 +87,28 @@ async function enter(id, mode, ticket) {
 addEventListener('message', e => {
   const m = e.data;
   if (!current || e.source !== frame.contentWindow || e.origin !== current) return;
+  if (m?.kind === 'universal-social-device' && /^[a-f0-9-]{36}$/.test(m.request)) {
+    try {
+      const token=deviceKey(m.relay,m.create===true);
+      frame.contentWindow.postMessage({kind:'universal-social-result',request:m.request,token},current);
+    } catch { frame.contentWindow.postMessage({kind:'universal-social-result',request:m.request,error:'Device storage unavailable.'},current); }
+    return;
+  }
+  if (m?.kind === 'universal-recent' && typeof m.request === 'string') {
+    if (m.row && Number.isFinite(Date.parse(m.row.saved))) recents[currentProfile] = { profile:currentProfile, name:String(m.row.name || '').slice(0,160), saved:m.row.saved };
+    else delete recents[currentProfile];
+    try { localStorage.setItem('universal-conquest-checkpoints', JSON.stringify(recents)); } catch {}
+    const row = Object.values(recents).sort((a,b)=>Date.parse(b.saved)-Date.parse(a.saved))[0] || null;
+    frame.contentWindow.postMessage({kind:'universal-recent-result',request:m.request,row},current);
+    return;
+  }
   if (m?.kind === 'universal-plate') {
     transition(m);
     return;
   }
   if (typeof m?.id !== 'string' || !/^(stock|\d+)$/.test(m.id)) return;
   if (m.kind === 'universal-start' && typeof m.ticket === 'string' && /^[a-f0-9-]{36}$/.test(m.ticket)) enter(m.id, 'conquest', m.ticket);
-  else if (m.kind === 'universal-select' && ['title', 'modes', 'conquest', 'story', 'skirmish', 'instant', 'load'].includes(m.mode))
+  else if (m.kind === 'universal-select' && ['title', 'modes', 'customize', 'campaigns', 'profile-play', 'conquest', 'story', 'skirmish', 'instant', 'continue', 'load', 'load-conquest', 'load-story', 'load-skirmish', 'load-instant', 'load-tutorial'].includes(m.mode))
     enter(m.id, m.mode);
 });
 enter('stock', 'title');

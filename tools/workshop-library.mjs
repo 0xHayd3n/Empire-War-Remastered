@@ -42,7 +42,9 @@ function item(folder, key) {
   const splash = images.find(n => /^splash\.(png|jpe?g|webp)$/i.test(n));
   const battle = path.join('Data', 'Art', 'Textures', 'Loadscreens', 'AAA_New_Space_1.png');
   const scene = splash || (fs.existsSync(path.join(folder, battle)) ? battle : undefined);
-  return { id: key, folder, name: name?.trim() || `Workshop ${key}`, art: art && path.join(folder, art), scene };
+  const summary = [info?.description, info?.steamdata?.description].find(s=>typeof s==='string' && s.trim())?.trim().slice(0,800);
+  const version = typeof info?.version === 'string' || typeof info?.version === 'number' ? String(info.version).slice(0,80) : undefined;
+  return { id: key, folder, summary, version, name: name?.trim() || `Workshop ${key}`, art: art && path.join(folder, art), scene };
 }
 
 export function readLibrary(libraries = steamLibraries(), profileDir = process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'ModCollectionLauncher/profiles'), override = process.env.SWR_GAME) {
@@ -81,5 +83,5 @@ export function readLibrary(libraries = steamLibraries(), profileDir = process.e
   }
   for (const m of items.values()) if (!grouped.has(m.id)) card(m.name, m.id, [m.id], [], false);
   cards.sort((a,b) => Number(b.saved) - Number(a.saved) || a.name.localeCompare(b.name));
-  return { game, items, cards, skipped, ambiguous };
+  return { game, items, cards, skipped, ambiguous, roots: libraries };
 }

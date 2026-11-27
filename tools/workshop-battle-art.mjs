@@ -6,6 +6,17 @@ import { mediaFile } from './workshop-media.mjs';
 
 export const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 export const artRoot = () => process.env.SWR_BATTLE_ART || (process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'EaWBrowserWorkshop', 'battle-art'));
+// Decorative Coruscant orbit for title and campaign plates, never a claim about a tactical map.
+const orbitSHA = 'e65d0ea67ba6dcbcd386bd7883d7e8bddcd77b872fa802d5224331d8a5905f73';
+export async function campaignOrbit() {
+  try {
+    const root = artRoot();
+    const file = root && mediaFile(root, `${orbitSHA}.jpg`, 12 * 1024 * 1024);
+    if (!file) return null;
+    const bytes = await fs.promises.readFile(file.file);
+    return digest(bytes) === orbitSHA ? bytes : null;
+  } catch { return null; }
+}
 const hash = /^[0-9a-f]{64}$/;
 export function mapKey(value) {
   const key = String(value || '').replaceAll('\\', '/').toUpperCase();

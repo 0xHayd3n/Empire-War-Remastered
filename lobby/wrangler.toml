@@ -17,6 +17,10 @@ class_name = "Lobby"
 name = "HALL"
 class_name = "Hall"
 
+[[durable_objects.bindings]]
+name = "SOCIAL"
+class_name = "Social"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Registry", "Lobby"]
@@ -24,6 +28,10 @@ new_sqlite_classes = ["Registry", "Lobby"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["Hall"]
+
+[[migrations]]
+tag = "v3-social"
+new_sqlite_classes = ["Social"]
 
 [env.production]
 name = "empire-at-war-browser-edition-lobby"
@@ -40,6 +48,10 @@ class_name = "Registry"
 [[env.production.durable_objects.bindings]]
 name = "LOBBY"
 class_name = "Lobby"
+
+[[env.production.durable_objects.bindings]]
+name = "SOCIAL"
+class_name = "Social"
 
 [[env.production.durable_objects.bindings]]
 name = "HALL"

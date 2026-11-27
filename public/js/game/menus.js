@@ -121,8 +121,10 @@ export class Menus {
     const dlg = this.stack.pop();
     if (dlg) dlg.close();
     const below = this.stack[this.stack.length - 1];
-    if (below) below.veil.style.display = '';
-    else this.releasePause();
+    if (below) {
+      below.veil.style.display = '';
+      below.focus?.();
+    } else this.releasePause();
   }
 
   closeAll() {
@@ -503,7 +505,7 @@ export class Menus {
     return b;
   }
 
-  async saveRows() {
+  async saveRows(family = null) {
     const when = iso => {
       try {
         return new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
@@ -513,7 +515,8 @@ export class Menus {
     };
     const net = this.game.setup.net,
       type = this.game.setup.type;
-    return (await listSaves())
+    const rows = family && !net ? await (await import('./modesaves.js')).modeSaves(family) : await listSaves();
+    return rows
       .filter(s => (net ? s.mp && (!type || s.mp.type === type) : !s.mp))
       .map(s => ({ key: s.id, label: s.name, note: `${(s.summary.factions || []).join(' vs ')}   ${when(s.saved)}`, save: s }));
   }
@@ -583,21 +586,21 @@ export class Menus {
     name.select();
   }
 
-  async load() {
+  async loadChecked(id, load = loadSaved) {
+    const saved = await getSave(id).catch(() => null);
+    if (!saved) return this.notify('That save could not be read.');
+    const differences = contentDifferences(saved.content, await loadContent());
+    if (!differences.length) return load(id);
+    const shown = differences.slice(0, 3).join(', ') + (differences.length > 3 ? ` and ${differences.length - 3} more` : '');
+    return this.choose(`This save was made with a different setup: ${shown}. Load it anyway?`, () => load(id));
+  }
+
+  async load(family = null) {
     const dlg = await this.push('IDD_LOAD_GAME_DIALOG');
     if (!dlg) return;
     dlg.show('IDC_CHECK_RECORDINGS', false);
     let list;
-    const go = async row => {
-      const saved = await getSave(row.key).catch(() => null);
-      const differences = contentDifferences(saved?.content, await loadContent());
-      if (!differences.length) {
-        loadSaved(row.key);
-        return;
-      }
-      const shown = differences.slice(0, 3).join(', ') + (differences.length > 3 ? ` and ${differences.length - 3} more` : '');
-      this.choose(`This save was made with a different setup: ${shown}. Load it anyway?`, () => loadSaved(row.key));
-    };
+    const go = row => this.loadChecked(row.key);
     const pick = () => {
       const on = !!(list && list.selected());
       dlg.enable('IDC_LOAD_GAME_BUTTON', on);
@@ -605,7 +608,7 @@ export class Menus {
       down.classList.toggle('off', !on);
     };
     const refresh = async () => {
-      list = dlg.list('IDC_SAVE_GAME_LIST', await this.saveRows(), pick, go);
+      list = dlg.list('IDC_SAVE_GAME_LIST', await this.saveRows(family), pick, go);
       pick();
     };
     dlg.on('IDC_LOAD_CANCEL_BUTTON', () => this.pop());

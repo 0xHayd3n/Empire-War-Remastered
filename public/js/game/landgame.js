@@ -4307,6 +4307,7 @@ export class LandGame {
       reportLinkedVictory(this, faction);
     }
     this.over = !this.invasionBook;
+    this.setup.net?.rankedFinish?.(this.world.winner);
     this.reportView?.finished(this.tacticalWinner);
     const d = document.createElement('div');
     d.id = 'landend';

@@ -502,6 +502,7 @@ export class GalacticGame {
     }
     await this.scriptUI?.ready();
 
+    this.setup.menuFamily ||= exactPath ? 'conquest' : g.campaign.bool('Tutorial') ? 'tutorial' : /^Full_Story_Campaign_(Rebel|Empire|Underworld)$/i.test(g.campaign.name) ? 'story' : 'conquest';
     finishSplash();
     if (this.setup.restore && !this.setup.result && !this.setup.net) this.setUserPaused?.(true);
     this.bindInput();
@@ -523,6 +524,11 @@ export class GalacticGame {
         }
       });
     } else requestAnimationFrame(this.frame);
+    if (!this.setup.restore && !this.setup.result && !this.setup.net && this.setup.menuFamily === 'conquest' && !this.noSave) {
+      // A new conquest can be continued before its first battle. Never overwrite a manual slot.
+      try { await putSave(snapshot(this, this.saveName()), 'conquest-opening'); }
+      catch (e) { console.warn('Opening campaign checkpoint unavailable', e); }
+    }
   }
 
   get noSave() {
@@ -2946,6 +2952,7 @@ export class GalacticGame {
           : {}),
         campaignName: g.campaign.name,
         galaxy: snap,
+        menuFamily: this.setup.menuFamily,
         storyPlots,
         autoResolve: this.autoResolveFor(b),
         galacticPerceptions: this.galacticPerceptions(b),
@@ -3201,6 +3208,7 @@ export class GalacticGame {
         planetType: pl.type.name,
         campaignName: g.campaign.name,
         galaxy: snap,
+        menuFamily: this.setup.menuFamily,
         storyPlots,
         galacticPerceptions: this.galacticPerceptions(b),
         treasury: this.tacticalTreasury(b),

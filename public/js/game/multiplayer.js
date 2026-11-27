@@ -1,6 +1,7 @@
 import { db, factionColor, autoColors } from '../gamedata.js';
 import { PALETTE, ROWS, MAX_SLOTS, slotWindow, rowsOf } from './slotrows.js';
 import { openDialog } from './dialogs.js';
+import { playlistPool, ballotSlate } from './mappool.js';
 import { mapHeader, mapTitle, controlMap, loadMapPreview } from '../ted.js';
 import { NetSession, Hall, listGames, newGameId } from '../net.js';
 import { advancedOptions, SPECTATOR_TEAM } from './lobby.js';
@@ -10,6 +11,12 @@ import { startMarks } from './mapstarts.js';
 import { loadCampaignData } from './galaxy.js';
 import { listSaves, getSave, deleteSave, importSaveFile, validate, packSave, unpackSave } from './savegame.js';
 import { inApp } from '../platform.js';
+import { loadContent } from '../content.js';
+import { variantOf, issuedFleet } from './operationvariants.js';
+import { instantRoster } from './instantbattle.js';
+import { stagingInvite } from './staginginvite.js';
+import { playlistKey, searchRelay } from './playlistrelay.js';
+import { lobbyRecord, rankedFinish } from './matchrank.js';
 
 const T = (id, fallback) => {
   const s = db.text.get(id);
@@ -372,6 +379,87 @@ const KINDS = {
     stagingOff: ['IDC_INTERNET_BUDDIES_BUTTON']
   }
 };
+
+// Only files already indexed by the native multiplayer catalog can enter a rotation.
+export function mountedRotation(variant, maps, landMaps, customMaps) {
+  return playlistPool(variant, { maps: [...maps, ...customMaps.space], landMaps: [...landMaps, ...customMaps.land], mapHeader });
+}
+
+export async function openPlaylist(args) {
+  const { variant, ladder = 'social', relay, telemetry, maps, landMaps, version, factions, signal, status } = args;
+  if (!['ranked', 'social'].includes(ladder)) throw Error('Choose a matchmaking playlist.');
+  const rules = variantOf(variant);
+  if (!rules) throw Error('Choose an available ruleset.');
+  const type = rules.domain,
+    pool = mountedRotation(variant, maps, landMaps, args.customMaps);
+  if (!pool.length)
+    throw Error('This playset has no eligible ' + (rules.type === 'control' ? 'control-point' : type) + ' maps. Choose another ruleset.');
+  const sides = rules.type === 'instant' ? factions.filter(f => issuedFleet(instantRoster(f, false)).length) : factions;
+  if (!sides.length) throw Error('No playable task groups in this playset. Choose another ruleset.');
+  const data = dataFingerprint(),
+    name = args.name || storedName() || 'Commander';
+  const [content, campaigns, { runMapBallot }] = await Promise.all([loadContent(), multiplayerCampaigns(), import('./mapballot.js')]);
+  const pack = document.querySelector('meta[name="swr-pack-revision"]')?.content || '';
+  let build = version,
+    active = content;
+  if (version === 'dev') {
+    // Two unrelated local source trees both identify as dev. Never assume they can play lockstep.
+    try {
+      const res = await fetch((globalThis.SWR_BASE || '') + 'api/playlist-manifest', {
+        cache: 'no-store',
+        signal: AbortSignal.any([signal, AbortSignal.timeout(10000)])
+      });
+      const manifest = res.ok && (await res.json());
+      if (!/^[a-f0-9]{64}$/.test(manifest.build) || !Array.isArray(manifest.mods)) throw Error();
+      build = manifest.build;
+      active = { ...content, mods: [...manifest.mods, ...content.mods.filter(m => m.source === 'added')] };
+    } catch {
+      throw Error('Cannot verify this development build. Use the local game server or a stamped release.');
+    }
+  }
+  const key = await playlistKey({
+    ladder, type,
+    variant,
+    version: build,
+    data,
+    content: active,
+    pack,
+    maps: [maps, landMaps, args.customMaps.space, args.customMaps.land, pool],
+    factions
+  });
+  const record = ladder === 'ranked' ? await lobbyRecord(relay,variant) : null;
+  if (ladder === 'ranked' && !record) throw Error('Ranked record unavailable on this device. Use Social or restore access to device storage.');
+  signal.throwIfAborted();
+  status('Searching the relay for a compatible commander…');
+  const { net, peer } = await searchRelay({ variant, ladder, rating: record?.rating, relay, telemetry, version, key, name, signal, status });
+  try {
+    signal.throwIfAborted();
+    status('Paired. Contacting the other commander for the map vote…');
+    const matchMap = await runMapBallot({ net, peer, slate: ballotSlate(pool, net.gameId), signal, name, onUpdate: args.ballot });
+    signal.throwIfAborted();
+    if (
+      !(await openStaging({
+        ...args,
+        net,
+        host: net.host,
+        name,
+        campaigns,
+        data,
+        K: KINDS.internet,
+        kind: 'playlist',
+        ladder,
+        factions: sides,
+        options: { type: rules.type === 'instant' ? 'space' : rules.type, name: rules.name },
+        matchMap,
+        playlistPeer: peer
+      }))
+    )
+      throw Error('The staging room could not be opened. Retry the search.');
+  } catch (e) {
+    net.close();
+    throw e;
+  }
+}
 
 export async function openMultiplayer({
   maps,
@@ -919,7 +1007,7 @@ async function openStaging(args) {
   const again = state => {
     if (host) net.broadcast({ k: 'rehost' });
     quit();
-    openStaging({ ...args, resume: state }).then(ok => {
+    openStaging({ ...args, signal: undefined, resume: state }).then(ok => {
       if (!ok) {
         net.close();
         back();
@@ -966,9 +1054,13 @@ async function openStaging(args) {
     });
   if (host && (resume?.ib || (!resume && options?.type === 'instant'))) return instant(null, resume?.ib || null);
   const dlg = await openDialog(K.staging, { ...SCREEN, modal: false });
+  if (!dlg) return false;
+  if (args.signal?.aborted || net.closing || (!resume && args.playlistPeer != null && !net.links.has(args.playlistPeer))) {
+    dlg.close();
+    return false;
+  }
   if (host) password = options?.password || '';
   for (const id of K.stagingOff) dlg.enable(id, false);
-  if (!dlg) return false;
   const fLabel = f => T(db.faction(f).str('Text_ID'), f);
   const mapName = mapTitle;
   const factionsFor = [factions[0], factions.find(f => f !== factions[0]) || factions[0]];
@@ -1005,6 +1097,18 @@ async function openStaging(args) {
     autoResolve: C.num('MP_Default_Allow_Auto_Resolve', 2) === 0 ? 0 : 2,
     randomEvents: C.bool('MP_Default_Allow_Random_Events', false)
   };
+  const rules = kind === 'playlist' && variantOf(args.variant);
+  if (rules)
+    Object.assign(st, {
+      variant: rules.id,
+      mapFile: args.matchMap,
+      credits: rules.credits,
+      fog: rules.fog,
+      popCap: rules.popCap,
+      preBuilt: rules.preBuilt,
+      shooter: false
+    });
+  st.invitable = host && !password && !rules;
   const campaign = () => st.type === 'campaign';
   const SLOTS = rowsOf(dlg) || ROWS;
   let slots = Array.from({ length: SLOTS }, (_, i) => ({
@@ -1061,19 +1165,56 @@ async function openStaging(args) {
     });
     dlg.ctl(K.stagingChat)?.querySelector('.dlg-row:last-child')?.scrollIntoView({ block: 'nearest' });
   };
+  const invite = rules
+    ? null
+    : stagingInvite(
+        dlg.veil,
+        net,
+        kind,
+        () => st.invitable && slots.some(s => s.kind === 'open'),
+        text => addChat('', text)
+      );
+  if (invite) offs.push(invite.close);
+  if (rules) {
+    const card = document.createElement('aside');
+    card.className = 'staging-rules';
+    card.dataset.variant = rules.id;
+    const title = document.createElement('strong');
+    title.textContent = `${args.ladder === 'ranked' ? 'Ranked' : 'Social'} / ${rules.name}`;
+    const chosen = document.createElement('div');
+    chosen.className = 'staging-selection';
+    chosen.textContent = `Voted map: ${mapName(st.mapFile)}`;
+    card.append(title, chosen, document.createTextNode(rules.rule));
+    dlg.veil.append(card);
+  }
   const leave = why => {
     if (left) return;
     left = true;
     clearInterval(beat);
+    for (const off of offs) off();
     net.close();
     dlg.close();
     if (why) alert(why);
     back();
   };
 
+  if (kind === 'playlist') {
+    const onBack = e => {
+      if (!['Escape', 'Backspace'].includes(e.key) || (e.key === 'Backspace' && e.target.closest?.('input,textarea,[contenteditable=true]')) || e.defaultPrevented || document.querySelector('dialog[open]')) return;
+      const top = [...document.querySelectorAll('.dlg-veil')].filter(el => el.checkVisibility()).at(-1);
+      if (top === dlg.veil) {
+        e.preventDefault();
+        e.stopPropagation();
+        leave(null);
+      }
+    };
+    // Native staging chat consumes bubbling key events even when its input is empty.
+    document.addEventListener('keydown', onBack, true);
+    offs.push(() => document.removeEventListener('keydown', onBack, true));
+  }
   const humans = () => slots.filter(s => s.kind === 'human');
   const listing = () =>
-    kind !== 'lan' &&
+    kind === 'internet' &&
     net.setListing({
       name: st.name,
       host: name,
@@ -1123,6 +1264,10 @@ async function openStaging(args) {
     track('message', (from, m) => {
       const i = slots.findIndex(s => s.kind === 'human' && s.peer === from);
       if (m.k === 'hello') {
+        if (args.playlistPeer != null && from !== args.playlistPeer) {
+          net.send(from, { k: 'refuse', why: 'This flight is reserved for its matched commander.' });
+          return;
+        }
         if (m.version !== version || m.data !== data) {
           net.send(from, { k: 'refuse', why: "Your game version or game data differs from the host's." });
           setTimeout(() => net.kick(from), 300);
@@ -1155,7 +1300,7 @@ async function openStaging(args) {
       } else if (m.k === 'mine') {
         const s = slots[i];
         if (s.saved) return;
-        if (Number.isInteger(m.team) && ((m.team >= 0 && m.team < teamCount()) || (m.team === SPECTATOR_TEAM && !campaign())))
+        if (!rules && Number.isInteger(m.team) && ((m.team >= 0 && m.team < teamCount()) || (m.team === SPECTATOR_TEAM && !campaign())))
           s.team = m.team;
         if (typeof m.faction === 'string' && campaign() && menuEntry()) {
         } else if (typeof m.faction === 'string' && campaign() && sidesOf(st.mapFile).includes(m.faction)) s.faction = m.faction;
@@ -1186,17 +1331,22 @@ async function openStaging(args) {
       publish();
     });
   } else {
+    let knock;
     const offMessage = track('message', (from, m) => {
+      if (from !== 0) return;
+      if (rules && m.k === 'state' && (m.st?.variant !== rules.id || m.st?.mapFile !== args.matchMap)) return leave('The host changed the voted map or ruleset.');
       if (m.k === 'state' && m.ib) {
         if (left) return;
         left = true;
         offMessage();
         offClosed();
+        invite?.close();
         dlg.close();
         instant(m.ib);
         return;
       }
       if (m.k === 'state') {
+        if (knock && m.slots.some(s => s.peer === net.id)) clearInterval(knock);
         st = m.st;
         slots = m.slots;
         render();
@@ -1210,6 +1360,7 @@ async function openStaging(args) {
         });
       } else if (m.k === 'kicked') leave('The host removed you from the game.');
       else if (m.k === 'start') {
+        if (rules && (m.setup?.variant !== rules.id || m.setup?.ladder !== args.ladder || m.setup?.mapFile !== args.matchMap)) return leave('The host sent a different map or ruleset.');
         if (!m.save) begin(m.setup);
         else {
           note.textContent = 'Opening the saved game...';
@@ -1220,7 +1371,14 @@ async function openStaging(args) {
         }
       }
     });
-    net.send(0, { k: 'hello', name, version, data, ...(password ? { password } : {}) });
+    const hello = () => net.send(0, { k: 'hello', name, version, data, ...(password ? { password } : {}) });
+    // A fast guest can mount staging before the host has installed its native hello handler.
+    if (rules) {
+      const until = performance.now() + 20000;
+      knock = setInterval(() => performance.now() < until ? hello() : leave('The paired commander did not reach staging.'), 800);
+      offs.push(() => clearInterval(knock));
+    }
+    hello();
   }
   const offClosed = track('closed', why => {
     if (!started) leave(why === 'host left' ? 'The host closed the game.' : 'The connection to the game was lost (' + why + ').');
@@ -1395,11 +1553,11 @@ async function openStaging(args) {
     const used = usedTeams();
     starts.show(m, key, { teams }, team => st.teamFactions?.[isDynamic(m) ? (used[team] ?? team) : team]);
   };
-  dlg.enable('IDC_LOAD_GAME', host);
-  for (const id of ['IDC_STAGING_MAP_LIST', 'IDC_SELECT_OFFICIAL_MAPS', 'IDC_SELECT_CUSTOM_MAPS']) dlg.show(id, host);
-  for (const id of ['IDC_GAME_OPTIONS_CLIENT_DISPLAY_LEFT', 'IDC_GAME_OPTIONS_CLIENT_DISPLAY_RIGHT']) dlg.show(id, !host);
+  dlg.enable('IDC_LOAD_GAME', host && !rules);
+  for (const id of ['IDC_STAGING_MAP_LIST', 'IDC_SELECT_OFFICIAL_MAPS', 'IDC_SELECT_CUSTOM_MAPS']) dlg.show(id, host && !rules);
+  for (const id of ['IDC_GAME_OPTIONS_CLIENT_DISPLAY_LEFT', 'IDC_GAME_OPTIONS_CLIENT_DISPLAY_RIGHT']) dlg.show(id, !host || rules);
   if (!host) dlg.enable('IDC_SELECT_OPTIONS', false);
-  if (host) {
+  if (host && !rules) {
     const byName = (a, b) => a.name.localeCompare(b.name);
     const row = m => ({
       key: m,
@@ -1473,6 +1631,7 @@ async function openStaging(args) {
     ['hard', T('TEXT_HARD_AI_PLAYER', 'Hard AI')]
   ];
   const render = () => {
+    invite?.update();
     const me = mine();
     autoColors(
       slots.filter(s => s.kind !== 'closed' && s.kind !== 'open' && s.team !== SPECTATOR_TEAM),
@@ -1567,6 +1726,10 @@ async function openStaging(args) {
         v => change('team', v)
       );
       for (const k of ['FACTION', 'COLOR', 'TEAM']) dlg.enable(`IDC_PLAYER_${k}_${r}`, filled && editable && !s.saved);
+      if (rules) {
+        dlg.enable(`IDC_PLAYER_TEAM_${r}`, false);
+        dlg.enable(`IDC_PLAYER_NAME_${r}`, false);
+      }
       for (const k of ['FACTION', 'COLOR']) dlg.show(`IDC_PLAYER_${k}_${r}`, s.team !== SPECTATOR_TEAM);
       if (menuEntry() && s.kind === 'human' && s.peer !== 0) dlg.enable(`IDC_PLAYER_FACTION_${r}`, false);
       if (campaign()) dlg.show(`IDC_PLAYER_TEAM_${r}`, false);
@@ -1580,7 +1743,7 @@ async function openStaging(args) {
     win.update();
     dlg.show('IDC_ACCEPT_PLAYER_8', false);
     for (const k of ['NAME', 'FACTION', 'COLOR', 'TEAM']) dlg.show(`IDC_PLAYER_${k}_8`, false);
-    if (!host) {
+    if (!host || rules) {
       const yes = T('TEXT_ON', 'On'),
         no = T('TEXT_OFF', 'Off');
       const rows = campaign()
@@ -1628,7 +1791,7 @@ async function openStaging(args) {
       dlg.setImage('IDC_IMAGE', '');
       seeds.update();
     }
-    if (host) dlg.enable('IDC_SELECT_OPTIONS', !single() && !st.save);
+    if (host) dlg.enable('IDC_SELECT_OPTIONS', !rules && !single() && !st.save);
     const hint = !single()
       ? ''
       : menuEntry()
@@ -1644,7 +1807,7 @@ async function openStaging(args) {
     count: () => slots.length,
     draw: () => render(),
     like: 'IDC_SELECT_OPTIONS',
-    add: host
+    add: host && !rules
       ? () => {
           const i = slots.length;
           if (i >= MAX_SLOTS || st.save) return;
@@ -1672,7 +1835,7 @@ async function openStaging(args) {
   }
 
   dlg.on('IDC_SELECT_OPTIONS', async () => {
-    if (!host) return;
+    if (!host || rules) return;
     if (campaign()) await campaignOptions(st, campaignOf(st.mapFile)?.campaign);
     else await advancedOptions(st);
     unready();
@@ -1680,7 +1843,7 @@ async function openStaging(args) {
   });
   dlg.show('IDC_LOAD_GAME', true);
   dlg.on('IDC_LOAD_GAME', async () => {
-    if (!host) return;
+    if (!host || rules) return;
     const id = await pickSave(st.type, text => addChat('', text));
     if (id) useSave(id);
   });
@@ -1694,7 +1857,7 @@ async function openStaging(args) {
       net.send(0, { k: 'ready', on: !(s && s.ready) });
       return;
     }
-    if (!st.mapFile) return;
+    if (!st.mapFile || (rules && humans().length !== 2)) return;
     const players = slots.filter(s => s.kind !== 'closed' && s.kind !== 'open');
     if (st.save && loaded) {
       const open = slots.find(s => s.kind === 'open');
@@ -1791,6 +1954,13 @@ async function openStaging(args) {
       ),
       ...(watchers.length ? { spectators: watchers.map(s => s.peer), spectatorNames: watchers.map(s => s.name) } : {})
     };
+    if (rules) {
+      setup.variant = rules.id;
+      setup.ladder = args.ladder;
+      setup.type = rules.type;
+      if (rules.type === 'instant')
+        setup.instant = { turn: 0, armies: setup.players.map(p => issuedFleet(instantRoster(setup.teamFactions[p.team], false))) };
+    }
     net.setListing(null);
     net.broadcast({ k: 'start', setup });
     begin(setup);
@@ -1810,20 +1980,24 @@ async function openStaging(args) {
       return;
     }
     const link = !campaign() ? netFor() : { session: net, me: net.id, relaunch };
+    if (rules && args.ladder === 'ranked' && !resume && args.playlistPeer != null && !setup.restore) {
+      link.rankedFinish = rankedFinish({ relay: net.relay, variant: rules.id, room: net.gameId, players: setup.players, me: net.id, peer: args.playlistPeer, session: net });
+    }
     if (setup.spectators) link.spectators = setup.spectators;
     launch({ ...setup, net: link });
   };
 
   if (host) publish();
   else render();
-  const beat = host && kind !== 'lan' ? setInterval(listing, 30000) : 0;
+  const beat = host && kind === 'internet' ? setInterval(listing, 30000) : 0;
   if (host && st.type === 'campaign' && !campaigns.some(c => !c.variants))
     addChat(
       '',
       'This game data has no multiplayer campaign: its single-player conquests are offered. Players on the host side play in co-op; other sides get the story of their own faction where the conquest has one.'
     );
   if (host) {
-    for (const line of inviteLines(net.gameId, kind)) addChat('', line.text, line.copy);
+    if (kind === 'playlist') addChat('', `${st.name} • Reserved for the matched pair.`);
+    else for (const line of inviteLines(net.gameId, kind)) addChat('', line.text, line.copy);
   }
   return true;
 }

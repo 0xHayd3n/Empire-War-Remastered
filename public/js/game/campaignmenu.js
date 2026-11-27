@@ -111,6 +111,7 @@ export async function openCampaignMenu({ start, cancel = null, audio = null, tut
     close();
     start({
       mode: 'galactic',
+      menuFamily: tutorial ? 'tutorial' : 'conquest',
       campaign: c.name,
       faction: c.str('Starting_Active_Player'),
       difficulty,

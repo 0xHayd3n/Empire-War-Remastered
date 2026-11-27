@@ -4,7 +4,7 @@ import { fullscreen } from './pointertrap.js';
 import { makeZip } from './zipwriter.js';
 import { collectPerformance, cpuProfile, profileText, performanceWarnings, performanceLines } from './perfreport.js';
 
-const SETTINGS_SKIPPED = new Set(['swr.lobby', 'swr.mpname']);
+const SETTINGS_SKIPPED = new Set(['swr.lobby', 'swr.mpname', 'swr-matchmaking-console-v1']);
 const MAX_SETTING_LENGTH = 4000;
 const MAX_SCREEN_TEXT = 40000;
 const SAVE_TIMEOUT_MS = 10000;
@@ -216,7 +216,7 @@ function storedSettings() {
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (!key || !key.startsWith('swr') || SETTINGS_SKIPPED.has(key)) continue;
+      if (!key || !key.startsWith('swr') || key.startsWith('swr.social.') || key.startsWith('swr.ranked.') || SETTINGS_SKIPPED.has(key)) continue;
       const value = localStorage.getItem(key) || '';
       out[key] = value.length > MAX_SETTING_LENGTH ? `[${value.length} characters]` : value;
     }
@@ -344,6 +344,7 @@ async function saveGameFile(game) {
 }
 
 function visibleText() {
+  if (document.querySelector('dialog[open] .social-console')) return '[Private social panel omitted]';
   const text = (document.body?.innerText || '').replace(/\n{3,}/g, '\n\n').trim();
   return text.length > MAX_SCREEN_TEXT ? text.slice(0, MAX_SCREEN_TEXT) + '\n...' : text;
 }

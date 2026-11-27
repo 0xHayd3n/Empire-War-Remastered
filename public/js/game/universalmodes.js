@@ -1,5 +1,6 @@
 // Navigation inside the live game. Only the host may resolve a known era ID to its local content origin.
 import { openChoiceSheet } from './universaldialog.js';
+import { isLoadMode } from './modesaves.js';
 const names = {
   conquest: 'Galactic Conquest',
   story: 'Story campaign',
@@ -26,7 +27,8 @@ const briefing = {
   1770851727: 'Explore the Galactic Civil War through Remake’s fleet and faction campaigns.',
   1125571106: 'In the aftermath of Endor, the New Republic and Imperial successor states struggle for control.'
 };
-export const eraMode = mode => Object.hasOwn(names, mode);
+const modeName = mode => names[mode] || (mode === 'continue' ? 'Continue Campaign' : 'Load ' + (names[mode.slice(5)] || 'Tutorial'));
+export const eraMode = mode => Object.hasOwn(names, mode) || isLoadMode(mode) || mode === 'continue';
 export function universalModeNavigation({ setup, current, host }) {
   let panel = null;
   const close = () => {
@@ -89,7 +91,7 @@ export function universalModeNavigation({ setup, current, host }) {
       busy = false;
     const sheet = await openChoiceSheet({
       screen: 'eras',
-      heading: names[mode] + ' — Choose your era',
+      heading: modeName(mode) + ' — Choose your era',
       context: 'Select a time period, then a storyline.',
       section: 'Time period',
       back: () => {
@@ -148,7 +150,7 @@ export function universalModeNavigation({ setup, current, host }) {
             sheet.info(
               (briefing[r.id] || r.name) +
                 '\n' +
-                (r.ready ? 'Continue to ' + names[mode] + '.' : 'Not built locally. Choose another storyline or build this pack.')
+                (r.ready ? 'Continue to ' + modeName(mode) + '.' : 'Not built locally. Choose another storyline or build this pack.')
             );
           });
         }
@@ -158,7 +160,7 @@ export function universalModeNavigation({ setup, current, host }) {
       if (!closed) sheet.info(e.message);
     }
   };
-  const run = async (mode, back = () => home(mode === 'load' ? 'title' : 'modes')) => {
+  const run = async (mode, back = () => home(mode === 'continue' ? 'title' : 'modes')) => {
     close();
     const again = () => pick(mode, back);
     try {
@@ -167,14 +169,14 @@ export function universalModeNavigation({ setup, current, host }) {
     } catch (e) {
       console.warn('Universal mode setup', e);
     }
-    const d = open('UNIVERSAL · ' + names[mode].toUpperCase(), 'Setup unavailable', mode === 'conquest' ? back : again);
+    const d = open('UNIVERSAL · ' + modeName(mode).toUpperCase(), 'Setup unavailable', mode === 'conquest' || mode === 'continue' ? back : again);
     d.querySelector('[role=status]').textContent =
-      `This era could not open ${names[mode]}. Its listed campaigns are available under Galactic Conquest.`;
+      mode === 'continue' ? 'No readable Galactic Conquest checkpoint remains in this era.' : `This era could not open ${modeName(mode)}.`;
   };
-  const saves = (rows, load, back) => {
-    const d = open('UNIVERSAL · SAVED CAMPAIGNS AND BATTLES', 'Load game', back),
+  const saves = (rows, load, back, mode = 'load') => {
+    const d = open('UNIVERSAL · SAVE ARCHIVE', modeName(mode), back),
       list = rows.filter(r => !r.mp);
-    if (!list.length) d.querySelector('[role=status]').textContent = 'No single-player saves in this era.';
+    if (!list.length) d.querySelector('[role=status]').textContent = 'No matching single-player saves in this era.';
     for (const sv of list)
       button(d.querySelector('.era-choices'), sv.name || sv.id, () => {
         close();
@@ -182,5 +184,12 @@ export function universalModeNavigation({ setup, current, host }) {
       });
     return true;
   };
-  return { pick, run, localModes, home, saves, supports: eraMode };
+  function resume(profile) {
+    if (!profile || profile === current || parent === window) return run('continue');
+    const d = open('GALACTIC CONQUEST', 'Opening campaign', () => home());
+    const failed=e=>{if(e.origin===host && e.source===parent && e.data?.kind==='universal-error')d.querySelector('[role=status]').textContent=e.data.error;};
+    addEventListener('message',failed);d.addEventListener('close',()=>removeEventListener('message',failed),{once:true});
+    parent.postMessage({kind:'universal-select',id:profile,mode:'continue'},host);
+  }
+  return { pick, run, resume, localModes, home, saves, supports: eraMode };
 }

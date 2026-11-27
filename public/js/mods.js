@@ -106,6 +106,15 @@ export async function moveMod(id, by) {
   );
   return true;
 }
+// Workshop management deletes only archives created by addModArchive in this origin's private mods directory.
+// Don't report success if the byte removal fails. A missing archive may still leave a removable index record.
+export async function removeBrowserArchive(id) {
+  if (!Number.isSafeInteger(id) || id < 1) throw Error('Invalid browser archive.');
+  const m = await tx('readonly', s => s.get(id));
+  if (!m || m.game || !/^[a-z0-9]+-[a-z0-9]{1,6}\.tar$/.test(m.archive?.file || '')) throw Error('Not a managed browser archive.');
+  try { await (await modDir()).removeEntry(m.archive.file); } catch(e) { if (e.name !== 'NotFoundError') throw e; }
+  await tx('readwrite', s => s.delete(id));
+}
 export async function removeMod(id) {
   const m = await tx('readonly', s => s.get(id));
   await tx('readwrite', s => s.delete(id));
@@ -611,7 +620,7 @@ export async function addModFolder(handle, progress, { compat = false } = {}) {
   return mod;
 }
 
-export async function addModArchive(file, progress = () => {}) {
+export async function addModArchive(file, progress = () => {}, { lookupTitles = true } = {}) {
   const { storeTar, tarTree, fileStream } = await import('./pack.js');
   const dir = await modDir(),
     name = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.tar`;
@@ -638,7 +647,7 @@ export async function addModArchive(file, progress = () => {}) {
     for (const [low, [off, size, path]] of paths)
       if (low.startsWith(base) && used.has(path.slice(base.length))) entries[path.slice(base.length)] = [off, size];
     const folder = folderOf(paths, base),
-      info = (await infoName(root)) || (await workshopNames([folder || '']))[folder];
+      info = (await infoName(root)) || (lookupTitles && (await workshopNames([folder || '']))[folder]);
     const mod = {
       name: info || folder || file.name.replace(/\.(tar(\.gz)?|tgz|gz)$/i, ''),
       ...(/^\d+$/.test(folder) ? { workshopFolder: folder } : {}),

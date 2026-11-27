@@ -1,3 +1,4 @@
+export { Social } from './social.js';
 const MAX_FRAME = 64 * 1024;
 const MAX_PEERS = 108;
 const MAX_LOBBIES = 500;
@@ -28,10 +29,15 @@ export default {
     if (req.method === 'OPTIONS')
       return new Response(null, {
         status: 204,
-        headers: { ...c.headers, 'Access-Control-Allow-Methods': 'GET', 'Access-Control-Max-Age': '86400' }
+        headers: { ...c.headers, 'Access-Control-Allow-Methods': url.pathname === '/social/v1' ? 'POST' : 'GET', ...(url.pathname === '/social/v1' ? {'Access-Control-Allow-Headers':'Authorization, Content-Type'} : {}), 'Access-Control-Max-Age': '86400' }
       });
     if (!c.ok) return json({ error: 'origin not allowed' }, 403);
 
+    if (url.pathname === '/social/v1' && req.method === 'POST') {
+      if(!env.SOCIAL)return json({error:'Social is not enabled on this relay.'},503,c.headers);
+      const reply=await env.SOCIAL.get(env.SOCIAL.idFromName('roster-v1')).fetch(req);
+      return new Response(reply.body,{status:reply.status,headers:{'Content-Type':'application/json','Cache-Control':'no-store',...c.headers}});
+    }
     if (url.pathname === '/lobbies' && req.method === 'GET') {
       const reg = env.REGISTRY.get(env.REGISTRY.idFromName('main'));
       const list = await (await reg.fetch('https://registry/list')).json();

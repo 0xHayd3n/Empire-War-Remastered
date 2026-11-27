@@ -33,6 +33,7 @@ const assert = require('node:assert/strict'),
       await r.continue();
     });
     await page.goto(`http://127.0.0.1:${port}/`);
+    await f.locator('[data-id="TITLE_PLAY"]').click();
     await f.locator('[data-id="IDC_MAIN_MENU_SINGLE_PLAYER_GAMES"]').click();
     await gc.click();
     await map.waitFor();

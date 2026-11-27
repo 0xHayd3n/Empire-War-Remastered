@@ -17,8 +17,8 @@ export function lobbyUrl() {
   return LOBBY;
 }
 
-export async function listGames() {
-  const r = await fetch(lobbyUrl() + '/lobbies', { cache: 'no-store' });
+export async function listGames(signal, relay = lobbyUrl()) {
+  const r = await fetch(relay + '/lobbies', { cache: 'no-store', signal });
   if (!r.ok) throw new Error('lobby service: ' + r.status);
   return r.json();
 }
@@ -214,9 +214,10 @@ export class NetSession extends Emitter {
     this.pieces = new Map();
   }
 
-  connect(gameId, { host, name }) {
+  connect(gameId, { host, name, relay }) {
     this.host = !!host;
     this.gameId = gameId;
+    this.relay = relay;
     this.name = name || 'Player';
     this.outbox = [];
     this.onHide = () => this.close();
@@ -225,7 +226,7 @@ export class NetSession extends Emitter {
   }
 
   open(resolve = null, reject = null) {
-    const base = lobbyUrl().replace(/^http/, 'ws') + '/lobby/' + this.gameId + '?name=' + encodeURIComponent(this.name);
+    const base = (this.relay ?? lobbyUrl()).replace(/^http/, 'ws') + '/lobby/' + this.gameId + '?name=' + encodeURIComponent(this.name);
     const url =
       base + (this.token ? '&resume=' + this.id + '&token=' + encodeURIComponent(this.token) : '&role=' + (this.host ? 'host' : 'join'));
     const ws = (this.ws = new WebSocket(url));
@@ -351,7 +352,8 @@ export class NetSession extends Emitter {
   }
 
   close() {
-    if (this.closing && !this.links.size) return;
+    if (this.disposed) return;
+    this.disposed = true;
     this.closing = true;
     this.ping?.stop();
     this.ping = null;

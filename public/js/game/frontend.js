@@ -1,5 +1,8 @@
 import { db } from '../gamedata.js';
 import { MenuArtwork } from './menuartwork.js';
+import { Menus } from './menus.js';
+import { titleMenu } from './titlemenu.js';
+import { recentCampaign, saveModes } from './modesaves.js';
 import { whileLoading } from '../splash.js';
 import { openCampaignMenu } from './campaignmenu.js';
 import { openMainCampaignMenu, suggestTutorial, tutorialSuggested, markTutorialSuggested } from './storycampaignmenu.js';
@@ -10,16 +13,21 @@ import { loadDialogs } from './dialogs.js';
 const PANEL = { cls: 'front', stretch: true };
 
 export class FrontEnd {
-  constructor(game, { skirmish, instant, leave, start, multiplayer, universal }) {
+  constructor(audio, { skirmish, instant, leave, start, multiplayer, playlist, mapRotation, universal, load }) {
     this.universal = universal;
-    this.game = game;
-    this.menus = game.menus;
+    this.audio = audio;
+    // Save, presence and leave guards use this marker for non-playable menu sessions.
+    this.setup = { attract: true };
+    this.menus = new Menus(this);
     this.skirmish = skirmish;
     this.instant = instant;
     this.leave = leave;
+    this.load = load;
     this.start = start;
     this.openLobbies = multiplayer;
-    this.depth = 0;
+    this.playlist = playlist;
+    this.mapRotation = mapRotation;
+    this.events = new AbortController();
     this.onKey = e => {
       if (this.universal && document.querySelector('.era-panel[open], [data-universal-screen]')) return;
       const top = this.menus.stack[this.menus.stack.length - 1];
@@ -36,19 +44,39 @@ export class FrontEnd {
     const o = (this.overlay = document.createElement('div'));
     o.id = 'frontOverlay';
     document.body.appendChild(o);
+    document.body.classList.add('front-end');
+    if (!globalThis.SWR_BASE && ['localhost', '127.0.0.1'].includes(location.hostname)) {
+      document.body.style.setProperty('--title-photo', 'url("/api/title-orbit.jpg")');
+    }
     this.artwork = new MenuArtwork(o);
-    await this.artwork.refresh();
-    addEventListener('keydown', this.onKey, true);
+    const listen = { capture: true, signal: this.events.signal };
+    addEventListener('keydown', this.onKey, listen);
+    const unlock = () => this.audio.unlock();
+    for (const event of ['pointerdown', 'keydown']) addEventListener(event, unlock, { ...listen, once: true });
+    this.audio.menuOnly = true;
+    this.menuMusic();
     return this.main();
+  }
+  menuMusic() {
+    this.audio.setPlaylist(db.music.get('MAIN_MENU_MUSIC_EVENT')?.list('Files') || []);
+  }
+  message(text) {
+    return this.menus.notify(text);
   }
   dispose() {
     this.campaignRequest?.abort();
+    this.events.abort();
+    cancelAnimationFrame(this.movieFrame);
+    if (this.tacticalMovies) this.tacticalMovies.onFinish = null;
+    this.menus.closeAll();
+    document.body.classList.remove('front-end');
+    document.body.style.removeProperty('--title-photo');
     this.artwork?.dispose();
     this.overlay?.remove();
-    removeEventListener('keydown', this.onKey, true);
   }
 
   async screen(id, hide = [], opts = {}) {
+    void this.artwork.refresh(); // Keep localized artwork on the native submenus.
     const dlg = await this.menus.push(id, { ...PANEL, ...opts });
     if (!dlg) return null;
     for (const c of ['IDC_MENU_PETRO_LOGO', ...hide]) dlg.show(c, false);
@@ -58,32 +86,72 @@ export class FrontEnd {
 
   credits(dlg) {
     if (this.rolling) return;
-    const g = this.game,
-      overlay = document.getElementById('frontOverlay'),
+    const overlay = this.overlay,
       show = on => {
-        for (const d of this.menus.stack) d.veil.style.display = on ? '' : 'none';
+        dlg.veil.style.display = on ? '' : 'none';
         if (overlay) overlay.style.display = on ? '' : 'none';
       };
-    g.audio?.unlock?.();
+    this.audio.unlock();
     show(false);
-    g.audio?.stopMusic?.();
-    const movies = (g.tacticalMovies ||= new TacticalMovies(g, { missing: new Map() }));
+    this.audio.stopMusic();
+    const movies = (this.tacticalMovies ||= new TacticalMovies(this, { missing: new Map() }));
     movies.canvas.style.zIndex = '90';
     this.rolling = true;
     const back = () => {
       this.rolling = false;
       show(true);
-      if (g.music) {
-        g.music.mode = '';
-        g.setMusic?.('ambient');
-      }
+      cancelAnimationFrame(this.movieFrame);
+      this.menuMusic();
+      dlg.focus?.();
     };
     movies.play('Credits', { loop: true, skippable: true });
     movies.onFinish = back;
+    // Credits need a clock; an idle title screen does not.
+    let last = performance.now();
+    const tick = now => {
+      movies.update(Math.min((now - last) / 1000, 0.1), false);
+      last = now;
+      if (movies.active) this.movieFrame = requestAnimationFrame(tick);
+    };
+    this.movieFrame = requestAnimationFrame(tick);
   }
 
   async main() {
-    const dlg = await this.screen('IDD_MAIN_MENU_DIALOG', ['IDC_MAIN_MENU_PLAY_DEMO']);
+    const defs = (await loadDialogs())?.dialogs;
+    let dlg = this.title = titleMenu(defs?.get('IDD_MAIN_MENU_DIALOG'), this.audio, {
+      mapRotation: this.mapRotation,
+      findMatch: this.playlist && (async options => {
+        this.audio.unlock();
+        await this.playlist({...options, back: () => {
+          dlg.veil.style.display = this.overlay.style.display = '';
+          options.returned();
+        }});
+        if (options.signal.aborted || !dlg.veil.isConnected) return;
+        dlg.veil.style.display = this.overlay.style.display = 'none';
+      }),
+      singleDef: defs?.get('IDD_SINGLE_PLAYER_GAMES_MENU_DIALOG'), multiDef: defs?.get('IDD_MULTIPLAYER_DIALOG'), instant: !!this.instant, latest: recentCampaign
+    });
+    if (dlg) {
+      this.menus.stack.push(dlg);
+      dlg.on('IDC_MENU_CREDITS', () => this.credits(dlg));
+      dlg.on('IDC_CUSTOM_CAMPAIGN_BUTTON', () => this.universal ? this.pickEra('conquest', dlg) : this.campaign(dlg));
+      dlg.on('IDC_NEW_CAMPAIGN_BUTTON', () => this.universal ? this.pickEra('story', dlg) : this.newCampaign(dlg));
+      const show = on => { dlg.veil.style.display = this.overlay.style.display = on ? '' : 'none'; if (on) dlg.focus(); };
+      dlg.on('IDC_SKIRMISH_GAMES_BUTTON', async () => {
+        if (this.universal) return this.pickEra('skirmish', dlg);
+        show(false); if (!await this.skirmish(() => show(true)).catch(() => false)) show(true);
+      });
+      dlg.on('IDC_INSTANT_BATTLE_BUTTON', () => this.universal ? this.pickEra('instant', dlg) : this.runInstant(show));
+      for (const [id,kind] of [['IDC_MULTIPLAYER_INTERNET_BUTTON','internet'],['IDC_MULTIPLAYER_LAN_BUTTON','lan']]) dlg.on(id, () => { this.audio.unlock(); return this.openLobbies(kind); });
+      for (const mode of saveModes) dlg.on('load-'+mode, () => this.universal ? this.pickEra('load-'+mode,dlg) : this.menus.load(mode));
+      dlg.on('CHOOSE_CAMPAIGN', () => this.chooseCampaign());
+      dlg.on('CONTINUE', async () => {
+        const row = await recentCampaign();
+        if (!row) return dlg.show('home');
+        if (this.universal) return this.universal.resume(row.profile);
+        if (row.id) await this.menus.loadChecked(row.id, this.load);
+      });
+    } else dlg = await this.screen('IDD_MAIN_MENU_DIALOG', ['IDC_MAIN_MENU_PLAY_DEMO']);
     if (!dlg) return false;
     dlg.on('IDC_MAIN_MENU_TUTORIAL', () => this.campaign(dlg, true));
     dlg.on('IDC_MAIN_MENU_MULTIPLAYER', () => this.multiplayer());
@@ -94,6 +162,10 @@ export class FrontEnd {
     return true;
   }
 
+  async chooseCampaign() {
+    return (await import('./campaignpicker.js')).chooseCampaign({load:id=>this.menus.loadChecked(id,this.load),back:()=>this.title?.focus()});
+  }
+
   pickEra(mode, dlg) {
     const overlay = document.getElementById('frontOverlay');
     dlg.veil.style.display = 'none';
@@ -101,10 +173,12 @@ export class FrontEnd {
     return this.universal.pick(mode, () => {
       dlg.veil.style.display = '';
       if (overlay) overlay.style.display = '';
+      dlg.focus?.();
     });
   }
 
   async single() {
+    if (this.title) return this.title.show('play', 'IDC_CUSTOM_CAMPAIGN_BUTTON');
     if (this.universal) void import('./universalcampaign.js').then(m => m.campaignLibrary()).catch(() => {});
     const def = this.instant ? (await loadDialogs())?.dialogs.get('IDD_SINGLE_PLAYER_GAMES_MENU_DIALOG') : null,
       slot = def ? instantSlot(def) : null;
@@ -170,7 +244,7 @@ export class FrontEnd {
   }
 
   async runInstant(show) {
-    this.game.audio.unlock();
+    this.audio.unlock();
     show(false);
     const ok = await this.instant(() => show(true)).catch(e => {
       console.warn('instant battle', e);
@@ -204,11 +278,15 @@ export class FrontEnd {
     this.menus.extra(dlg, 'IDC_SKIRMISH_GAMES_BUTTON', 'Instant Battle', skirmish.x, y, skirmish.w, () => this.universal ? this.pickEra('instant', dlg) : this.runInstant(show));
   }
 
-  async multiplayer() {
+  async multiplayer(custom = false) {
+    if (this.title) {
+      this.title.show(custom ? 'custom' : 'multi', custom ? 'IDC_OK_MAIN' : 'FLIGHT_PLAYLIST');
+      return;
+    }
     const dlg = await this.screen('IDD_MULTIPLAYER_DIALOG');
     if (!dlg) return;
     const go = kind => {
-      this.game.audio.unlock();
+      this.audio.unlock();
       this.openLobbies(kind);
     };
     dlg.on('IDC_MULTIPLAYER_INTERNET_BUTTON', () => go('internet'));
@@ -228,6 +306,7 @@ export class FrontEnd {
       adjust: c => (c.id !== 'IDC_OK_MAIN' && c.id !== 'IDC_MAIN_OPTIONS_TWEAKS' && c.id !== 'IDC_MENU_PETRO_LOGO' && c.y < ok.y ? { ...c, y: c.y - step } : null)
     });
     if (!dlg) return;
+    if (this.title) dlg.setText('IDC_STATIC_OPTIONS', 'Settings');
     dlg.setText('IDC_MAIN_OPTIONS_TWEAKS', 'Tweaks');
     dlg.on('IDC_MAIN_OPTIONS_TWEAKS', () => this.menus.tweaks());
     dlg.on('IDC_MAIN_OPTIONS_KEYBOARD', () => this.menus.keyboard());
@@ -269,10 +348,10 @@ export class FrontEnd {
     const ok = await whileLoading('conquest', title, () => build({
       signal, tutorial,
       isTutorialComplete: c => tutorialFinished(c.name),
-      audio: this.game.audio,
+      audio: this.audio,
       cancel: restore,
       start: setup => {
-        this.game.audio.unlock();
+        this.audio.unlock();
         this.start(setup);
       }
     })).catch(e => {

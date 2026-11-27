@@ -42,6 +42,8 @@ export function snapshot(game, name = '') {
 export function withMultiplayer(game, s) {
   const setup = game.setup,
     net = setup.net;
+  if (s.summary) s.summary.family = game.galactic ? setup.menuFamily : setup.campaign?.menuFamily || (setup.instant ? 'instant' : setup.campaign ? undefined : 'skirmish');
+  if (setup.instant && s.setup) s.setup.instant = setup.instant;
   if (s.setup) delete s.setup.net;
   if (!net || (setup.campaign && !game.galactic)) return s;
   const players = setup.players || [];
@@ -809,6 +811,7 @@ const meta = (id, s) => ({
   name: s.name,
   saved: s.saved,
   summary: s.summary || {},
+  family: s.summary?.family,
   build: s.build,
   ...(s.multiplayer ? { mp: s.multiplayer } : {})
 });
@@ -873,6 +876,7 @@ export async function putSave(snap, id = null) {
       );
     }
   }
+  if (id !== 'resume') globalThis.window?.dispatchEvent?.(new Event('swr-save-list-changed'));
   return id;
 }
 
@@ -898,6 +902,7 @@ export async function deleteSave(id) {
       localStorage.removeItem(LS + id);
     } catch {}
   }
+  if (id !== 'resume') globalThis.window?.dispatchEvent?.(new Event('swr-save-list-changed'));
 }
 
 export function downloadSave(snap) {

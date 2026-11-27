@@ -1,0 +1,486 @@
+/* One inspection floor, not three dashboard panels. Order forms live below
+   the flight line; the same camera and its controls stay in place on selection. */
+.unit-armory {
+  --pad: clamp(14px, 2.2vw, 34px);
+  --muted: #b8c9d1;
+  overflow-wrap: anywhere;
+}
+.unit-armory label {
+  display: grid;
+  gap: 0.24rem;
+  min-width: 0;
+  font: 12px/1.35 var(--body);
+  color: #c3d2da;
+}
+.unit-armory .inspection-bay {
+  position: relative;
+  isolation: isolate;
+  background: linear-gradient(120deg, #101e28e8, #0a1621e8 64%, #10212ce8);
+  border-block: 1px solid #a6c2ce65;
+}
+.unit-armory .inspection-bay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse 45% 69% at 68% 30%, #6a899957, transparent 94%),
+    linear-gradient(170deg, transparent 49%, #8ea4a918 49.3%, #42596920 50%, transparent 57%);
+}
+.unit-armory .bay-context,
+.unit-armory .bay-selectors,
+.unit-armory .stage-controls,
+.unit-armory .camera-tools,
+.unit-armory .armory-index header,
+.unit-armory .roster-step,
+.unit-armory .card-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.unit-armory .bay-context {
+  justify-content: space-between;
+  padding: 0.55rem var(--pad);
+  border-bottom: 1px solid #b1c8d52b;
+}
+.unit-armory .bay-context > small {
+  font-size: max(0.8rem, 12px);
+  color: #dae5e7;
+}
+.unit-armory .bay-context i {
+  color: var(--gold);
+  margin-inline: 0.4em;
+}
+.unit-armory .bay-selectors label {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+.unit-armory .bay-selectors select,
+.unit-armory .camera-tools select,
+.unit-armory .armory-index :is(input, select) {
+  max-width: min(36vw, 260px);
+  background: #101c259e;
+  border: none;
+  border-bottom: 1px solid #8799a38c;
+  padding: 0.35rem 0.45rem;
+}
+.unit-armory .stage-scene {
+  position: relative;
+}
+.unit-armory .record {
+  position: absolute;
+  left: var(--pad);
+  top: clamp(30px, 6vh, 78px);
+  width: 27%;
+  pointer-events: none;
+  z-index: 1;
+}
+.unit-armory .record-owner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 1.35rem;
+  font: 500 max(12px, 0.85rem) var(--body);
+  color: #dce5e8;
+}
+.unit-armory .record-owner .bf-crest {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+}
+.unit-armory .record-owner .bf-crest::before {
+  content: attr(data-glyph);
+}
+.unit-armory .record-owner .bf-crest.has-art {
+  background: var(--crest-art) center/contain no-repeat;
+}
+.unit-armory .record-owner .bf-crest.has-art::before {
+  content: none;
+}
+.unit-armory .record-head small {
+  color: #c1d1d8;
+}
+.unit-armory .record h2 {
+  font: 550 clamp(1.9rem, 3.6vw, 4.5rem) / 1.04 var(--ui-font);
+  letter-spacing: 0.012em;
+  margin: 0.27rem 0 0.75rem;
+  text-wrap: balance;
+}
+.unit-armory .unit-data {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+  margin: 0;
+  border-left: 3px solid var(--faction-ink, var(--gold));
+  padding-left: 0.65rem;
+}
+.unit-armory .unit-data dt {
+  font: 12px var(--body);
+  color: var(--muted);
+}
+.unit-armory .unit-data dd {
+  margin: 0.2rem 0 0;
+  font: 550 max(15px, 1.1rem) var(--ui-font);
+}
+.unit-armory armory-live-stage {
+  display: block;
+  position: relative;
+}
+.unit-armory .stage-window {
+  position: relative;
+  margin-left: 29%;
+  height: clamp(270px, 38vh, 491px);
+  overflow: hidden;
+  outline-offset: -3px;
+}
+.unit-armory .stage-window[data-live] {
+  cursor: grab;
+  touch-action: pan-y;
+}
+.unit-armory .stage-window[data-drag] {
+  cursor: grabbing;
+}
+/* Hit-test the inspection surface, not a gameplay canvas (the tactical touch
+   adapter owns canvas events and its global canvas rule disables scrolling). */
+.unit-armory .stage-window :is(canvas, img) {
+  pointer-events: none;
+}
+.unit-armory .stage-window canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.unit-armory .stage-icon {
+  position: absolute;
+  width: min(24vw, 190px);
+  height: 60%;
+  object-fit: contain;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+.unit-armory .stage-reticle {
+  position: absolute;
+  inset: 6% 4%;
+  pointer-events: none;
+  opacity: 0.35;
+  background:
+    linear-gradient(#c8d4d7, #c8d4d7) left top/12px 1px no-repeat,
+    linear-gradient(#c8d4d7, #c8d4d7) left top/1px 12px no-repeat,
+    linear-gradient(#c8d4d7, #c8d4d7) right bottom/12px 1px no-repeat,
+    linear-gradient(#c8d4d7, #c8d4d7) right bottom/1px 12px no-repeat;
+}
+.unit-armory .stage-controls {
+  padding: 0 var(--pad);
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.unit-armory .stage-caption {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+.unit-armory .stage-caption > small {
+  color: var(--muted);
+}
+.unit-armory .stage-status,
+.unit-armory .camera-guide,
+.unit-armory .result-count {
+  font: 12px/1.4 var(--body);
+  color: #d6e3e9;
+}
+.unit-armory .camera-tools {
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.unit-armory :is(.camera-tools, .roster-step) button {
+  font-size: max(12px, 0.84rem);
+  background: #10202a99;
+  border-color: #a7bdc44a;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0.22rem 0.5rem;
+}
+.unit-armory .camera-guide {
+  display: block;
+  padding: 0.3rem var(--pad) 0.7rem;
+  color: var(--muted);
+}
+.unit-armory .armory-index {
+  background: linear-gradient(0deg, #0b1722d9, #0b172236);
+  border-top: 1px solid #a8bac440;
+  min-width: 0;
+}
+.unit-armory .armory-index header {
+  padding: 0.55rem var(--pad);
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+.unit-armory .roster-caption {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-right: auto;
+}
+.unit-armory .units {
+  display: flex;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #647988 #0d1822;
+}
+.unit-armory .armory-row {
+  flex: 0 0 clamp(175px, 16.2vw, 242px);
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  border-right: 1px solid #bbcbd63b;
+}
+.unit-armory .armory-inspect {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  border: 0;
+  border-top: 2px solid transparent;
+  padding: 0.55rem 0.45rem;
+  min-height: 57px;
+  text-transform: none;
+  text-align: left;
+  background: #24374355;
+}
+.unit-armory .armory-inspect[aria-pressed='true'] {
+  border-top-color: var(--gold);
+  background: #3c4a51;
+}
+.unit-armory .armory-inspect img,
+.unit-armory .armory-no-icon {
+  flex: none;
+  object-fit: contain;
+  width: 36px;
+  height: 34px;
+}
+.unit-armory .armory-inspect span {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  flex: 1;
+}
+.unit-armory .armory-inspect strong {
+  font: 600 max(13px, 0.86rem) / 1.2 var(--body);
+}
+.unit-armory .armory-inspect small {
+  font: 12px/1.2 var(--body);
+  letter-spacing: 0;
+  text-transform: none;
+  color: #c3d3da;
+}
+.unit-armory .card-flag {
+  color: var(--gold);
+  font: 11px var(--body);
+  margin-left: 0.3em;
+}
+.unit-armory .unit-count {
+  color: var(--gold);
+}
+.unit-armory .armory-row .unit-row {
+  justify-content: center;
+  align-self: stretch;
+  border: 0;
+  padding: 0;
+  background: #182a3480;
+  color: var(--gold);
+  font-size: 1.1rem;
+}
+.unit-armory .armory-row button:focus-visible {
+  outline-offset: -3px;
+}
+.unit-armory .unit-details {
+  background: #111e29d9;
+}
+.unit-armory .unit-spec {
+  padding: 0.6rem var(--pad);
+  font: 13px var(--body);
+}
+.unit-armory .unit-spec[open] {
+  max-height: 14rem;
+  overflow: auto;
+}
+.unit-armory .unit-spec summary {
+  cursor: pointer;
+  color: var(--gold);
+}
+.unit-armory .unit-spec p {
+  white-space: pre-line;
+}
+.unit-armory .deployment-desk {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: #0b1923ef;
+}
+.unit-armory :is(.flight-card, .armory-blueprint) {
+  min-width: 0;
+  padding: 1.15rem var(--pad);
+  border-top: 1px solid var(--line);
+}
+.unit-armory .armory-blueprint {
+  border-left: 1px solid var(--line);
+}
+.unit-armory .card-heading {
+  justify-content: space-between;
+}
+.unit-armory h3,
+.unit-armory .armory-blueprint h2 {
+  margin: 0;
+  font: 550 1.55rem var(--ui-font);
+  text-transform: uppercase;
+}
+.unit-armory .card-slots {
+  display: grid;
+  grid-template-columns: 0.55fr minmax(110px, 1.65fr) 0.75fr;
+  align-items: end;
+  gap: 0.4rem;
+}
+.unit-armory .card-slots :is(input, select) {
+  width: 100%;
+}
+.unit-armory :is(.flight-card p, .fleet-validation, .card-message) {
+  font: 13px/1.45 var(--body);
+}
+.unit-armory :is(.card-estimate, .fleet-validation, .card-message) {
+  color: var(--gold);
+}
+.unit-armory .desk-actions button {
+  font-size: max(0.82rem, 12px);
+}
+.unit-armory .armory-blueprint label {
+  margin-top: 0.5rem;
+}
+.unit-armory .tally {
+  display: block;
+  margin: 0.7rem 0 0.4rem;
+  font: 550 1.15rem var(--ui-font);
+  color: var(--gold);
+}
+.unit-armory .fleet-mix {
+  gap: 0.2rem;
+}
+.unit-armory .fleet-lane {
+  padding: 0.32rem 0.45rem;
+}
+.unit-armory .manifest-row {
+  font: 13px var(--body);
+}
+.unit-armory :is(.flight-card, .blueprint-status, .armory-warning, .fleet-validation):empty {
+  display: none;
+}
+@media (max-width: 720px) {
+  .unit-armory .bay-context {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.32rem;
+  }
+  .unit-armory .bay-selectors {
+    width: 100%;
+  }
+  .unit-armory .bay-selectors label {
+    flex: 1;
+    display: grid;
+    min-width: 0;
+  }
+  .unit-armory .bay-selectors select {
+    width: 100%;
+    max-width: none;
+  }
+  .unit-armory .record {
+    position: static;
+    width: auto;
+    padding: 0.7rem var(--pad) 0;
+  }
+  .unit-armory .record-owner {
+    margin: 0 0 0.35rem;
+  }
+  .unit-armory .record-owner .bf-crest {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+  .unit-armory .record h2 {
+    margin: 0.2rem 0 0.4rem;
+    font-size: 1.8rem;
+  }
+  .unit-armory .unit-data div {
+    display: flex;
+    align-items: baseline;
+    gap: 0.28rem;
+  }
+  .unit-armory .stage-window {
+    margin: 0;
+    height: clamp(180px, 32vh, 275px);
+  }
+  .unit-armory .stage-controls {
+    gap: 0.35rem;
+  }
+  .unit-armory .stage-caption > small {
+    display: none;
+  }
+  .unit-armory .camera-tools button,
+  .unit-armory .roster-step button {
+    min-width: 36px;
+    min-height: 36px;
+  }
+  .unit-armory .camera-guide {
+    font-size: 11px;
+  }
+  .unit-armory .armory-index header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  }
+  .unit-armory .roster-caption {
+    grid-column: 1/-1;
+  }
+  .unit-armory .armory-index :is(select, input) {
+    width: 100%;
+    max-width: none;
+  }
+  .unit-armory .armory-row {
+    grid-template-columns: minmax(0, 1fr) 35px;
+    flex-basis: 190px;
+  }
+  .unit-armory .deployment-desk {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .unit-armory .armory-blueprint {
+    border-left: none;
+  }
+  .unit-armory .desk-actions button {
+    min-height: 40px;
+  }
+}
+#instantBattle .ib-saved-orders {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+#instantBattle :is(.ib-saved-orders, .ib-preset-message):empty {
+  display: none;
+}
+#instantBattle .ib-saved-orders :is(.ib-select, .ib-preset) {
+  min-width: 0;
+  max-width: 100%;
+}
+#instantBattle .ib-saved-orders .ib-preset {
+  flex: 1 1 165px;
+}
+#instantBattle .ib-saved-orders .ib-select {
+  flex: 1;
+  width: 0;
+}
+#instantBattle .ib-preset-message {
+  overflow-wrap: anywhere;
+}

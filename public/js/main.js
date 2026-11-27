@@ -14,7 +14,7 @@ import * as THREE from 'three';
 import { db, loadGameData, skirmishStation, skirmishFactions, autoColors, switchLanguage } from './gamedata.js';
 import { findFiles, fetchText, fromInstall, pendingFiles } from './vfs.js';
 import { gfx, storeGfx, pixelRatio } from './gfx.js';
-import { loadMap, loadMapHeader, startEnvironment, skirmishMaps, mapTitle } from './ted.js';
+import { loadMap, startEnvironment, skirmishMaps, mapTitle } from './ted.js';
 import { wreckType, stepBoarding } from './game/derelicttactical.js';
 import { hasStationOrder, tickStationOrder, supportHUD } from './game/stationsupport.js';
 import { recoveryHUD } from './game/derelicthud.js';
@@ -46,6 +46,7 @@ import { texturesReady, eachTextureReady, loadTexture, textureBytes, dxtSupporte
 import { loadParticles } from './particles.js';
 import { Advisor } from './game/advisor.js';
 import { FrontEnd } from './game/frontend.js';
+import { lastConquest, recentCampaign, modeSaves, isLoadMode } from './game/modesaves.js';
 import { InstantBattle, placeInstantBattle, shipsOf, leftOutOfInstant } from './game/instantbattle.js';
 import { openInstantBattle as buildInstantBattle } from './game/instantmenu.js';
 import { isDynamic, dynamicMaps, warmDynamicMaps, dynamicMapStation } from './game/dynamicmap.js';
@@ -62,7 +63,7 @@ import { loadPrioritySets } from './game/priorities.js';
 import { loadDialogs, openDialog } from './game/dialogs.js';
 import { Menus } from './game/menus.js';
 import { openLobby as buildLobby } from './game/lobby.js';
-import { openMultiplayer as buildMultiplayer } from './game/multiplayer.js';
+import { openMultiplayer as buildMultiplayer, openPlaylist, mountedRotation } from './game/multiplayer.js';
 import { BUILD } from './build.js';
 import {
   snapshot,
@@ -1869,6 +1870,7 @@ class Game {
       );
       return;
     }
+    this.setup.net?.rankedFinish?.(winner?.id); // Space victory identifies a Team; land victory uses its numeric id.
     const won = winner === this.human.team;
     this.reportView?.finished(winner);
     const s = this.human.stats,
@@ -3380,7 +3382,9 @@ async function boot() {
   const multiplayer = async kind => {
     leaveFor('multiplayer');
     hideSplash();
-    history.replaceState(null, '', location.pathname + '?multiplayer' + (kind === 'lan' ? '=lan' : ''));
+    const relay = new URLSearchParams(location.search).get('lobby');
+    history.replaceState(null, '', location.pathname + '?multiplayer' + (kind === 'lan' ? '=lan' : '') + (relay ? '&lobby=' + encodeURIComponent(relay) : ''));
+    const back = () => leaveTo(location.pathname + '?title-section=custom-games' + (relay ? '&lobby=' + encodeURIComponent(relay) : ''));
     const ok = await openMultiplayer({
       maps,
       landMaps,
@@ -3392,14 +3396,35 @@ async function boot() {
       relaunch,
       quit: () => leaveFor('multiplayer'),
       kind,
-      back: () => leaveTo(location.pathname)
+      back
     }).catch(e => {
       console.warn('multiplayer', e);
       return false;
     });
-    if (!ok) leaveTo(location.pathname);
+    if (!ok) back();
   };
+  const mapRotation = variant => mountedRotation(variant, maps, landMaps, customMaps);
+  const playlist = ({ variant, ladder, name, relay, telemetry, ballot, signal, status, back }) =>
+    openPlaylist({
+      variant, ladder, name, relay, telemetry, ballot,
+      signal,
+      status,
+      maps,
+      landMaps,
+      customMaps,
+      factions: FACTIONS,
+      version: BUILD,
+      audio,
+      launch: setup => {
+        leaveFor(setup.mode);
+        return launch(setup);
+      },
+      relaunch,
+      quit: () => leaveFor('multiplayer'),
+      back: () => (window.game?.title ? back() : leaveTo(location.pathname + '?title-section=multiplayer'))
+    });
   const exits = {
+    playlist, mapRotation,
     lobby,
     instant,
     multiplayer,
@@ -3414,10 +3439,19 @@ async function boot() {
   let universal;
   if (universalHost && topFrame()) {
     const { universalModeNavigation } = await import('./game/universalmodes.js');
+    addEventListener('swr-save-list-changed', () => recentCampaign().catch(() => {}));
     universal = exits.universal = universalModeNavigation({current:profileId || 'stock', host:universalHost, setup:async (mode,back) => {
       if (mode === 'skirmish') return lobby(back);
       if (mode === 'instant') return instant(back);
-      if (mode === 'load') return universal.saves(await listSaves(),loadSave,back);
+      if (isLoadMode(mode)) {
+        void recentCampaign().catch(()=>{}); // Backfill this era when browsing older saves.
+        return universal.saves(await modeSaves(mode.slice(5)), loadSave, back, mode);
+      }
+      if (mode === 'continue') {
+        const row = await lastConquest();
+        if (!row) { await recentCampaign(); return false; }
+        await loadSave(row.id); return true;
+      }
       const start = setup => { audio.unlock(); exits.start(setup); };
       if (mode === 'story') {
         const {openMainCampaignMenu, mainCampaign} = await import('./game/storycampaignmenu.js');
@@ -3430,21 +3464,29 @@ async function boot() {
     }});
   }
   const mainMenu = async () => {
-    if (universal && profileId && window.parent !== window) { universal.home(); return; }
+    const entryMode = params.get('universal-mode');
+    const deskEntry = universal && (entryMode === 'profile-play' ? 'play' : entryMode === 'customize' ? 'customize' : entryMode === 'campaigns' ? 'home' : null);
+    if (universal && profileId && window.parent !== window && !deskEntry) { universal.home(); return; }
     if (!params.has('nomenu')) {
-      const demo = db.constants.list('Demo_Attract_Maps')[0]?.replace(/\.rec$/i, '.ted');
-      const front =
-        demo && db.constants.bool('Main_Menu_Demo_Attract_Mode')
-          ? await startFrontEnd(demo, exits).catch(e => {
-              console.warn('main menu', e);
-              return false;
-            })
-          : false;
+      const front = await startFrontEnd(exits).catch(e => {
+        console.warn('main menu', e);
+        return null;
+      });
       if (front) {
-        if (universal && params.get('universal-mode') === 'modes') {
+        if (deskEntry) {
+          params.delete('universal-mode'); history.replaceState(null, '', location.pathname);
+          if(entryMode==='campaigns') await front.chooseCampaign();
+          else if(front.title) front.title.show(deskEntry,'TITLE_BACK');
+          else if(deskEntry==='customize') front.message('This mod uses its native title menu. Fleet presets are available in the standard menu.');
+        } else if (universal && params.get('universal-mode') === 'modes') {
           params.delete('universal-mode');
           history.replaceState(null, '', location.pathname);
-          await window.game.front.single();
+          await front.single();
+        } else if (['multiplayer','custom-games'].includes(params.get('title-section'))) {
+          const custom = params.get('title-section') === 'custom-games';
+          params.delete('title-section');
+          history.replaceState(null, '', location.pathname + (params.size ? '?' + params : ''));
+          await front.multiplayer(custom);
         }
         return;
       }
@@ -3602,59 +3644,26 @@ async function boot() {
   await mainMenu();
 }
 
-async function startFrontEnd(mapFile, { lobby, instant, multiplayer, load, start, universal }) {
-  if (!(await loadMap(mapFile).catch(() => null))) return false;
-  const land = (await loadMapHeader(mapFile).catch(() => null))?.kind === 1;
-  const attractSetup = {
-    attract: true,
-    direct: true,
-    benchmark: 0,
-    mapFile,
-    credits: 0,
-    popCap: 0,
-    fog: false,
-    teamFactions:
-      db.faction('Rebel') && db.faction('Underworld') ? ['Rebel', 'Underworld'] : [FACTIONS[0], FACTIONS[1] || FACTIONS[0]],
-    players: [
-      { human: true, team: 0, color: '#e0352b' },
-      { human: false, team: 1, color: '#f7c90d', difficulty: 'easy' }
-    ]
-  };
-  const game = land ? new LandGame({ ...attractSetup, mode: 'land' }, { audio, progress }) : new Game(attractSetup);
-  audio.menuOnly = true;
-  await game.start();
-  const unlock = () => {
-    audio.unlock();
-    removeEventListener('pointerdown', unlock, true);
-  };
-  addEventListener('pointerdown', unlock, true);
-  const front = (game.front = new FrontEnd(game, {
-    universal,
+async function startFrontEnd({ lobby, instant, multiplayer, playlist, mapRotation, load, start, universal }) {
+  const front = (window.game = new FrontEnd(audio, {
+    universal, load,
     skirmish: cancel => lobby(cancel),
     instant: cancel => instant(cancel),
-    multiplayer,
+    multiplayer, playlist, mapRotation,
     start,
-    leave: () => leaveTo('index.html')
+    leave: () => universal ? universal.home() : leaveTo('index.html')
   }));
   if (!(await front.open())) return false;
   hideSplash();
-  const cycle = db.constants.num('Demo_Attract_Map_Cycle_Delay_Seconds', 1200);
-  let from = 0;
-  game.attractCycle = setInterval(() => {
-    if (game.restartAttract && game.world.time - from > cycle && game.menus.stack.length === 1) {
-      game.restartAttract();
-      from = game.world.time;
-    }
-  }, 5000);
   const put = await pendingResume();
-  if (put)
-    game.menus.ask(
+  if (put && window.game === front)
+    front.menus.ask(
       'Continue your game?',
       [put.name, 'The browser closed this page while it was in the background.'],
       () => load(put.id).then(() => forgetResume()),
       () => forgetResume()
     );
-  return true;
+  return front;
 }
 
 watchBoot(boot().catch(e => {

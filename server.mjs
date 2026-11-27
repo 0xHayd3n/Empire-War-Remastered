@@ -3,8 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openGame } from './tools/megfs.mjs';
+import { mediaFile } from './tools/workshop-media.mjs';
 import { NativeFonts } from './tools/native-fonts.mjs';
-import { artRoot, photoStore, stackKey } from './tools/workshop-battle-art.mjs';
+import { artRoot, campaignOrbit, photoStore, stackKey } from './tools/workshop-battle-art.mjs';
 import zlib from 'node:zlib';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -17,6 +18,7 @@ const universalMode = process.argv.includes('--universal');
 if (universalMode && (STATIC || workshopMode || process.argv.includes('--mod') || process.env.SWR_MOD)) throw new Error('Universal profiles cannot be combined with static, Workshop or extra mod layers.');
 const assetCache = workshopMode || universalMode ? 'no-store' : 'max-age=86400';
 const PUBLIC = path.join(HERE, 'public');
+let playlistRevision; // Lazy, shared by immutable mounts for this server run.
 const defaultMods = process.argv
   .flatMap((a, i) => (a === '--mod' && process.argv[i + 1] ? [process.argv[i + 1]] : []))
   .concat((process.env.SWR_MOD || '').split(';').filter(Boolean));
@@ -120,6 +122,32 @@ const server = http.createServer(async (req, res) => {
     if (session.library && (p === '/' || p === '/index.html')) {
       res.writeHead(302, { Location: '/play.html', 'Cache-Control': 'no-store' }); return res.end();
     }
+    if (session.workshop && p.startsWith('/api/title-workshop/')) {
+      const host = `127.0.0.1:${session.port}`, origin = `http://${host}`;
+      if (req.headers.host !== host || (req.headers.origin && req.headers.origin !== origin) || req.headers['sec-fetch-site'] === 'cross-site') return send(res,403,'Use the local game window.');
+      res.setHeader('Cache-Control','no-store');
+      try {
+        if (req.method === 'GET' && p === '/api/title-workshop/catalog') return send(res,200,JSON.stringify(session.workshop.catalog()),MIME['.json']);
+        const status = /^\/api\/title-workshop\/status\/([1-9]\d{0,19})$/.exec(p);
+        if (req.method === 'GET' && status) return send(res,200,JSON.stringify(session.workshop.status(status[1])),MIME['.json']);
+        const pic = /^\/api\/title-workshop\/picture\/(\d+)$/.exec(p);
+        if (req.method === 'GET' && pic) {
+          const file = session.workshop.picture(pic[1]);
+          if (!file) return send(res,404,'Preview unavailable.');
+          return send(res,200,await fs.promises.readFile(file.file),({'.ico':'image/x-icon','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp'})[path.extname(file.file).toLowerCase()] || 'application/octet-stream',{'X-Content-Type-Options':'nosniff','Cache-Control':'private, max-age=300'});
+        }
+        if (req.method !== 'POST' || req.headers.origin !== origin) return send(res,403,'Use the Workshop tab.');
+        if (p === '/api/title-workshop/titles') return send(res,200,JSON.stringify(await session.workshop.titles()),MIME['.json']);
+        if (p === '/api/title-workshop/refresh') return send(res,200,JSON.stringify(session.workshop.catalog(true)),MIME['.json']);
+        if (p === '/api/title-workshop/prepare') {
+          let size=0; const bytes=[];
+          for await (const b of req) { if ((size+=b.length)>2048) return send(res,413,'Playset too large.'); bytes.push(b); }
+          const url=await session.workshop.prepare(JSON.parse(Buffer.concat(bytes).toString()).ids);
+          return send(res,200,JSON.stringify({url}),MIME['.json']);
+        }
+      } catch(e) { return send(res,409,e.code ? 'Playset or preview unavailable. Check the local server and try again.' : e.message); }
+      return send(res,404,'Unknown Workshop operation.');
+    }
     if (session.eras && p === '/api/universal/eras') return send(res, 200, JSON.stringify(session.eras()), MIME['.json'], { 'Cache-Control':'no-store' });
     if (session.atlas && p.startsWith('/api/universal/portraits/')) {
       const id = /^\/api\/universal\/portraits\/([a-f0-9]{64})\.png$/.exec(p)?.[1];
@@ -165,6 +193,17 @@ const server = http.createServer(async (req, res) => {
       const html = fs.readFileSync(path.join(PUBLIC, 'play.html'), 'utf8')
         .replace('</head>', `<meta name="swr-universal" content="${session.library}"><script defer src="js/universallaunch.js"></script><link rel="stylesheet" href="universal-modes.css">${session.pack ? `<meta name="swr-pack-revision" content="${session.pack.mounted.workshop}:${session.pack.revision}">` : ''}</head>`);
       return send(res, 200, html, MIME['.html'], { 'Cache-Control':'no-store', 'Document-Policy':'js-profiling' });
+    }
+    if (req.method === 'GET' && p.startsWith('/api/title-art/')) {
+      const key = /^\/api\/title-art\/(rendezvous|solo-command|fleet-command|conquest|resume|story|skirmish|instant|tutorial|archive|internet|lan|network)\.jpg$/.exec(p)?.[1];
+      const root = process.env.SWR_TITLE_ART || (process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'EaWBrowserWorkshop', 'title-art'));
+      const file = game && root && key && mediaFile(root, key + '.jpg', 1024 * 1024);
+      const bytes = file && await fs.promises.readFile(file.file).catch(() => null);
+      return send(res, bytes ? 200 : 204, bytes || '', 'image/jpeg', { 'Cache-Control': 'private, max-age=300' });
+    }
+    if (game && req.method === 'GET' && p === '/api/title-orbit.jpg') {
+      const bytes = await campaignOrbit();
+      return send(res, bytes ? 200 : 204, bytes || '', 'image/jpeg', { 'Cache-Control': 'private, no-cache' });
     }
     if (p === '/api/battle-photo') {
       res.setHeader('Cache-Control', 'no-store');
@@ -216,6 +255,16 @@ const server = http.createServer(async (req, res) => {
       const out = [];
       for (const k of gameFor(url).game.index.keys()) if (rx.test(k)) out.push(k);
       return send(res, 200, JSON.stringify(out.sort()), MIME['.json']);
+    }
+    if (p === '/api/playlist-manifest' && req.method === 'GET') {
+      try {
+        playlistRevision ||= import('./tools/playlist-build.mjs').then(m => m.playlistBuild(path.join(PUBLIC, 'js')));
+        const mods = session.pack ? [session.pack.mounted] : MODS.map(mountedMod);
+        return send(res, 200, JSON.stringify({ build: await playlistRevision, mods }), MIME['.json'], { 'Cache-Control': 'no-store' });
+      } catch {
+        playlistRevision = null;
+        return send(res, 503, 'Game build unavailable.');
+      }
     }
     if (p === '/api/mounted') {
       return send(res, 200, JSON.stringify(session.pack ? [session.pack.mounted] : MODS.map(mountedMod)), MIME['.json']);

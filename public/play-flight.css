@@ -1,0 +1,729 @@
+/* One stationary scene. Only the two foreground planes have perspective, never the input targets' children. */
+.title-menu[data-immersive] {
+  isolation: isolate;
+  display: block;
+  padding: 0;
+  background: transparent;
+}
+.title-menu[data-immersive] > header,
+.title-menu[data-immersive] .mode-heading,
+.title-menu[data-immersive] > .title-notices,
+body:has(.title-menu[data-immersive]) #buildTag {
+  display: none;
+}
+.title-menu[data-immersive] .mode-body {
+  max-width: none;
+}
+.flight-deck,
+.mm-sheet {
+  --mm-line: #d0dedf52;
+  --mm-ice: #c3d1d5;
+  --mm-gold: #f5d49d;
+  color: #f5f5ef;
+  font: 400 1rem/1.4 var(--ui-font);
+  text-transform: none;
+  letter-spacing: normal;
+}
+.flight-deck [hidden] {
+  display: none !important;
+}
+.flight-deck[data-step='lobby'] {
+  box-sizing: border-box;
+  max-width: 1800px;
+  margin: auto;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(24px, 8vh, 100px) clamp(24px, 8vw, 145px) max(16px, 3.8vh);
+}
+.front-end:has(.title-menu[data-immersive])::before {
+  inset: 0;
+  filter: none;
+  background-color: #13212b;
+  background-image: linear-gradient(0deg, #070e16e8, transparent 46%),
+    linear-gradient(90deg, #0a141ecc 0%, #0b17206e 43%, #10212d0d 74%, #0d1b2540 100%), var(--mm-photo, none), url('art/rendezvous.svg');
+  background-size: cover;
+  background-position: 50% 48%;
+  background-repeat: no-repeat;
+}
+.mm-lobby {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: clamp(28px, 8.8vw, 160px);
+  align-items: start;
+  perspective: 1600px;
+}
+.mm-left {
+  align-self: center;
+  min-width: 0;
+  transform: rotateY(3.4deg) rotateZ(-0.55deg);
+  transform-origin: 18% 60%;
+  padding-block: clamp(24px, 5vh, 64px);
+}
+.mm-wing {
+  min-width: 0;
+  margin-top: clamp(4px, 4vh, 60px);
+  transform: rotateY(-5deg) rotateZ(1deg);
+  transform-origin: 85% 25%;
+}
+.mm-kicker,
+.flight-deck small,
+.mm-eyebrow {
+  display: block;
+  font: 500 0.74rem/1.4 var(--ui-font);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--mm-ice);
+}
+.mm-kicker {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: clamp(0.78rem, 1vw, 1rem);
+  text-shadow: 0 1px 5px #000;
+}
+.mm-kicker i {
+  width: 1.7rem;
+  height: 2px;
+  background: var(--mm-gold);
+}
+.mm-kicker span {
+  color: var(--mm-gold);
+}
+.mm-mast {
+  position: relative;
+  margin: 0.45rem 0 1.05rem;
+}
+.mm-crest {
+  position: absolute;
+  right: calc(100% + 0.7rem);
+  top: 7%;
+  width: clamp(25px, 3.4vw, 58px);
+  height: 88%;
+  color: #ede8d5;
+}
+.mm-left .mm-title {
+  color: #faf9ef;
+  margin: 0;
+  font: 640 clamp(3rem, 5.65vw, 6.35rem) / 1.05 var(--ui-font);
+  letter-spacing: -0.035em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 12px #07101989;
+}
+.mm-message {
+  margin-bottom: clamp(20px, 5.3vh, 66px);
+  color: #edf1ee;
+  text-shadow: 0 2px 5px #071019;
+}
+.mm-message .mm-state {
+  font-size: 0.87rem;
+  color: var(--mm-gold);
+}
+.op-status {
+  margin: 0.16rem 0 0;
+  max-width: 48ch;
+  font-size: clamp(1rem, 1.4vw, 1.35rem);
+}
+.mm-menu {
+  display: grid;
+  border-top: 1px solid var(--mm-line);
+  border-bottom: 1px solid var(--mm-line);
+  padding: 0.35rem 0;
+  background: linear-gradient(90deg, #09131dba, #0c17218f 74%, #0c172173);
+}
+.flight-deck button,
+.mm-sheet :is(button, input, select) {
+  font-family: var(--ui-font);
+  border-radius: 0;
+}
+.mm-menu button,
+.mm-candidate {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  text-align: left;
+  min-height: clamp(41px, 5.15vh, 60px);
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: #e9eae6;
+  cursor: pointer;
+}
+.mm-menu button {
+  padding: 0.35rem 0.8rem;
+  text-transform: uppercase;
+  font-size: clamp(1rem, 1.45vw, 1.5rem);
+  font-weight: 500;
+  letter-spacing: 0.025em;
+  text-shadow: 0 1px 4px #071019;
+}
+.mm-menu button small {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+.mm-menu button strong {
+  margin-left: auto;
+  text-align: right;
+  color: #d2dcd9;
+  font-size: 0.83em;
+  font-weight: 400;
+}
+.mm-menu button[data-highlight]:enabled,
+.mm-candidate:is(:hover, :focus-visible) {
+  color: white;
+  border-left-color: var(--mm-gold);
+  background: linear-gradient(90deg, #a1a29954, #a7aaa348);
+  outline: none;
+  box-shadow: inset 0 0 0 1px #d0d3cd3b;
+}
+.mm-menu button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.mm-menu .mm-launch {
+  color: var(--mm-gold);
+}
+.mm-metrics {
+  color: var(--mm-gold);
+  font-variant-numeric: tabular-nums;
+  margin: 0.7em 0 0;
+  text-shadow: 0 2px 4px #000;
+}
+.mm-wing header,
+.mm-member,
+.mm-slot {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  box-sizing: border-box;
+  margin-bottom: 3px;
+  padding: 0.5rem 0.85rem;
+}
+.mm-wing header {
+  background: #0b141de6;
+  border-top: 2px solid #ddd0ac;
+  justify-content: space-between;
+  padding: 0.55rem 0.85rem;
+}
+.mm-wing h3 {
+  font: 540 clamp(1.25rem, 1.7vw, 2rem) / 1.16 var(--ui-font);
+  margin: 0.12rem 0;
+}
+.mm-count {
+  color: #dfdfd2;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}
+.mm-member {
+  background: linear-gradient(90deg, #9b7431f0, #70542ced);
+  border-left: 3px solid var(--mm-gold);
+  min-height: 44px;
+}
+.mm-insignia {
+  display: grid;
+  place-content: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  border: 1px solid #eed6a3a6;
+  font: 500 1.4rem/1 var(--ui-font);
+  color: #ffefcd;
+  flex: none;
+}
+.mm-member strong,
+.mm-slot span {
+  overflow-wrap: anywhere;
+  font-size: clamp(1.05rem, 1.4vw, 1.45rem);
+  font-weight: 500;
+}
+.mm-member b {
+  margin-left: auto;
+  color: #f3e7cf;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 0.76rem;
+}
+.mm-slot {
+  background: #132430c9;
+  color: #d2dbe0;
+  min-height: 43px;
+}
+.mm-slot i {
+  width: 0.55rem;
+  height: 0.55rem;
+  margin: 0 0.52rem;
+  border: 1px dashed #c5cfcf;
+  transform: rotate(45deg);
+}
+.flight-deck[data-state='ballot'] .mm-slot {
+  background: linear-gradient(90deg, #31506cdc, #1d3c52f0);
+}
+.flight-deck[data-state='ballot'] .mm-slot i {
+  border-style: solid;
+  background: #c5d6db;
+}
+.mm-brief {
+  margin-top: clamp(12px, 2vh, 26px);
+  padding: 0.75rem 0.85rem;
+  border-top: 1px solid var(--mm-line);
+  background: linear-gradient(90deg, #0d1721ca, #0e19237a);
+}
+.mm-brief h3 {
+  text-transform: uppercase;
+}
+.mm-brief p {
+  color: #dbe2df;
+  margin: 0.3rem 0 0;
+  font-size: 0.98rem;
+}
+.mm-brief .mm-record {
+  color: var(--mm-gold);
+}
+.mm-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.2rem;
+  border-top: 1px solid var(--mm-line);
+  padding-top: 0.45rem;
+  width: 100%;
+  text-shadow: 0 2px 5px #080e17;
+}
+.mm-foot button,
+.mm-select,
+.mm-sheet .mm-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 1.01rem;
+  color: #edece5;
+}
+.mm-foot button,
+.mm-sheet .mm-back {
+  min-height: 42px;
+  border: 0;
+  background: transparent;
+  padding: 0 0.16rem;
+  cursor: pointer;
+}
+.mm-foot button:hover,
+.mm-sheet .mm-back:hover {
+  color: var(--mm-gold);
+}
+.flight-deck kbd,
+.mm-sheet kbd {
+  border: 1px solid #bfcac8ac;
+  border-radius: 3px;
+  padding: 0.11rem 0.36rem;
+  background: #131e28c9;
+  color: #fbf0d8;
+  font: 500 0.72rem/1.3 var(--ui-font);
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+.mm-content {
+  margin-left: auto;
+  max-width: 45%;
+  text-align: right;
+  overflow-wrap: anywhere;
+  color: #b9c7c9;
+  font-size: 0.83rem;
+}
+.flight-deck button:focus-visible,
+.mm-sheet :is(button, select, input):focus-visible {
+  outline: 2px solid var(--mm-gold);
+  outline-offset: 2px;
+}
+.mm-manual {
+  color: #e9eff1;
+  text-align: center;
+}
+.mm-manual p {
+  margin: 0.2rem 0;
+}
+.flight-deck[data-step='custom'] + .mode-grid {
+  margin-top: 0.85rem;
+}
+
+/* Paired ballot: keep the roster in place, replacing only the left command plane. */
+.flight-deck[data-state='ballot'] .mm-left {
+  padding-block: 0.75rem;
+}
+.flight-deck[data-state='ballot'] .mm-message {
+  margin-bottom: 0.65rem;
+}
+.flight-deck[data-state='ballot'] .mm-mast {
+  margin-bottom: 0.35rem;
+}
+.mm-chart {
+  position: relative;
+  margin: 0 0 0.55rem;
+  background: linear-gradient(115deg, #263e4c, #0b1726);
+  border: 1px solid var(--mm-line);
+  height: clamp(76px, 14vh, 156px);
+  overflow: hidden;
+}
+.mm-chart-plate {
+  position: absolute;
+  inset: 0;
+  background: url('art/match-scope.svg') center/contain no-repeat;
+}
+.mm-chart figcaption {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: end;
+  padding: 0.5rem 0.75rem;
+  background: linear-gradient(90deg, #0b1729c9, transparent 65%);
+  text-shadow: 0 1px 4px #000;
+}
+.mm-chart figcaption strong {
+  font-weight: 520;
+  font-size: 1.12rem;
+  text-transform: uppercase;
+}
+.mm-vote-caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.28rem 0.4rem;
+  border-top: 1px solid var(--mm-line);
+  color: #f3e3bf;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.mm-clock {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.22rem;
+}
+.mm-options {
+  display: grid;
+  gap: 3px;
+}
+.mm-candidate {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 3.8rem 1fr 1.7rem 1rem;
+  gap: 0.65rem;
+  padding: 0.35rem 0.65rem;
+  background: #12202bcb;
+}
+.mm-thumb {
+  height: 2.45rem;
+  background: #162735 url('art/match-scope.svg') center/contain no-repeat;
+  border: 1px solid #9fbdc36b;
+}
+.mm-map-name strong {
+  font-size: 1.07rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.mm-map-name small {
+  font-size: 0.62rem;
+}
+.mm-votes {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.18rem;
+}
+.mm-choice-mark {
+  width: 0.72rem;
+  height: 0.72rem;
+  border: 1px solid #c2cec9;
+}
+.mm-candidate[aria-pressed='true'] .mm-choice-mark,
+.mm-candidate[data-winner] .mm-choice-mark {
+  background: var(--mm-gold);
+  outline: 1px solid #17222c;
+  outline-offset: -3px;
+}
+.mm-candidate[aria-pressed='true'],
+.mm-candidate[data-winner] {
+  border-left-color: var(--mm-gold);
+  background: #574d32dc;
+}
+.mm-vote-help {
+  font-size: 0.86rem;
+  color: #d5dfdf;
+  margin: 0.4rem 0;
+}
+
+.mm-sheet {
+  box-sizing: border-box;
+  width: min(58rem, 94%);
+  max-height: 90dvh;
+  overflow: auto;
+  padding: 0;
+  margin: auto;
+  border: 1px solid #859396;
+  border-top: 2px solid var(--mm-gold);
+  background: linear-gradient(115deg, #182b35f7, #0b1722f7);
+  box-shadow: 0 16px 70px #0008;
+}
+.mm-sheet::backdrop {
+  background: #09131c9c;
+}
+.mm-sheet header,
+.mm-sheet footer {
+  padding: clamp(12px, 2vw, 24px);
+  border-bottom: 1px solid var(--mm-line);
+}
+.mm-sheet h2 {
+  margin: 0.2rem 0 0;
+  font: 570 clamp(1.6rem, 3vw, 3rem) / 1.08 var(--ui-font);
+  text-transform: uppercase;
+}
+.mm-sheet-main {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 1.3fr);
+  gap: clamp(9px, 1.5vw, 22px);
+  padding: clamp(12px, 2vw, 24px);
+}
+.mm-shelf,
+.mm-fields {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.25rem;
+}
+.mm-sheet :is(select, input, button) {
+  box-sizing: border-box;
+  color: #f0f2ee;
+  background: #172a36;
+  padding: 0.52rem 0.7rem;
+  border: 1px solid #88a0a966;
+  font: 480 0.98rem/1.3 var(--ui-font);
+}
+.mm-sheet button {
+  cursor: pointer;
+}
+.mm-sheet button:hover {
+  background: #354751;
+}
+.mm-shelf small {
+  margin-bottom: 0.3rem;
+}
+.mm-shelf button {
+  min-height: 42px;
+  text-align: left;
+}
+.mm-shelf button[aria-pressed='true'] {
+  border-left: 3px solid var(--mm-gold);
+  background: #5e533ce8;
+  color: #ffebc4;
+}
+.mm-dossier {
+  padding: 0.85rem;
+  background:
+    linear-gradient(0deg, #101d27 4%, #132835b8 80%),
+    var(--mm-art, url('art/match-scope.svg')) center/cover;
+  border-top: 1px solid #899e9e;
+  overflow-wrap: anywhere;
+}
+.mm-dossier h3 {
+  margin: 0.35rem 0;
+  font: 550 clamp(1.4rem, 2vw, 2.2rem) / 1.1 var(--ui-font);
+  text-transform: uppercase;
+}
+.mm-dossier p {
+  margin: 0.3rem 0 0.6rem;
+  color: #dce5e4;
+}
+.mm-dossier strong {
+  font-size: 0.89rem;
+  color: #ead6b3;
+  font-weight: 500;
+}
+.mm-rotation {
+  margin-top: 0.65rem;
+  border-top: 1px solid var(--mm-line);
+  padding-top: 0.55rem;
+  font-size: 0.87rem;
+  color: #d3e0df;
+}
+.mm-sheet footer {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  border-bottom: 0;
+  border-top: 1px solid var(--mm-line);
+}
+.mm-sheet .mm-primary {
+  margin-left: auto;
+  flex: none;
+  color: #19252b;
+  background: #ecd1a1;
+  border-color: #f5dfb7;
+}
+.mm-sheet .mm-primary:hover {
+  background: #ffdfaa;
+}
+.mm-sheet-note {
+  color: #c5d2d7;
+  font-size: 0.88rem;
+}
+.mm-network {
+  grid-template-columns: 1fr 1fr;
+}
+.mm-fields label {
+  color: #d1dddf;
+  font-size: 0.9rem;
+}
+.mm-fields select,
+.mm-fields input {
+  display: block;
+  width: 100%;
+  margin: 0.12rem 0 0.35rem;
+}
+.mm-fields input:read-only {
+  color: #b5c5c8;
+  background: transparent;
+}
+.staging-invite,
+.staging-rules {
+  font: 550 1rem/1.3 var(--ui-font);
+  color: #eaf2f3;
+  background: #112532f2;
+  border: 1px solid #cbd7db9c;
+  padding: 0.4rem 0.8rem;
+}
+.dlg-veil > .staging-invite,
+.staging-rules {
+  position: fixed;
+  top: 1vh;
+  right: 1vw;
+  z-index: 3;
+}
+.staging-invite {
+  pointer-events: auto;
+  cursor: pointer;
+  min-height: 42px;
+}
+.staging-invite[hidden] {
+  display: none !important;
+}
+.staging-rules {
+  pointer-events: none;
+  font-size: 0.82rem;
+  max-width: 52vw;
+}
+.staging-rules strong {
+  display: block;
+  color: #ffe1aa;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+#instantBattle .staging-invite {
+  align-self: center;
+}
+@media (max-width: 720px) {
+  .flight-deck[data-step='lobby'] {
+    padding: 16px 18px 10px;
+  }
+  .mm-lobby {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+    gap: 1rem;
+    padding-block: 0.5rem 1rem;
+  }
+  .mm-left,
+  .mm-wing {
+    transform: none;
+    align-self: stretch;
+    margin: 0;
+    padding: 0;
+  }
+  .mm-mast {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin: 0.3rem 0;
+  }
+  .mm-crest {
+    position: static;
+    width: 1.6rem;
+    height: 2.4rem;
+  }
+  .mm-left .mm-title {
+    font-size: clamp(2.45rem, 8vw, 3.3rem);
+  }
+  .mm-message {
+    margin-bottom: 0.65rem;
+  }
+  .mm-menu button {
+    min-height: 42px;
+    font-size: 1rem;
+  }
+  .mm-brief {
+    margin: 0.4rem 0 0;
+    padding: 0.5rem 0.8rem;
+  }
+  .mm-wing header,
+  .mm-member,
+  .mm-slot {
+    padding: 0.37rem 0.75rem;
+    min-height: 34px;
+  }
+  .mm-wing header small {
+    display: none;
+  }
+  .mm-foot {
+    gap: 0.25rem 0.75rem;
+  }
+  .mm-content {
+    font-size: 0.73rem;
+    flex: 1;
+  }
+  .mm-sheet-main {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr);
+  }
+  .mm-dossier {
+    grid-column: 1/-1;
+    min-height: 0;
+  }
+  .mm-network {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .mm-sheet footer {
+    flex-wrap: wrap;
+  }
+  .mm-sheet-note {
+    order: -1;
+    width: 100%;
+  }
+  .flight-deck[data-state='ballot'] .mm-left {
+    padding: 0;
+  }
+  .flight-deck[data-state='ballot'] .mm-brief {
+    display: none;
+  }
+  .staging-rules {
+    font-size: 0.68rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mm-left,
+  .mm-wing {
+    transform: none;
+  }
+}
+@media (max-height: 580px) and (min-width: 721px) {
+  .flight-deck[data-step='lobby'] {
+    padding-block: 12px;
+  }
+  .mm-left {
+    padding-block: 12px;
+  }
+  .mm-message {
+    margin-bottom: 12px;
+  }
+  .mm-left .mm-title {
+    font-size: 3.2rem;
+  }
+}

@@ -91,6 +91,7 @@ export async function openMainCampaignMenu({ start, cancel = null, audio = null,
     close();
     start({
       mode: 'galactic',
+      menuFamily: 'story',
       campaign: campaign.name,
       faction: campaign.str('Starting_Active_Player'),
       difficulty,

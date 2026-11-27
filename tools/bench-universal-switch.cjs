@@ -60,6 +60,7 @@ const { chromium } = require('playwright-core'),
         gc = f.locator('[data-id="IDC_CUSTOM_CAMPAIGN_BUTTON"]'),
         board = f.locator('.uc-atlas'),
         year = board.getByRole('slider', { name: 'Starting year' });
+      await f.locator('[data-id="TITLE_PLAY"]').click();
       await f.locator('[data-id="IDC_MAIN_MENU_SINGLE_PLAYER_GAMES"]').click();
       async function measure(control, key, target) {
         await control.evaluate(

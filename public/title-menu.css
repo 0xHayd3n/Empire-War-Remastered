@@ -1,0 +1,115 @@
+/* One stationary scene. The native submenus still draw their mounted frame above it. */
+.front-end::before {
+  content: '';
+  position: fixed;
+  inset: -8px;
+  pointer-events: none;
+  background: linear-gradient(180deg, #07101a38, transparent 45%, #07101a33), var(--title-photo, none), url('art/briefings.svg#orbit'),
+    #0b1520;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: blur(2.5px) saturate(0.85);
+}
+.front-end #buildTag {
+  display: block;
+}
+.front-end:not(:has(.dlg-veil:not(.title-menu))) #frontOverlay {
+  visibility: hidden;
+}
+.title-menu {
+  --margin: clamp(24px, 6vw, 120px);
+  pointer-events: auto;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 3rem;
+  padding: clamp(28px, 7vh, 88px) var(--margin) clamp(34px, 9vh, 115px);
+  box-sizing: border-box;
+  color: #f5f7f8;
+  font-family: var(--ui-font);
+  text-transform: uppercase;
+  background: linear-gradient(90deg, #050b127a, transparent 67%), linear-gradient(0deg, #050a11c9, transparent 45%);
+}
+.title-menu nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding-inline: 0.45rem;
+}
+.title-menu nav button {
+  appearance: none;
+  min-height: 44px;
+  padding: 0.56em clamp(0.9em, 1.8vw, 1.8em);
+  border: 1.5px solid #f5f7f8c9;
+  border-radius: 0;
+  transform: skewX(-17deg);
+  color: #fff;
+  background: #14202da8;
+  backdrop-filter: blur(14px);
+  font: 600 clamp(0.92rem, 1.25vw, 1.28rem) / 1.1 var(--ui-font);
+  text-transform: uppercase;
+  letter-spacing: 0.035em;
+  cursor: pointer;
+}
+.title-menu nav button span {
+  display: block;
+  transform: skewX(17deg);
+}
+.title-menu nav button[data-current] {
+  color: #101923;
+  background: #f2f4f4;
+  border-color: #fff;
+}
+.title-menu nav button:focus-visible {
+  outline: 2px solid #f1c981;
+  outline-offset: 3px;
+}
+.title-menu nav button:active {
+  background: #d6bb92;
+  color: #101923;
+}
+.title-wordmark {
+  align-self: flex-start;
+  text-shadow: 0 2px 18px #03070c88;
+}
+.title-wordmark > span {
+  display: flex;
+  align-items: center;
+  gap: 0.9em;
+  font-size: clamp(0.8rem, 1.12vw, 1.2rem);
+  font-weight: 500;
+  letter-spacing: 0.29em;
+}
+.title-wordmark > span::after {
+  content: '';
+  width: 3.2em;
+  height: 1px;
+  background: #d7bd92;
+}
+.title-wordmark h1 {
+  margin: 0.12em 0 0.16em;
+  color: inherit;
+  font: 600 clamp(2.5rem, 6.5vw, 7rem) / 1.08 var(--ui-font);
+  letter-spacing: -0.035em;
+  text-shadow: inherit;
+}
+.title-wordmark strong {
+  display: block;
+  color: #e6cca5;
+  font-size: clamp(0.82rem, 1.25vw, 1.32rem);
+  font-weight: 400;
+  letter-spacing: 0.43em;
+}
+@media (max-width: 650px) {
+  .title-menu {
+    --margin: 20px;
+  }
+  .title-menu nav {
+    gap: 0.5rem;
+  }
+  .title-menu nav button {
+    padding-inline: 0.92em;
+  }
+}

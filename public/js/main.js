@@ -108,7 +108,7 @@ import { superweaponShot } from './game/tacticalsuperweaponcamera.js';
 import { TacticalStoryHost } from './game/tacticalstory.js';
 import { installCampaignStoryView, addStoryGoal, mergeStoryGoals } from './game/spacecampaignview.js';
 import { stepTacticalSpeech } from './game/tacticalspeech.js';
-import { isSuperweaponTarget, isTacticalSuperweapon } from './game/tacticalsuperweapon.js';
+import { isSuperweaponTarget, isTacticalSuperweapon, superweaponClipNames } from './game/tacticalsuperweapon.js';
 import { TacticalSuperweaponHUD } from './game/tacticalsuperweaponhud.js';
 import { tacticalAnnouncement } from './game/tacticalvictory.js';
 import { loadBlackMarket } from './game/blackmarket.js';
@@ -982,10 +982,10 @@ class Game {
 
   async loadSuperweaponClips(types) {
     if (!types.length) return;
-    this.superweaponClips ??= new Set((await findFiles('MODELS\\\\[^\\\\]*_ATTACK_00\\.ALA$')).map(n => n.split('\\').pop()));
+    this.superweaponClips ??= new Set((await findFiles('MODELS\\\\[^\\\\]*_ATTACK_\\d\\d\\.ALA$')).map(n => n.split('\\').pop()));
     await Promise.all(
       types
-        .map(t => animName(t.str('Space_Model_Name'), 'ATTACK'))
+        .flatMap(superweaponClipNames)
         .filter(n => this.superweaponClips.has(n))
         .map(loadALA)
     );
@@ -1189,7 +1189,9 @@ class Game {
       }
       if (o.type.behaviors().has('MARKER') || o.type.bool('Is_Marker')) continue;
       if (isSuperweaponTarget(o.type)) {
-        if (!again) w.tacticalSuperweapons.addTarget(this.placeScenery(o));
+        if (again) continue;
+        if (w.tacticalSuperweapons.planet?.destroyed) this.placeDestroyedPlanetRemains(o);
+        else w.tacticalSuperweapons.addTarget(this.placeScenery(o));
         continue;
       }
       if (!again) {
@@ -1388,6 +1390,15 @@ class Game {
         this.renderer.sceneryBillboards = this.renderer.sceneryBillboards.filter(a => a !== inst);
       }
     };
+  }
+
+  // A world already destroyed shows what its planet prop leaves behind when a Death Star fires on it.
+  placeDestroyedPlanetRemains(planetProp) {
+    const transform = { x: planetProp.pos[0], y: planetProp.pos[1], z: planetProp.pos[2], rotation: planetProp.rot, scale: planetProp.scale || 1 };
+    for (const name of planetProp.type.list('Death_By_TSW_Replacements')) {
+      const type = db.type(name);
+      if (type) this.tacticalReplacement(type, transform);
+    }
   }
 
   tacticalReplacement(type, transform) {
@@ -3038,6 +3049,23 @@ async function boot() {
         window.game?.releaseDirect?.();
         window.game?.ui?.releaseDirect?.();
       }
+    };
+  }
+  {
+    const box = $('optPlanetFinder');
+    let on = false;
+    try {
+      on = localStorage.getItem('swr-planet-finder') === '1';
+    } catch {}
+    box.checked = on;
+    window.planetFinder = on;
+    box.parentElement.title =
+      'In galactic conquest, a panel listing the planets with a search box and the recent events you could see. Drag it by its title, resize it from its corner, and use its cog to choose what it lists.';
+    box.onchange = () => {
+      window.planetFinder = box.checked;
+      try {
+        localStorage.setItem('swr-planet-finder', box.checked ? '1' : '0');
+      } catch {}
     };
   }
   {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { openGame } from './megfs.mjs';
-const archive = openGame(fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)), []);
+const archive = openGame(process.env.SWR_GAME || fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)), []);
 globalThis.fetch = async input => {
   const key = archive.resolve(decodeURIComponent(String(input).replace(/^asset\//, '').split('?')[0])),
     data = key && archive.read(key);
@@ -16,7 +16,9 @@ const { PendingBattle } = await import('../public/js/game/galacticpending.js');
 const { GalacticLog } = await import('../public/js/game/galacticlog.js');
 const { galaxyHash } = await import('../public/js/game/galacticnet.js');
 const { campaignDefaults, applyGroundAutoResolve } = await import('../public/js/game/campaignsettings.js');
-const { searchPlanets, recordLocation, locationRows, locationEntries, LOCATION_LIMIT } = await import(
+const { witnessed, FleetWatch, approachText } = await import('../public/js/game/galacticwitness.js');
+const { relation } = await import('../public/js/game/galacticrelation.js');
+const { searchPlanets, recordLocation, locationRows, locationEntries, LOCATION_LIMIT, planetKind, eventShown, defaultPrefs } = await import(
   '../public/js/game/galacticsearch.js'
 );
 
@@ -42,7 +44,11 @@ const searchGame = () => ({
   assert.deepEqual(searchPlanets(g, 'CALA').map(r => r.name), ['Mon Calamari'], 'any part of the name, any case');
   assert.deepEqual(searchPlanets(g, 'endor').map(r => r.name), ['Éndor'], 'accents do not matter');
   assert.deepEqual(searchPlanets(g, 'hidden'), [], 'background bodies are not planets');
-  assert.deepEqual(searchPlanets(g, '  '), [], 'an empty box finds nothing');
+  assert.deepEqual(
+    searchPlanets(g, '  ').map(r => r.name),
+    ['Corellia', 'Corulag', 'Coruscant', 'Éndor', 'Kuat', 'Mon Calamari'],
+    'an empty box lists every planet alphabetically'
+  );
   assert.equal(searchPlanets(g, 'o', 2).length, 2, 'the list is capped');
   assert.equal(searchPlanets(g, 'cor')[0].index, 1, 'the result carries the planet index to select');
   g.planetViews[1].name = 'Renamed';
@@ -93,11 +99,12 @@ const focus = (extra = {}) => {
 const logGame = () => {
   const galaxy = startingGalaxy(data, campaign),
     shown = [];
-  const game = { galaxy, me: galaxy.players[0].faction, locationUI: { refresh: () => shown.push(1) }, planetViews: [] };
+  const game = { galaxy, me: galaxy.players[0].faction, locationUI: { added: () => shown.push(1) }, planetViews: [] };
   return { game, galaxy, shown, log: new GalacticLog(game, null) };
 };
 {
   const { game, galaxy, shown, log } = logGame();
+  galaxy.visibility = { planets: galaxy.planets.map(() => ({ discovered: true, ownerKnown: true, mask: 0 })) };
   galaxy.time = 130;
   const before = galaxyHash({ galaxy });
   galaxy.time = 65;
@@ -241,4 +248,123 @@ for (const net of [false, true]) {
     assert.ok(!outcomes.includes('resolve'));
   }
 }
+// ---- recent events only hold what the local player could see ----
+{
+  const { game, galaxy, log } = logGame();
+  const me = game.me,
+    mine = galaxy.planets.find(p => !p.background && p.owner === me),
+    far = galaxy.planets.find(p => !p.background && p.owner && p.owner !== me);
+  galaxy.visibility = { planets: galaxy.planets.map(() => ({ discovered: true, ownerKnown: false, mask: 0 })) };
+  assert.equal(witnessed(galaxy, mine, me), true, 'your own planet is always in sight');
+  assert.equal(witnessed(galaxy, far, me), false, 'a planet in the fog is not');
+  log.message('Taken in the fog', { planet: far.index });
+  assert.equal(locationEntries(galaxy).length, 0, 'a capture nobody saw is not in recent events');
+  galaxy.visibility.planets[far.index].ownerKnown = true;
+  log.message('Taken in sight', { planet: far.index });
+  assert.deepEqual(locationEntries(galaxy).map(e => e.text), ['Taken in sight'], 'one in sight is');
+  galaxy.time = (galaxy.time || 0) + 2;
+  log.message('Taken in sight', { planet: far.index });
+  assert.equal(locationEntries(galaxy).length, 1, 'the same news a moment later is kept once');
+  galaxy.time += 10;
+  log.message('Taken in sight', { planet: far.index });
+  assert.equal(locationEntries(galaxy).length, 2, 'but not forever');
+}
+
+// ---- the panel's filters ----
+{
+  const { game, galaxy, log } = logGame();
+  const me = game.me,
+    foe = galaxy.players.map(p => p.faction).find(f => relation(f, me) === 1),
+    mine = galaxy.planets.find(p => !p.background && p.owner === me),
+    theirs = galaxy.planets.find(p => !p.background && p.owner === foe);
+  galaxy.visibility = { planets: galaxy.planets.map(() => ({ discovered: true, ownerKnown: false, mask: 0 })) };
+  assert.equal(planetKind(game, mine), 'own');
+  assert.equal(planetKind(game, theirs), 'unknown', 'an owner never seen is unknown');
+  galaxy.visibility.planets[theirs.index].ownerKnown = true;
+  assert.equal(planetKind(game, theirs), 'enemy');
+  galaxy.visibility.planets.forEach(v => (v.ownerKnown = true));
+  log.message('Taken', { planet: mine.index, kind: 'capture' });
+  log.locate(mine.index, 'Corvette produced', 'production');
+  assert.deepEqual(locationEntries(galaxy).map(e => e.kind), ['capture', 'production'], 'events carry their kind');
+  const prefs = defaultPrefs();
+  prefs.events.production = false;
+  assert.deepEqual(
+    locationRows(game, 60, e => eventShown(prefs, e)).map(r => r.text),
+    ['Taken'],
+    'a turned-off kind is not listed'
+  );
+  assert.equal(eventShown(prefs, { text: 'old save' }), true, 'entries from before kinds are always listed');
+}
+
+// ---- a fought battle goes into recent events like an auto-resolved one ----
+{
+  const galaxy = startingGalaxy(data, campaign),
+    me = galaxy.players[0].faction,
+    foe = galaxy.players.map(p => p.faction).find(f => relation(f, me) === 1),
+    units = galaxy.fleets.find(f => f.units.length)?.units || [],
+    planet = galaxy.planets.find(p => !p.background && p.owner === me);
+  galaxy.fleets = [
+    { owner: me, planet: planet.index, leg: null, units: [units[0], units[0]] },
+    { owner: foe, planet: planet.index, leg: null, units: [units[0], units[0], units[0]] }
+  ];
+  const located = [];
+  const game = { galaxy, me, galacticLog: { locate: (...a) => located.push(a) } };
+  Object.setPrototypeOf(game, GalacticGame.prototype);
+  // the enemy loses all three ships, you lose one of two
+  const r = { mode: 'space', planet: planet.index, sides: [foe, me], alive: ['0:0'], winner: 'defender' };
+  const tally = game.battleTally(r);
+  assert.deepEqual([tally.mine, tally.theirs, tally.won], [1, 3, true], 'losses on each side, from your side');
+  game.logBattle(r, tally);
+  assert.equal(located.length, 1);
+  assert.deepEqual([located[0][0], located[0][2]], [planet.index, 'battle'], 'logged at the planet as a battle');
+  const { battleLine } = await import('../public/js/game/galacticpending.js');
+  assert.equal(located[0][1], battleLine(me, true, true, db.t(planet.type.str('Text_ID')) || planet.name, 1, 3), 'with the auto-resolve line');
+  const empty = galaxy.planets.find(p => !p.background && !p.garrison.length && !p.groundStructures.length);
+  if (empty) {
+    const landing = { mode: 'land', planet: empty.index, sides: [me, empty.owner], participants: [], alive: [], winner: 'attacker' };
+    game.logBattle(landing, game.battleTally(landing));
+    assert.equal(located.length, 1, 'landing on an undefended planet is no battle');
+  }
+}
+
+// ---- fleets the local player sees move ----
+{
+  const galaxy = startingGalaxy(data, campaign),
+    me = galaxy.players[0].faction,
+    foe = galaxy.players.map(p => p.faction).find(f => relation(f, me) === 1),
+    units = galaxy.fleets.find(f => f.units.length)?.units.slice(0, 1) || [];
+  assert.ok(foe && units.length, 'an enemy and some ships to move');
+  const mine = galaxy.planets.find(p => !p.background && p.owner === me),
+    other = galaxy.planets.find(p => !p.background && p.owner !== me);
+  galaxy.visibility = { planets: galaxy.planets.map(() => ({ discovered: true, ownerKnown: true, mask: 0, fleetOverlay: true })) };
+  const fleet = { owner: foe, planet: other.index, leg: null, units, pos: other.pos.slice() };
+  galaxy.fleets = [fleet];
+  const watch = new FleetWatch();
+  assert.deepEqual(watch.step(galaxy, me), [], 'the first look is not news');
+  fleet.leg = { a: other.index, b: mine.index, from: other.pos, to: mine.pos, dir: [1, 0, 0], speed: 1, t: 0 };
+  const left = watch.step(galaxy, me);
+  assert.ok(left.some(([p, text, kind]) => p === other.index && /fleet left/.test(text) && kind === 'fleet'), 'a fleet leaving a planet in sight');
+  assert.ok(
+    left.some(([p, text, kind]) => p === mine.index && text === approachText(mine) && kind === 'approach'),
+    'an enemy fleet heading for your planet, with no fleet of yours there'
+  );
+  assert.deepEqual(watch.step(galaxy, me), [], 'the same course is reported once');
+  fleet.leg = null;
+  fleet.planet = mine.index;
+  assert.deepEqual(
+    watch.step(galaxy, me).map(([p, text]) => [p, /fleet arrived/.test(text)]),
+    [[mine.index, true]],
+    'its arrival in sight'
+  );
+  galaxy.visibility.planets.forEach(v => (v.fleetOverlay = false));
+  fleet.leg = { a: mine.index, b: other.index, from: mine.pos, to: other.pos, dir: [1, 0, 0], speed: 1, t: 0 };
+  fleet.planet = mine.index;
+  assert.ok(!watch.step(galaxy, me).some(([, text]) => /fleet left/.test(text)), 'fleets the map does not show are not reported');
+  const own = { owner: me, planet: mine.index, leg: null, units, pos: mine.pos.slice() };
+  galaxy.fleets.push(own);
+  watch.step(galaxy, me);
+  own.leg = { a: mine.index, b: other.index, from: mine.pos, to: other.pos, dir: [1, 0, 0], speed: 1, t: 0 };
+  assert.deepEqual(watch.step(galaxy, me), [], 'your own fleets are not news');
+}
+
 console.log('gc qol ok');

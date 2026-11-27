@@ -95,7 +95,7 @@ import { stepIncome, orbitFleets, cycleNumber, creditCap } from './galacticecono
 import { GalacticAI } from './galacticai.js';
 import { GalacticBattles } from './galacticbattles.js';
 import { packContrast, orbitBombingRun } from './galacticautoresolve.js';
-import { PendingBattle, PENDING_SHELLS } from './galacticpending.js';
+import { PendingBattle, PENDING_SHELLS, battleLine } from './galacticpending.js';
 import { GalacticVictory } from './galacticvictory.js';
 import { destroyedPlanetModel, destroyPlanet, hasPlanetDestruction } from './planetdestruction.js';
 import { campaignScore } from './campaignscore.js';
@@ -1504,7 +1504,8 @@ export class GalacticGame {
       this.galacticLog?.message(String(db.t('TEXT_ENEMY_FLEET_APPROACHING_LOCATION')).replace('##0', name), {
         urgent: true,
         color: [0, 193, 91],
-        planet: p.index
+        planet: p.index,
+        kind: 'approach'
       });
       this.audio?.play(db.faction(this.me)?.str('SFXEvent_Enemy_Fleet_Approaching_Planet'));
     }
@@ -1523,7 +1524,7 @@ export class GalacticGame {
     const args = [db.t(planet.type.str('Text_ID')) || planet.name, name(old), name(now), bonus];
     this.galacticLog?.message(
       text.replace(/%l?[sd]/g, () => String(args.shift() ?? '')),
-      { urgent: false, color: [255, 24, 39], planet: planet.index }
+      { urgent: false, color: [255, 24, 39], planet: planet.index, kind: 'capture' }
     );
     if (mine && bonus) this.audio?.playAudioEvent('SFXEvent_Planet_Capture_Bonus_Reward');
     const faction = db.faction(this.me);
@@ -1699,11 +1700,9 @@ export class GalacticGame {
     const out = [];
     for (const p of this.galaxy.planets) {
       const v = intelligence(this.galaxy, p);
-      const abilityTarget =
-        !p.destroyed && this.dragFleet?.planet === p.index && this.dragFleet.units.some(u => hasPlanetDestruction(u.carries || u.type));
-      if (p.background || p.destroyed || !v?.discovered || (!p.type.bool('Planet_Surface_Accessible', true) && !abilityTarget)) continue;
+      if (p.background || p.destroyed || !v?.discovered || !p.type.bool('Planet_Surface_Accessible', true)) continue;
       const units = v.groundCount ? p.garrison.filter(u => u.owner === p.owner) : [];
-      const target = abilityTarget || (this.dragFleet?.planet === p.index && canLand(this.galaxy, this.dragFleet, p.index));
+      const target = this.dragFleet?.planet === p.index && canLand(this.galaxy, this.dragFleet, p.index);
       if (!units.length && !target) continue;
       const point = this.overlayPoint(p.pos, 0, this.groundComp.offset[1], ui);
       if (point) out.push({ p: p.index, units, empty: !units.length, ...point });
@@ -2521,15 +2520,27 @@ export class GalacticGame {
                 : SLOTS.find(s => s.code === { steal: 1, smuggle: 5, blackmarket: 9, sabotage: 2, corrupt: 7 }[kind]) || null;
             if (slot) break;
           }
-      if (!slot && hero) {
-        const s = slotFor(this, record, p, f.owner);
-        if (s && (f.units.length === 1 || s.code === 6)) slot = s;
+      let slotRecord = record;
+      if (!slot) {
+        const destroyer = this.planetDestroyerSlot(f, p);
+        if (destroyer) ({ slot, record: slotRecord } = destroyer);
       }
+      if (!slot && hero && f.units.length === 1) slot = slotFor(this, record, p, f.owner);
       if (!slot) continue;
       const point = this.overlayPoint(p.pos, this.specialComp.offset[0], 0, ui);
-      if (point) out.push({ p: p.index, slot, record: raid ? null : record, raid, ...point });
+      if (point) out.push({ p: p.index, slot, record: raid ? null : slotRecord, raid, ...point });
     }
     return out;
+  }
+
+  // The destroy-planet slot is offered for any fleet that carries a planet destroyer, whatever else it holds.
+  planetDestroyerSlot(fleet, planet) {
+    for (const record of fleet.units) {
+      if (!hasPlanetDestruction(record.carries || record.type)) continue;
+      const slot = slotFor(this, record, planet, fleet.owner);
+      if (slot?.code === 6) return { slot, record };
+    }
+    return null;
   }
 
   get busy() {
@@ -3232,7 +3243,8 @@ export class GalacticGame {
     if (r.mode !== 'land') this.victory.superweaponBattle(r);
     this.victory.tacticalDeaths(r);
     const story = this.story,
-      context = story && this.galaxy.planets[r.planet] ? story.battleContext(this.galaxy.planets[r.planet], r.sides) : null;
+      context = story && this.galaxy.planets[r.planet] ? story.battleContext(this.galaxy.planets[r.planet], r.sides) : null,
+      tally = this.battleTally(r);
     const told = (planet, dead, winnerIndex, space) => {
       if (r.sides && planet) this.ai?.plans?.conflict?.(planet, r.sides, space, false);
       if (!story) return;
@@ -3274,6 +3286,7 @@ export class GalacticGame {
         story?.planetCaptured(pl, old);
       }
       if (pl) told(pl, dead, r.winner === 'attacker' ? 0 : 1, false);
+      this.logBattle(r, tally);
       this.lastResult = r;
       return;
     }
@@ -3328,7 +3341,51 @@ export class GalacticGame {
     if (r.planetDestroyed) destroyPlanet(this, pl, false);
     told(pl, lost, r.winner === 'attacker' ? 0 : 1, true);
     for (const u of wrecked) u.dead = true;
+    this.logBattle(r, tally);
     this.lastResult = r;
+  }
+
+  // Losses on each side of a fought battle, counted before the result is applied, from the side of the local
+  // player (or the attacker when they only watched). A landing on a planet nobody defends is no battle.
+  battleTally(r) {
+    const g = this.galaxy,
+      pl = g.planets[r.planet];
+    if (!pl || !r.sides || !r.winner) return null;
+    const up = s => String(s ?? '').toUpperCase(),
+      local = this.localFaction ?? this.me,
+      side = r.sides.some(s => up(s) === up(local)) ? local : r.sides[0],
+      alive = new Set(r.alive || []),
+      tally = { side, mine: 0, theirs: 0, defenders: 0 };
+    const count = (owner, gid) => {
+      if (alive.has(gid)) return;
+      if (up(owner) === up(side)) tally.mine++;
+      else tally.theirs++;
+    };
+    if (r.mode === 'land') {
+      for (const gid of r.participants || []) {
+        const [fi, ui] = String(gid).split(':').map(Number);
+        if (g.fleets[fi]?.units[ui]) count(g.fleets[fi].owner, gid);
+      }
+      const defender = up(r.sides[1]);
+      pl.garrison.forEach((u, i) => up(u.owner) === defender && (tally.defenders++, count(u.owner, 'g:' + i)));
+      pl.groundStructures.forEach((u, i) => up(u.owner) === defender && (tally.defenders++, count(u.owner, 's:' + i)));
+    } else {
+      g.fleets.forEach((f, fi) => {
+        if (f.planet === r.planet && !f.leg && this.inBattle(f, r)) f.units.forEach((u, ui) => count(f.owner, fi + ':' + ui));
+      });
+      tally.defenders = 1;
+    }
+    const winner = r.winner === 'attacker' ? r.sides[0] : r.sides[1];
+    tally.won = up(winner) === up(side) || relation(winner, side) === 0;
+    return tally;
+  }
+
+  // a fought battle goes into recent events with the same line an auto-resolved one gets
+  logBattle(r, t) {
+    const pl = this.galaxy.planets[r.planet];
+    if (!t || !pl || !t.defenders) return;
+    const name = db.t(pl.type.str('Text_ID')) || pl.name;
+    this.galacticLog?.locate(r.planet, battleLine(t.side, t.won, r.mode !== 'land', name, t.mine, t.theirs), 'battle');
   }
   inBattle(f, r) {
     return r.sides ? r.sides.includes(f.owner) : true;
@@ -3380,19 +3437,6 @@ export class GalacticGame {
 
   land(fleet, p, { records = null, raid = false } = {}) {
     const chosen = records ? fleet.units.filter(u => records.includes(u)) : fleet.units;
-    if (
-      !this.over &&
-      !this.busy &&
-      fleet.owner === this.me &&
-      fleet.planet === p &&
-      !fleet.leg &&
-      chosen.some(
-        u =>
-          hasPlanetDestruction(u.carries || u.type) &&
-          this.story?.activate(this.story.object(u, this.galaxy.planets[p], fleet.owner).__object)
-      )
-    )
-      return true;
     if (this.busy || fleet.owner !== this.me || !canLand(this.galaxy, fleet, p, { raid })) return false;
     const pl = this.galaxy.planets[p],
       troops = invasionForces(this.galaxy, p, fleet.owner).filter(({ gid }) => {
@@ -4132,7 +4176,7 @@ export class GalacticGame {
           if (x.owner === this.me)
             this.galacticLog?.message(
               String(db.t('TEXT_TOOLTIP_INTERRUPTED_PRODUCTION')).replace('%s', db.t(x.planet.type.str('Text_ID')) || x.planet.name),
-              { urgent: true, color: [0, 193, 91], planet: x.planet.index }
+              { urgent: true, color: [0, 193, 91], planet: x.planet.index, kind: 'production' }
             );
         if (completed.length) {
           this.mergeFleets();
@@ -4140,7 +4184,7 @@ export class GalacticGame {
           for (const done of completed) if (done.owner === this.me) this.audio.play(done.type.str('SFXEvent_Build_Complete'));
           for (const done of completed)
             if (done.owner === (this.localFaction ?? this.me))
-              this.galacticLog?.locate(done.planet, (db.t(done.type.str('Text_ID')) || done.type.name) + ' produced');
+              this.galacticLog?.locate(done.planet, (db.t(done.type.str('Text_ID')) || done.type.name) + ' produced', 'production');
           for (const done of completed)
             if (done.tech !== undefined) {
               this.story?.signalTech(done.owner, done.tech);

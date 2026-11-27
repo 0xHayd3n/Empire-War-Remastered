@@ -15,6 +15,7 @@ import { layoutSelectionPanels, slotClickSelection } from './commandbargroups.js
 import { abilityLocked } from './blackmarket.js';
 import { battlePlanetName } from './battleplanet.js';
 import { playerSpecial } from './superweapon.js';
+import { SuperLaserSwitch } from './superlaserswitch.js';
 import { withKey, keysOf, keyName, onBindingsChange } from './keybinds.js';
 import { TooltipGate } from './tooltipgate.js';
 import { loadBarSkins, textureKey, decodeSkinIcons } from './barskins.js';
@@ -1028,6 +1029,7 @@ export class CommandBar {
       clock.style.display = 'none';
       this.weaponClock = clock;
     }
+    this.superLaser = game.world.tacticalSuperweapons ? new SuperLaserSwitch(this, ui, game) : null;
     this.bPing = this.button('b_special_weapon2', {
       title: db.t('TEXT_PLACE_BEACON') || 'Place beacon',
       onClick: () => {
@@ -1665,6 +1667,7 @@ export class CommandBar {
       if (this.weaponClock.style.display !== (on ? '' : 'none')) this.weaponClock.style.display = on ? '' : 'none';
       if (on) this.weaponClock.style.setProperty('--cd', 100 * charge + '%');
     }
+    this.superLaser?.refresh();
     this.bPing.classList.toggle('dis', !game.beaconReady?.());
     this.bPing.classList.toggle('sel', ui.armed === 'beacon');
     this.bReinforce.classList.toggle('flash', reinforcing && p.reinforcements.length > 0 && !this.reinforceOpen);

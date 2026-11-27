@@ -1,6 +1,6 @@
 # UI art direction: start with the loading card
 
-The loading cards are the reference for new Remastered UI. Modern Battlefront (2015/2017) informs the **hierarchy**: the scene comes first, the title orients the player, the controls make the next decision clear. Empire at War contributes a little warmth and its faction identities, not a gold frame around every control.
+The loading cards are the reference for new Remastered UI. The browser checks described below were written for the earlier classic setup screens; their sources are preserved in [`experiments/pre-universal/classic/tools/`](../experiments/pre-universal/classic/tools/). For current Universal screens, review the mounted window and use `npm run test:title-menu` or `npm run test:universal-solo-setup`. Modern Battlefront (2015/2017) informs the **hierarchy**: the scene comes first, the title orients the player, the controls make the next decision clear. Empire at War contributes a little warmth and its faction identities, not a gold frame around every control.
 
 ## Choose the reference before drawing the screen
 

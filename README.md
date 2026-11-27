@@ -17,6 +17,8 @@ npm ci
 npm run universal
 ```
 
+Already cloned `remastered`? With your work saved, run `git fetch origin`, then `git switch nightly` and `npm ci`. Future updates on that branch are `git pull --ff-only`.
+
 Open **[http://127.0.0.1:8590/](http://127.0.0.1:8590/)** and keep the terminal running. You should see **Home** with **Play**, **Workshop** and **Army Painter**. Try **Play → Single Player → Skirmish** for a battle, or **Galactic Conquest → Galactic Civil War** for a stock campaign. Close the server with `Ctrl+C`. On Windows, double-clicking `Universal Library.cmd` starts the same game.
 
 - **Game not found?** The launcher checks Steam libraries. For a different install, set `SWR_GAME` to the folder containing **both** `GameData` and `corruption`, then restart. For example, in PowerShell: `$env:SWR_GAME = 'D:\Games\Star Wars Empire at War'`. Set `STEAM_PATH` to your Steam client directory if Workshop discovery misses your library.

@@ -45,7 +45,7 @@ jobs:
             echo 'Conflicts: nightly was not changed. [Compare the branches](https://github.com/0xHayd3n/Empire-War-Remastered/compare/nightly...Glenn332:Empire-At-War-Browser-Edition:main).' >> "$GITHUB_STEP_SUMMARY"
             git diff --name-only --diff-filter=U | tee -a "$GITHUB_STEP_SUMMARY"; exit 1
           fi
-          if ! git diff --cached --quiet -- .github/workflows tools/nightly-publish.mjs tools/install-nightly-sync.ps1 CNAME public/CNAME; then
+          if ! git diff --cached --quiet -- .github/workflows tools/nightly-publish.mjs tools/nightly-task.cjs tools/install-nightly-sync.ps1 CNAME public/CNAME; then
             echo 'A workflow, publisher, or hosting change needs maintainer review; nightly was not changed.' >> "$GITHUB_STEP_SUMMARY"; exit 1
           fi
           printf 'base=%s\ntip=%s\ntree=%s\n' "$base" "$tip" "$(git write-tree)" >> "$GITHUB_OUTPUT"
@@ -82,7 +82,7 @@ jobs:
             echo 'A branch advanced during testing. Retry on the next run.' >> "$GITHUB_STEP_SUMMARY"; exit 0
           fi
           tree=$(git merge-tree --write-tree "$BASE" "$TIP"); test "$tree" = "$EXPECTED_TREE"
-          git diff --quiet "$BASE" "$tree" -- .github/workflows tools/nightly-publish.mjs tools/install-nightly-sync.ps1 CNAME public/CNAME
+          git diff --quiet "$BASE" "$tree" -- .github/workflows tools/nightly-publish.mjs tools/nightly-task.cjs tools/install-nightly-sync.ps1 CNAME public/CNAME
           git config user.name 'Nightly upstream sync'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           commit=$(git commit-tree "$tree" -p "$BASE" -p "$TIP" -m "Merge Browser Edition main ${TIP:0:10} into nightly")
           git push origin "$commit:refs/heads/nightly"

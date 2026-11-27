@@ -2,9 +2,9 @@ name: Source checks
 
 on:
   push:
-    branches: [remastered]
+    branches: [nightly, remastered]
   pull_request:
-    branches: [remastered]
+    branches: [nightly, remastered]
   workflow_dispatch:
 
 permissions:
@@ -21,16 +21,5 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Test without retail data
-        run: |
-          npm run test:universal
-          npm run test:workshop
-          npm run test:submods
-          npm run test:deploy
-          npm run test:battlefront
-          npm run test:painter
-          npm run test:immersive-weather
-          npm run test:remaster-maps
-          node tools/test-player-prefs.mjs
-          node --test tools/test-tactical-movement.mjs tools/test-ram-impacts.mjs tools/test-mod-death-coverage.mjs tools/test-detailed-breakup.mjs tools/articulated-ragdoll/articulated.test.mjs
-      - run: npm run build:prod
+      - name: Check engine, physics, maps and production build without retail data
+        run: npm run check:nightly

@@ -2,7 +2,7 @@
 
 Empire War Remastered is 0xHayd3n’s unofficial fork of RIRA’s [Empire at War: Browser Edition](https://github.com/Glenn332/Empire-At-War-Browser-Edition). It runs *Star Wars: Empire at War* and *Forces of Corruption* in a desktop browser using the files from your own Gold Pack installation. It is not a patch for the retail executable, and it does not include the game or any Workshop mod.
 
-**Development build:** `remastered` includes the current Universal engine, remastered battlefields and unfinished experiments. To try it, fight on Endor with the forest overhaul, paint a fleet, or compare the same battle with its original scenery. Settings and save behavior can change between commits. The [earlier checkpoint](https://github.com/0xHayd3n/Empire-War-Remastered/tree/29a04135410f08a2b526346e132400f29d6f934d) predates the physics and map work.
+**Nightly development build:** `nightly` follows the Universal checkout and includes the current Universal engine, remastered battlefields and unfinished experiments. To try it, fight on Endor with the forest overhaul, paint a fleet, or compare the same battle with its original scenery. Settings and save behavior can change between commits. The [earlier checkpoint](https://github.com/0xHayd3n/Empire-War-Remastered/tree/29a04135410f08a2b526346e132400f29d6f934d) predates the physics and map work.
 
 **Where it comes from:** The browser engine, land and space battles, Galactic Conquest, multiplayer and mod loading are the work this fork builds on. [PlayEAW.com](https://playeaw.com) hosts **upstream Browser Edition**, not Remastered.
 
@@ -11,7 +11,7 @@ Empire War Remastered is 0xHayd3n’s unofficial fork of RIRA’s [Empire at War
 You need your own installed **Empire at War – Gold Pack** (both the base game and expansion), [Node.js 22 or later](https://nodejs.org/) with npm, and a current desktop browser such as Chrome or Edge. No Workshop subscription or native build is required for stock play. The checkout includes the remaster materials and browser runtimes so you do not have to cook textures or compile physics yourself.
 
 ```sh
-git clone --branch remastered https://github.com/0xHayd3n/Empire-War-Remastered.git
+git clone --branch nightly https://github.com/0xHayd3n/Empire-War-Remastered.git
 cd Empire-War-Remastered
 npm ci
 npm run universal
@@ -58,6 +58,8 @@ The Universal library recognizes **Thrawn’s Revenge**, **Fall of the Republic*
 To test multiplayer on **one computer**, run `npm ci --prefix lobby` once, then `npm run relay:local` in a second terminal and select the local relay in the game. Use separate browser profiles for the two players. **Across computers**, both players need a matching build, edition and mod order, and the same reachable compatible relay. The loopback command does not deploy an internet service.
 
 ## Development and reporting
+
+[How Nightly publishes Universal changes and checks for upstream updates](docs/nightly.md). A Nightly commit can include unfinished work; a clean source build does not certify every campaign, mod or renderer.
 
 The browser code is in [`public/js/`](public/js/), the simulation and UI in [`public/js/game/`](public/js/game/), the local launchers and tests in [`tools/`](tools/), and the optional relay in [`lobby/`](lobby/). To check a checkout **without retail files**:
 

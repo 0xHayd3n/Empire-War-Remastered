@@ -21,6 +21,7 @@
     "test:universal-first-map": "node tools/check-universal-first-map.cjs",
     "test:universal-planet-launch": "node tools/check-universal-planet-launch.cjs",
     "bench:universal-skirmish": "node tools/bench-universal-skirmish.cjs",
+    "check:nightly": "npm run test:universal && npm run test:workshop && npm run test:submods && npm run test:deploy && npm run test:battlefront && npm run test:painter && npm run test:immersive-weather && npm run test:remaster-maps && node tools/test-player-prefs.mjs && node --test tools/test-tactical-movement.mjs tools/test-ram-impacts.mjs tools/test-mod-death-coverage.mjs tools/test-detailed-breakup.mjs tools/articulated-ragdoll/articulated.test.mjs && npm run build:prod",
     "test:remaster-maps": "node tools/test-endor-landscape.mjs && node tools/test-yavin-recipe.mjs && node tools/test-arid-substrate.mjs && node tools/test-hoth-recipe.mjs && node tools/test-badlands.mjs && node tools/test-naboo-recipe.mjs && node tools/test-utapau-recipe.mjs",
     "test:frame-median": "node tools/test-frame-median.mjs",
     "test:universal-solo-setup": "node tools/test-skirmish-setup.mjs && node tools/check-universal-solo-setup.cjs",

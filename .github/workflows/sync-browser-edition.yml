@@ -1,0 +1,89 @@
+name: Sync Browser Edition into Nightly
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '27 */6 * * *'
+
+concurrency:
+  group: nightly-upstream-sync
+  cancel-in-progress: false
+permissions:
+  contents: read
+
+env:
+  UPSTREAM: https://github.com/Glenn332/Empire-At-War-Browser-Edition.git
+
+jobs:
+  candidate:
+    if: github.repository == '0xHayd3n/Empire-War-Remastered' && github.ref == 'refs/heads/nightly'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      base: ${{ steps.merge.outputs.base }}
+      tip: ${{ steps.merge.outputs.tip }}
+      tree: ${{ steps.merge.outputs.tree }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: nightly
+          fetch-depth: 0
+          persist-credentials: false
+      - id: merge
+        name: Prepare a real merge; conflicts require review
+        shell: bash
+        run: |
+          set -eu
+          git fetch --no-tags "$UPSTREAM" refs/heads/main
+          base=$(git rev-parse HEAD); tip=$(git rev-parse FETCH_HEAD)
+          echo "Nightly: $base; upstream main: $tip" >> "$GITHUB_STEP_SUMMARY"
+          if git merge-base --is-ancestor "$tip" "$base"; then
+            echo 'Already up to date.' >> "$GITHUB_STEP_SUMMARY"; exit 0
+          fi
+          git config user.name 'Nightly upstream sync'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if ! git merge --no-ff --no-commit "$tip"; then
+            echo 'Conflicts: nightly was not changed. [Compare the branches](https://github.com/0xHayd3n/Empire-War-Remastered/compare/nightly...Glenn332:Empire-At-War-Browser-Edition:main).' >> "$GITHUB_STEP_SUMMARY"
+            git diff --name-only --diff-filter=U | tee -a "$GITHUB_STEP_SUMMARY"; exit 1
+          fi
+          if ! git diff --cached --quiet -- .github/workflows tools/nightly-publish.mjs tools/install-nightly-sync.ps1 CNAME public/CNAME; then
+            echo 'A workflow, publisher, or hosting change needs maintainer review; nightly was not changed.' >> "$GITHUB_STEP_SUMMARY"; exit 1
+          fi
+          printf 'base=%s\ntip=%s\ntree=%s\n' "$base" "$tip" "$(git write-tree)" >> "$GITHUB_OUTPUT"
+      - if: steps.merge.outputs.tree != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - if: steps.merge.outputs.tree != ''
+        run: npm ci && npm run check:nightly
+
+  publish:
+    needs: candidate
+    if: needs.candidate.outputs.tree != ''
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # This job never runs code or installs dependencies from the candidate tree.
+      - uses: actions/checkout@v4
+        with:
+          ref: nightly
+          fetch-depth: 0
+      - name: Publish only the tested tree, without forcing either branch
+        shell: bash
+        env:
+          BASE: ${{ needs.candidate.outputs.base }}
+          TIP: ${{ needs.candidate.outputs.tip }}
+          EXPECTED_TREE: ${{ needs.candidate.outputs.tree }}
+        run: |
+          set -eu
+          git fetch --no-tags "$UPSTREAM" refs/heads/main
+          if [ "$(git rev-parse HEAD)" != "$BASE" ] || [ "$(git rev-parse FETCH_HEAD)" != "$TIP" ]; then
+            echo 'A branch advanced during testing. Retry on the next run.' >> "$GITHUB_STEP_SUMMARY"; exit 0
+          fi
+          tree=$(git merge-tree --write-tree "$BASE" "$TIP"); test "$tree" = "$EXPECTED_TREE"
+          git diff --quiet "$BASE" "$tree" -- .github/workflows tools/nightly-publish.mjs tools/install-nightly-sync.ps1 CNAME public/CNAME
+          git config user.name 'Nightly upstream sync'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          commit=$(git commit-tree "$tree" -p "$BASE" -p "$TIP" -m "Merge Browser Edition main ${TIP:0:10} into nightly")
+          git push origin "$commit:refs/heads/nightly"
+          echo "Published tested merge $commit." >> "$GITHUB_STEP_SUMMARY"

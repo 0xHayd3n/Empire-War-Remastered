@@ -7,19 +7,22 @@ import { discordSetting, setDiscord, initDiscord } from './discordpresence.js';
 import { inApp, topFrame } from './platform.js';
 import { colorizes } from './game/teamcolor.js';
 import { applySetupLiveries, slotLivery } from './game/liverytransport.js';
-import { setTacticalRules } from './game/tacticalrules.js';
-import { linkedParent, authoredMapOwner, ensureMissionPlayers } from './game/linktactical.js';
+import { setTacticalRules, setSkirmishRules } from './game/tacticalrules.js';
+import { linkedParent, authoredMapOwner, ensureMissionPlayers, reportLinkedVictory } from './game/linktactical.js';
+import { StoryFlags } from './game/storyflags.js';
+import { missionAudio } from './game/tacticalmission.js';
 import { mpBattleParent } from './game/galacticmpbattle.js';
 import { startGalaxyFrame, galaxyFrameSetup } from './game/mpgalaxyframe.js';
 import { restoreFullscreen } from './pointertrap.js';
+import { warnSlowGpu } from './gpucheck.js';
 import './touch.js';
 import * as THREE from 'three';
 import { prepareDetachments } from './game/skirmishdetachments.js';
 import { db, loadGameData, skirmishStation, skirmishFactions, autoColors, switchLanguage } from './gamedata.js';
 import { findFiles, fetchText, fromInstall, pendingFiles } from './vfs.js';
-import { gfx, storeGfx, pixelRatio } from './gfx.js';
+import { gfx, storeGfx, pixelRatio, frameCap, menuFrameCap, FrameGate } from './gfx.js';
 import { endorPreview,yavinPreview,tatooinePreview,hothPreview,geonosisPreview,nabooPreview,utapauPreview,landPreview,wreckBattle } from './endor-preview.js';
-import { loadMap, startEnvironment, skirmishMaps, mapTitle } from './ted.js';
+import { loadMap, loadMapHeader, startEnvironment, skirmishMaps, mapTitle } from './ted.js';
 import { wreckType, stepBoarding } from './game/derelicttactical.js';
 import { hasStationOrder, tickStationOrder, supportHUD } from './game/stationsupport.js';
 import { recoveryHUD } from './game/derelicthud.js';
@@ -28,8 +31,10 @@ import { loadALA, animName } from './ala.js';
 import { loadIcons, iconUrl } from './icons.js';
 import { Audio } from './audio.js';
 import { Renderer, loadBlobMaterials } from './game/render.js';
-import { loadTacticalCamera } from './game/tacticalcameradata.js';
+import { loadTacticalCamera, loadTacticalCameraData } from './game/tacticalcameradata.js';
 import { World, Player, Team, modelsForType, buildListFor, isUpgradeType, resetEntityIds } from './game/sim.js';
+import { UnitPoses } from './game/unitposes.js';
+import { benchFleet } from './game/benchfleet.js';
 import { seedSim } from './game/simrandom.js';
 import { Lockstep, TURN, CHAT_MAX, chatText } from './game/netgame.js';
 import { ticker, NetSession } from './net.js';
@@ -72,6 +77,7 @@ import { loadDialogs, openDialog } from './game/dialogs.js';
 import { Menus } from './game/menus.js';
 import { openLobby as buildLobby } from './game/lobby.js';
 import { openMultiplayer as buildMultiplayer, openPlaylist, mountedRotation } from './game/multiplayer.js';
+import { offerDesktopApp } from './appinvite.js';
 import { BUILD } from './build.js';
 import {
   snapshot,
@@ -88,19 +94,21 @@ import {
   importSaveFile
 } from './game/savegame.js';
 import { watchForResume, pendingResume, forgetResume } from './game/resume.js';
-import { restoreBattleScripts } from './game/tacticalsave.js';
+import { restoreBattleScripts, SCRIPTS_LOST_WARNING } from './game/tacticalsave.js';
 import { orderMove } from './game/orders.js';
 import { placeSpecialWeapons, placeCampaignSpecialWeapons, specialWeaponSource } from './game/superweapon.js';
-import { loseReserve } from './game/campaignreserve.js';
-import { placeCampaignBattle, sideBeaten, battleResult, campaignIntro } from './game/campaignbattle.js';
+import { placeCampaignBattle, campaignIntro } from './game/campaignbattle.js';
 import { storyTypes, scriptTypes } from './game/storyart.js';
-import { openRetreatDialog, resolveTactical, spaceRosters } from './game/tacticalautoresolve.js';
+import { openRetreatDialog } from './game/tacticalautoresolve.js';
 import { tacticalSpeed } from './game/galacticspeed.js';
-import { RetreatCoordinator, showRetreatLine, hasRetreatPrevention } from './game/retreat.js';
-import { installTacticalBattle } from './game/tacticalbattle.js';
+import { showRetreatLine } from './game/retreat.js';
+import { spaceRetreat, startCinematicRetreat, stepCinematicJumps, autoResolveBattle, campaignCheck, campaignVictoryStep, tacticalCredits } from './game/spacecampaign.js';
+import { installTacticalBattle, superweaponMusic } from './game/tacticalbattle.js';
+import { superweaponShot } from './game/tacticalsuperweaponcamera.js';
 import { TacticalStoryHost } from './game/tacticalstory.js';
+import { installCampaignStoryView, addStoryGoal, mergeStoryGoals } from './game/spacecampaignview.js';
 import { stepTacticalSpeech } from './game/tacticalspeech.js';
-import { isSuperweaponTarget, isTacticalSuperweapon } from './game/tacticalsuperweapon.js';
+import { isSuperweaponTarget, isTacticalSuperweapon, superweaponClipNames } from './game/tacticalsuperweapon.js';
 import { TacticalSuperweaponHUD } from './game/tacticalsuperweaponhud.js';
 import { tacticalAnnouncement } from './game/tacticalvictory.js';
 import { loadBlackMarket } from './game/blackmarket.js';
@@ -110,7 +118,8 @@ import { TacticalCinematics } from './game/tacticalcinematics.js';
 import { usesBattleDestruction } from './game/rapier-runtime.js';
 import { wantsRamming } from './game/ram-impacts.js';
 import { motionRule, installBattlePhysics } from './game/battle-physics.js';
-import { stepDualFlash, tutorialFx } from './game/tutorialrewards.js';
+import { stepDualFlash, tutorialFx, tutorialReward } from './game/tutorialrewards.js';
+import { openRetryDialog } from './game/retrydialog.js';
 import { PALETTE as SLOT_COLORS, MAX_SLOTS } from './game/slotrows.js';
 import { leaveTo, guardLeaving } from './leaveguard.js';
 import { Beacons, beaconType } from './game/beacons.js';
@@ -118,10 +127,12 @@ import { SpectatorView } from './game/spectator.js';
 import { switchTarget } from './game/switchsides.js';
 import { restoreWindowSize } from './windowsize.js';
 import { EXTRA_FX_TIP, extraFxSetting, setExtraFx } from './game/extrafx.js';
+import { guardNativeUI } from './nativeui.js';
 const AI_STEP_MS = 4,
   AI_STEP_WORK = 80;
 
 guardLeaving();
+guardNativeUI();
 
 const $ = id => document.getElementById(id);
 const openLobby = args => whileLoading('staging', 'Skirmish setup', () => buildLobby(args));
@@ -269,112 +280,8 @@ function choices(el, options, initial, onPick) {
   return () => current;
 }
 
-const BENCH_FLEETS = {
-  Empire: [
-    'Star_Destroyer',
-    'Victory_Destroyer',
-    'Acclamator_Assault_Ship',
-    'Tartan_Patrol_Cruiser',
-    'Tartan_Patrol_Cruiser',
-    'Broadside_Class_Cruiser',
-    'TIE_Fighter_Squadron',
-    'TIE_Fighter_Squadron',
-    'TIE_Bomber_Squadron',
-    'TIE_Bomber_Squadron'
-  ],
-  Rebel: [
-    'Calamari_Cruiser',
-    'Alliance_Assault_Frigate',
-    'Nebulon_B_Frigate',
-    'Corellian_Corvette',
-    'Corellian_Corvette',
-    'Corellian_Gunboat',
-    'Rebel_X-Wing_Squadron',
-    'Rebel_X-Wing_Squadron',
-    'Y-Wing_Squadron',
-    'Y-Wing_Squadron'
-  ],
-  Underworld: [
-    'Kedalbe_Battleship',
-    'Vengeance_Frigate',
-    'Interceptor4_Frigate',
-    'Crusader_Gunship',
-    'Crusader_Gunship',
-    'Crusader_Gunship',
-    'StarViper_Squadron',
-    'StarViper_Squadron',
-    'Skipray_Squadron',
-    'Skipray_Squadron'
-  ]
-};
 const BENCH_SECONDS = 60;
 const TICK = 1 / 30;
-function benchFleet(faction, pads = false) {
-  const can = [],
-    seen = new Set(),
-    builders = [];
-  const builder = t => {
-    if (t && !seen.has(t)) {
-      seen.add(t);
-      builders.push(t);
-    }
-  };
-  for (let st = skirmishStation(faction), guard = 0; st && guard < 8; st = db.type(st.str('Next_Level_Base')), guard++) builder(st);
-  if (!pads) {
-    for (const st of builders)
-      for (const t of buildListFor(st, faction))
-        if (
-          !isUpgradeType(t) &&
-          !can.includes(t) &&
-          (t.has('Space_Model_Name') || t.has('Squadron_Units')) &&
-          t.tag.toLowerCase() !== 'starbase'
-        )
-          can.push(t);
-  } else
-    for (const t of db.types.values())
-      if ((t.behaviors().has('TACTICAL_BUILD_OBJECTS') && !t.has('Tactical_Health')) || t.name.toUpperCase().endsWith('_PAD')) builder(t);
-  for (let i = 0; pads && i < builders.length && i < 400; i++) {
-    for (const t of buildListFor(builders[i], faction)) {
-      if (isUpgradeType(t)) continue;
-      if (t.has('Tactical_Buildable_Constructed')) {
-        builder(db.type(t.str('Tactical_Buildable_Constructed')));
-        continue;
-      }
-      if (
-        !can.includes(t) &&
-        (t.has('Space_Model_Name') || t.has('Squadron_Units')) &&
-        t.tag.toLowerCase() !== 'starbase' &&
-        !t.behaviors().has('TACTICAL_BUILD_OBJECTS')
-      )
-        can.push(t);
-    }
-  }
-  const own = (BENCH_FLEETS[faction] || []).map(n => db.type(n));
-  const kinds = [...new Set(own)];
-  if (own.length && own.every(Boolean) && kinds.filter(t => can.includes(t)).length * 2 > kinds.length) return own;
-  if (!can.length) return own.filter(Boolean);
-  let seed = 2166136261;
-  for (const ch of faction) seed = Math.imul(seed ^ ch.charCodeAt(0), 16777619) >>> 0;
-  const rnd = () => {
-    seed = (seed + 0x6d2b79f5) >>> 0;
-    let x = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
-    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
-  };
-  const draw = (from, n, out) => {
-    const pool = from.slice();
-    for (let k = 0; k < n; k++) {
-      if (!pool.length) pool.push(...from);
-      out.push(pool.splice(Math.floor(rnd() * pool.length), 1)[0]);
-    }
-    return out;
-  };
-  const ships = can.filter(t => !t.has('Squadron_Units')),
-    wings = can.filter(t => t.has('Squadron_Units'));
-  if (!pads || !ships.length || !wings.length) return draw(can, 10, []);
-  return draw(wings, 4, draw(ships, 6, []));
-}
-
 const PREBUILD_SECONDS = 60;
 
 const mapRoleName = o => (o.role ? `TEAM_${String(o.team).padStart(2, '0')}_${o.role}` : o.type.name.toUpperCase());
@@ -442,7 +349,7 @@ class Game {
       for (const n of [
         cb.defender.station,
         ...(cb.recovery ? [wreckType] : []),
-        ...(cb.defender.orbital || []),
+        ...(cb.defender.orbital || []).map(o => o.type ?? o),
         ...(cb.planetWeapons || []),
         ...cb.attacker.units.map(u => u.type),
         ...cb.defender.units.map(u => u.type)
@@ -584,6 +491,7 @@ class Game {
     world.bring = type => {
       this.bring(type);
     };
+    this.mirrorCampaign = this.workerMode && !!this.setup.campaign;
     if (!this.workerMode && !query.has('noscripts'))
       this.scriptsReady = ScriptHost.create(this, scriptInputs)
         .then(h => {
@@ -643,6 +551,16 @@ class Game {
     world.campaign = !!this.setup.campaign;
     world.tacticalRules = setTacticalRules({ campaign: !!this.setup.campaign, skirmish: !!this.setup.campaign?.skirmishRules, corrupted: (this.setup.campaign?.corruption ?? -1) !== -1 });
     await installTacticalBattle(this);
+    if (this.mirrorCampaign) {
+      // The battle thread runs the superweapons; a press of the page's button goes to it as a command.
+      const manager = world.tacticalSuperweapons;
+      manager.command = (unit, player, sound = true) => {
+        if (unit.dead || unit.player !== player) return false;
+        if (sound) audio.play(unit.type.str('TSW_SFXEvent_GUI_Bttton_Press'));
+        this.command({ c: 'superweapon', u: [unit.id] });
+        return true;
+      };
+    }
     if (this.setup.campaign)
       for (const p of world.players)
         if (p.id >= 0 && this.setup.campaign.tech?.[p.factionName] !== undefined) p.campaignTech = this.setup.campaign.tech[p.factionName];
@@ -733,8 +651,9 @@ class Game {
         );
       }
     this.ai = this.ais[0];
-    [this.hudAssets] = await Promise.all([
+    [this.hudAssets, this.tacticalCameraData] = await Promise.all([
       loadHudAssets(human.factionName).catch(e => { console.warn('command bar', e); return null; }),
+      loadTacticalCameraData().catch(() => null),
       loadBlobMaterials().catch(() => null), loadPrioritySets().catch(e => console.warn('targeting priorities not loaded', e)),
       loadGameFonts(), loadDialogs().catch(() => null)
     ]);
@@ -821,7 +740,8 @@ class Game {
         .then(() => this.scripts.compileAll(3000))
         .catch(e => console.warn('scripts', e));
     if (savedScripts) await this.scripts.compileAll(3000).catch(e => console.warn('scripts', e));
-    await TacticalStoryHost.create(this, this.scripts, { restoring: !!savedScripts });
+    if (this.mirrorCampaign) await installCampaignStoryView(this);
+    else await TacticalStoryHost.create(this, this.scripts, { restoring: !!savedScripts });
     if (savedScripts) {
       try {
         restoreBattleScripts(this, savedScripts, null, this.savedThing);
@@ -1062,10 +982,10 @@ class Game {
 
   async loadSuperweaponClips(types) {
     if (!types.length) return;
-    this.superweaponClips ??= new Set((await findFiles('MODELS\\\\[^\\\\]*_ATTACK_00\\.ALA$')).map(n => n.split('\\').pop()));
+    this.superweaponClips ??= new Set((await findFiles('MODELS\\\\[^\\\\]*_ATTACK_\\d\\d\\.ALA$')).map(n => n.split('\\').pop()));
     await Promise.all(
       types
-        .map(t => animName(t.str('Space_Model_Name'), 'ATTACK'))
+        .flatMap(superweaponClipNames)
         .filter(n => this.superweaponClips.has(n))
         .map(loadALA)
     );
@@ -1269,7 +1189,9 @@ class Game {
       }
       if (o.type.behaviors().has('MARKER') || o.type.bool('Is_Marker')) continue;
       if (isSuperweaponTarget(o.type)) {
-        if (!again) w.tacticalSuperweapons.addTarget(this.placeScenery(o));
+        if (again) continue;
+        if (w.tacticalSuperweapons.planet?.destroyed) this.placeDestroyedPlanetRemains(o);
+        else w.tacticalSuperweapons.addTarget(this.placeScenery(o));
         continue;
       }
       if (!again) {
@@ -1470,6 +1392,15 @@ class Game {
     };
   }
 
+  // A world already destroyed shows what its planet prop leaves behind when a Death Star fires on it.
+  placeDestroyedPlanetRemains(planetProp) {
+    const transform = { x: planetProp.pos[0], y: planetProp.pos[1], z: planetProp.pos[2], rotation: planetProp.rot, scale: planetProp.scale || 1 };
+    for (const name of planetProp.type.list('Death_By_TSW_Replacements')) {
+      const type = db.type(name);
+      if (type) this.tacticalReplacement(type, transform);
+    }
+  }
+
   tacticalReplacement(type, transform) {
     const file = type.str('Space_Model_Name');
     if (getModelData(file))
@@ -1579,6 +1510,12 @@ class Game {
       this.command({ c: 'retreat' });
       return;
     }
+    if (this.mirror) {
+      const retreat = () => this.command({ c: 'retreat' });
+      if (this.retreatingHere || !this.setup.campaign.autoResolve?.allowed) retreat();
+      else openRetreatDialog({ retreat, autoResolve: () => this.autoResolveNow() });
+      return;
+    }
     if (this.retreat.active?.player === this.human) {
       this.retreat.cancel();
       return;
@@ -1588,218 +1525,78 @@ class Game {
     else retreat();
   }
   spaceRetreat(cb) {
-    const w = this.world,
-      game = this,
-      sides = [cb.attacker.team, cb.defender.team];
-    const going = p =>
-      [...w.units, ...w.squads].filter(
-        e =>
-          e.player === p &&
-          !e.dead &&
-          !e.isStructure &&
-          !e.isPad &&
-          !e.isStation &&
-          !e.underConstruction &&
-          !e.hyper &&
-          (e.type?.bool('Hyperspace') || !!e.squad?.type?.bool('Hyperspace')) &&
-          !(
-            e.hardpoints &&
-            e.hardpoints.some(h => h.kind === 'HARD_POINT_ENGINE') &&
-            e.hardpoints.filter(h => h.kind === 'HARD_POINT_ENGINE').every(h => !h.alive)
-          )
-      );
-    w.defenderTeam = cb.defender.team;
-    return (w.retreat = new RetreatCoordinator({
-      prefix: 'Space',
-      campaign: !!cb && !this.setup.linkedTactical,
-      skirmishRules: () => !!cb?.skirmishRules || !!this.skirmishRules,
-      principals: cb?.sides || null,
-      time: () => w.time,
-      generic: name => this.tacticalStory?.generic(name),
-      players: () => w.players.filter(p => p.id >= 0),
-      factionOf: p => p.factionName,
-      teamOf: p => p.team,
-      isLocal: p => (this.setup.net ? !!p.human : p === this.human),
-      isSide: p => p.id >= 0 && sides.includes(w.teams.indexOf(p.team)),
-      units: going,
-      everything: p => [...w.units, ...w.squads].filter(e => e.player === p && !e.dead),
-      blocker: p =>
-        w.interdictors.some(i => i.team !== p.team)
-          ? 3
-          : w.units.some(u => !u.dead && u.player === p && hasRetreatPrevention(u.type))
-            ? 4
-            : w.units.some(u => !u.dead && u.player === p && isTacticalSuperweapon(u.type))
-              ? 6
-              : 0,
-      begin: state => {
-        w.retreatState = state;
-        for (const e of state.list)
-          for (const u of e.fighters || [e]) {
-            if (u.retreatTarget === undefined) u.retreatTarget = u.targetableUnit;
-            u.holdFire = true;
-            u.targetableUnit = false;
-            u.setOrder?.({ kind: 'idle' });
+    return spaceRetreat(this, cb);
+  }
+  retreatCameraStart(station, flyers, dir, marker) {
+    const cine = (this.retreatCamera = new TacticalCinematics(this, { at: () => null, of: () => null }));
+    cine.start(false);
+    if (!cine.on) {
+      this.retreatCamera = null;
+      return;
+    }
+    const d = dir || { x: -1, y: 0, z: 0 },
+      M = marker || { x: station?.x ?? 0, y: station?.y ?? 0, z: 0 };
+    const q = 175.034,
+      xy = Math.hypot(d.x, d.y) || 1,
+      perp = d.x > 0 ? { x: d.y / xy, y: -d.x / xy } : { x: -d.y / xy, y: d.x / xy };
+    const stationKey = offset => ({
+      position: { x: station.x, y: station.y, z: station.z || 0 },
+      offset,
+      entity: station,
+      rotate: false,
+      last: null
+    });
+    cine.shots = {
+      first: flyers
+        ? {
+            from: { x: M.x - q * d.x + 150 * perp.x, y: M.y - q * d.y + 150 * perp.y, z: M.z - q * d.z + 70 },
+            target: { x: M.x + q * d.x, y: M.y + q * d.y, z: M.z + q * d.z }
           }
-      },
-      cancelled: state => {
-        for (const e of state.list)
-          for (const u of e.fighters || [e]) {
-            u.holdFire = undefined;
-            u.targetableUnit = u.retreatTarget ?? u.targetableUnit;
-            u.retreatTarget = undefined;
-          }
-        w.retreatState = null;
-      },
-      flightStart: (state, list) => {
-        const d = w.retreatDir || { x: -1, y: 0 };
-        for (const e of list)
-          for (const u of e.fighters || [e]) {
-            u.retreatFlight = true;
-            u.heading = Math.atan2(d.y, d.x);
-          }
-      },
-      move: (e, distance) => {
-        if (e.isSquad || e.fighters) return;
-        const d = w.retreatDir || { x: -1, y: 0 };
-        e.x += d.x * distance;
-        e.y += d.y * distance;
-        e.syncObj?.();
-      },
-      cameraStart: (state, list) => {
-        const station = state.player.station && !state.player.station.dead ? state.player.station : null,
-          flyers = list.length > 0;
-        if (!station && !flyers) return 0;
-        const cine = (this.retreatCamera = new TacticalCinematics(this, { at: () => null, of: () => null }));
-        cine.start(false);
-        if (!cine.on) {
-          this.retreatCamera = null;
-          return flyers ? (station ? 450 : 150) : 300;
-        }
-        const d = w.retreatDir || { x: -1, y: 0, z: 0 },
-          M = w.retreatMarker || { x: station?.x ?? 0, y: station?.y ?? 0, z: 0 };
-        const q = 175.034,
-          xy = Math.hypot(d.x, d.y) || 1,
-          perp = d.x > 0 ? { x: d.y / xy, y: -d.x / xy } : { x: -d.y / xy, y: d.x / xy };
-        const stationKey = offset => ({
-          position: { x: station.x, y: station.y, z: station.z || 0 },
-          offset,
-          entity: station,
-          rotate: false,
-          last: null
-        });
-        cine.shots = {
-          first: flyers
-            ? {
-                from: { x: M.x - q * d.x + 150 * perp.x, y: M.y - q * d.y + 150 * perp.y, z: M.z - q * d.z + 70 },
-                target: { x: M.x + q * d.x, y: M.y + q * d.y, z: M.z + q * d.z }
-              }
-            : null,
-          station: station ? { from: stationKey({ x: 0, y: -2000, z: 2000 }), target: stationKey({ x: 0, y: 0, z: 0 }) } : null
-        };
-        cine.shotNow = null;
-        return flyers ? (station ? 450 : 150) : 300;
-      },
-      cameraFrame: frame => {
-        const cine = this.retreatCamera;
-        if (!cine?.on) return;
-        const shot = frame >= (cine.shots.first ? 150 : 0) && cine.shots.station ? 'station' : cine.shots.first ? 'first' : 'station';
-        if (cine.shotNow !== shot) {
-          cine.shotNow = shot;
-          const s = cine.shots[shot];
-          cine.position = { from: s.from, to: null, start: 0, end: 0 };
-          cine.target = { from: s.target, to: null, start: 0, end: 0 };
-        }
-        cine.tick = frame;
-        cine.paint();
-      },
-      cameraEnd: () => {
-        this.retreatCamera?.stop();
-        this.retreatCamera = null;
-      },
-      released: e => {
-        const u = e.fighters?.[0] || e,
-          sfx = e.type?.str('SFXEvent_Retreat_Engines_Jump').trim() || e.player?.faction?.str('SFXEvent_Exit_Into_Hyperspace').trim();
-        if (sfx) game.audio.play(sfx, u.x, u.y);
-      },
-      explode: p => {
-        const st = p.station;
-        if (!st || st.dead) return;
-        const blast = db.type(st.type.str('Retreat_Self_Destruct_Explosion').trim());
-        if (blast) w.detonate(blast, p, st.x, st.y, (st.z || 0) + st.type.num('Ranged_Target_Z_Adjust', 0), 1, true);
-        w.kill(st, null);
-      },
-      flightEnd: () => {
-        w.retreatState = null;
-      },
-      remove: (e, lost) => {
-        if (e.isSquad || e.fighters) {
-          e.dead = true;
-          if (!lost) e.retreated = true;
-          return;
-        }
-        if (!lost) e.retreated = true;
-        w.removeUnit(e);
-      },
-      end: enemy => this.tacticalVictory.request(enemy.team, 12, 210),
-      play: (sfx, p) => {
-        if (p === game.human && sfx) game.audio.play(sfx);
-      },
-      show: showRetreatLine
-    }));
+        : null,
+      station: station ? { from: stationKey({ x: 0, y: -2000, z: 2000 }), target: stationKey({ x: 0, y: 0, z: 0 }) } : null
+    };
+    cine.shotNow = null;
+  }
+  retreatCameraFrame(frame) {
+    const cine = this.retreatCamera;
+    if (!cine?.on) return;
+    const shot = frame >= (cine.shots.first ? 150 : 0) && cine.shots.station ? 'station' : cine.shots.first ? 'first' : 'station';
+    if (cine.shotNow !== shot) {
+      cine.shotNow = shot;
+      const s = cine.shots[shot];
+      cine.position = { from: s.from, to: null, start: 0, end: 0 };
+      cine.target = { from: s.target, to: null, start: 0, end: 0 };
+    }
+    cine.tick = frame;
+    cine.paint();
+  }
+  retreatCameraEnd() {
+    this.retreatCamera?.stop();
+    this.retreatCamera = null;
+  }
+  superweaponCamera(unit, target) {
+    if (!this.cine) return;
+    this.cine.stop();
+    this.cine.start();
+    this.cine.sequence = superweaponShot(this, unit, target);
+  }
+  retreatLine(...a) {
+    showRetreatLine(...a);
   }
   startCinematicRetreat(id, seconds) {
-    const w = this.world,
-      p = w.players.find(q => q.id === id);
-    if (!p || !(seconds >= 0)) return;
-    const wait = db.faction(p.factionName)?.num('Space_Retreat_Unit_Increment_Wait_Frames', 1) ?? 1;
-    const list = [...w.units, ...w.squads].filter(
-      e => e.player === p && !e.dead && !e.isStructure && !e.isPad && !e.isStation && !e.underConstruction
-    );
-    (this.cinematicJumps ||= []).push(...list.map((e, i) => ({ e, at: w.time + (seconds * 30 + i * wait) / 30, left: 90 })));
+    startCinematicRetreat(this, id, seconds);
   }
   stepCinematicJumps(dt) {
-    const jumps = this.cinematicJumps,
-      w = this.world;
-    if (!jumps?.length) return;
-    for (const j of jumps) {
-      if (j.done) continue;
-      const e = j.e;
-      if (e.dead) {
-        j.done = true;
-        continue;
-      }
-      const jumping = w.time >= j.at,
-        fast = e.player?.faction?.num('Space_Retreat_Flight_Move_Increment', 500) ?? 500;
-      if (jumping && !j.started) {
-        j.started = true;
-        for (const u of e.fighters || [e]) u.retreatFlight = true;
-        const sfx =
-            e.type?.str('SFXEvent_Retreat_Engines_Jump').trim() || e.player?.faction?.str('SFXEvent_Exit_Into_Hyperspace').trim(),
-          u0 = e.fighters?.[0] || e;
-        if (sfx) this.audio.play(sfx, u0.x, u0.y);
-      }
-      if (!e.isSquad && !e.fighters) {
-        const h = e.heading || 0,
-          step = jumping ? fast : 8.125;
-        e.x += Math.cos(h) * step * dt * 30;
-        e.y += Math.sin(h) * step * dt * 30;
-        e.syncObj?.();
-      }
-      if (!jumping) continue;
-      j.left -= dt * 30;
-      if (j.left <= 0) {
-        j.done = true;
-        if (e.isSquad || e.fighters) e.dead = true;
-        else w.removeUnit(e);
-      }
-    }
-    this.cinematicJumps = jumps.filter(j => !j.done);
+    stepCinematicJumps(this, dt);
   }
 
   autoResolveNow() {
-    const w = this.world,
-      cb = this.setup.campaign;
     if (!this.canRetreat()) return;
+    if (this.mirror) {
+      if (this.paused && !this.lock) this.togglePause();
+      this.command({ c: 'autoresolve' });
+      return;
+    }
     const code = this.retreat.canRetreat(this.human);
     if (code) {
       const sfx = this.retreat.refusal(this.human, code);
@@ -1807,41 +1604,134 @@ class Game {
       return;
     }
     if (this.paused) this.togglePause();
-    if (this.campaignBook?.boarding) this.campaignBook.boarding.void = true;
-    if (this.campaignBook?.support) this.campaignBook.support = { phase: 'closed' };
-    const rosters = spaceRosters(w, cb, this.campaignBook),
-      { winner, doomed } = resolveTactical(rosters, cb, { space: true });
-    const lose = e => {
-      if (e.reserve) {
-        loseReserve(e, this.campaignBook);
-      } else if (!e.dead) w.kill(e, null);
-    };
-    for (const e of doomed) lose(e);
-    const [won, lost] = winner === 0 ? [cb.attacker.team, cb.defender.team] : [cb.defender.team, cb.attacker.team];
-    const loser = w.players.find(p => p.id >= 0 && p.team === w.teams[lost]);
-    if (loser && this.retreat.canRetreat(loser) !== 0) {
-      for (const c of rosters[1 - winner]) lose(c.entity);
-      return;
-    }
-    if (!sideBeaten(w, w.teams[lost])) this.tacticalVictory.request(w.teams[won], 12, 210);
+    autoResolveBattle(this, this.human);
   }
 
   campaignCheck() {
-    const w = this.world,
-      cb = this.setup.campaign;
-    if (!cb || this.over || this.tacticalVictory.winner) return;
-    const station = this.campaignBook?.station;
-    if (db.constants.bool('Space_Station_Destruction_Forces_Retreat') && station && station.dead) {
-      this.tacticalVictory.request(w.teams[cb.attacker.team], 15, 210);
-      return;
+    campaignCheck(this);
+  }
+
+  // Campaign battle news from the battle thread.
+  campaignWinner(team, suppressNotice, flags = null, final = false) {
+    if (!team) return;
+    this.tacticalVictory.winner ||= { team, type: 0, frames: 0, suppressNotice };
+    const view = this.tacticalStory;
+    if (final && view) {
+      view.flags = new StoryFlags(flags || []);
+      reportLinkedVictory(this, team.factionName);
+      if (linkedParent(this)) this.mirror?.worker?.postMessage({ k: 'story', flags: view.flags.snapshot() });
     }
-    for (const s of [cb.attacker, cb.defender]) {
-      const team = w.teams[s.team];
-      if (!sideBeaten(w, team)) continue;
-      const other = w.teams[s === cb.attacker ? cb.defender.team : cb.attacker.team];
-      this.tacticalVictory.request(other, 11, 210);
-      return;
+    this.tacticalVictoryNotice(team, suppressNotice);
+  }
+  campaignFinished(outcome) {
+    const { credits, storyFlags, ...rest } = outcome;
+    this.campaignCredits = credits;
+    this.campaignOutcome = rest;
+    if (storyFlags && this.tacticalStory) this.tacticalStory.flags = new StoryFlags(storyFlags);
+  }
+  // Linked mission scripts on the battle thread: the camera, screen effects and sound play here.
+  cinematicCall(op, ...args) {
+    const c = (this.tacticalCinematics ||= new TacticalCinematics(this, { at: v => v, of: v => v }));
+    if (op === 'point') {
+      const rig = this.renderer?.rig;
+      if (rig && args[0]) {
+        rig.x = args[0].x;
+        rig.y = args[0].y;
+      }
+    } else if (op === 'start') {
+      const a = args[0] || [];
+      c.start(a.length ? a[0] : true);
     }
+    else if (op === 'stop') c.stop();
+    else if (op === 'key') c.key(args[0], args[2] || [], args[1]);
+    else if (op === 'tactical' && args[0] !== undefined) c.transitionToTactical(Number.isFinite(args[0]) ? args[0] : 1);
+  }
+  linkedPresentationCall(name, args) {
+    this.presentationOps?.[name]?.(...(args || []));
+  }
+  missionAudioCall(name, args) {
+    (this.missionAudioOps ||= missionAudio(this))[name]?.(...(args || []));
+  }
+  // Escape during a cutscene: the story scripts on the battle thread decide whether it skips.
+  storyEscape() {
+    if (!this.mirrorCampaign || !this.mirror?.worker) return false;
+    this.mirror.worker.postMessage({ k: 'story', escape: true });
+    return true;
+  }
+  lockControls(on) {
+    this.controlsLocked = !!on;
+  }
+  pauseWeatherAudio(on) {
+    this.weatherAudioPaused = !!on;
+  }
+  retreatActive(on) {
+    this.retreatingHere = !!on;
+  }
+  storyGoalOpened(request, popup, sound = true) {
+    const view = this.tacticalStory;
+    if (!view) return;
+    addStoryGoal(view, request);
+    if (popup) this.showStoryDialog?.(request);
+    else this.notifyStoryGoal?.(request, sound);
+    this.storyDialog?.refreshSummary();
+  }
+  // Tactical superweapons on the battle thread: the page's button and countdown follow its state.
+  superweaponState(list, eligible, disableDepth) {
+    const manager = this.world.tacticalSuperweapons;
+    if (!manager) return;
+    for (const [unit, state, target, speed, previousDistance] of list) {
+      if (!unit) continue;
+      if (!manager.record(unit)) manager.add(unit);
+      const r = manager.record(unit);
+      if (!r) continue;
+      Object.assign(r, { state, speed, previousDistance, initialized: true, target: target >= 0 ? manager.targets[target] || null : null });
+    }
+    manager.eligible = () => eligible;
+    manager.disableDepth = disableDepth;
+  }
+  superweaponTargetGone(index) {
+    const t = this.world.tacticalSuperweapons?.targets[index];
+    if (!t || t.dead) return;
+    t.dead = true;
+    t.remove?.();
+  }
+  superweaponHUDReset() {
+    this.superweaponHUD?.reset();
+  }
+  superweaponMusic(name) {
+    superweaponMusic(this, name);
+  }
+  openRetryDialog() {
+    openRetryDialog(this);
+  }
+  storyCameraAxis(axis, v) {
+    if (this.renderer && (axis === 'x' || axis === 'y')) this.renderer[axis] = v;
+  }
+  // A story reward from the battle thread that only changes what is shown here.
+  storyReward(reward, rewards, name, owner) {
+    const host = { game: this, errors: new Map(), plot: owner ? { owner } : null };
+    try {
+      tutorialReward(host, { reward, rewards, name, plot: host.plot });
+    } catch (error) {
+      console.warn('story reward', reward, error);
+    }
+  }
+  storyState(s) {
+    this.reinforcementsEnabled = s.reinforcements || undefined;
+    this.advisorEnabled = s.advisor || undefined;
+    this.world.fog = s.fog;
+    this.setup.fog = s.fog;
+    if (!!this.skirmishRules !== s.skirmishRules) {
+      this.skirmishRules = s.skirmishRules;
+      this.world.tacticalRules = setSkirmishRules(s.skirmishRules);
+    }
+    this.ui?.refresh?.();
+  }
+  storyGoalsChanged(goals) {
+    const view = this.tacticalStory;
+    if (!view) return;
+    mergeStoryGoals(view, goals);
+    this.storyDialog?.refreshSummary();
   }
 
   campaignVictoryStep() {
@@ -1855,16 +1745,10 @@ class Game {
       stepBoarding(this.setup.campaign, this.campaignBook, frozen);
       this.recoveryHud?.update();
     }
-    const result = this.tacticalVictory.update(this.world.tacticalSuperweapons.disableDepth, () => this.campaignCheck());
-    if (!result) return;
-    this.world.winner = result.team;
-    this.campaignOutcome = {
-      ...battleResult(this.world, this.campaignBook, this.setup.campaign, result.team.id),
-      ...this.tacticalCampaign?.result(this.campaignBook),
-      sides: this.setup.teamFactions.slice(),
-      victoryType: result.type
-    };
-    this.world.onEvent('gameover', { winner: result.team, ready: true });
+    const outcome = campaignVictoryStep(this);
+    if (!outcome) return;
+    this.campaignOutcome = outcome;
+    this.world.onEvent('gameover', { winner: this.world.winner, ready: true });
   }
 
   returnToGalaxy() {
@@ -1874,32 +1758,20 @@ class Game {
       linkedParent(this).returnLinkedTactical(result);
       return;
     }
-    if (mpBattleParent()) {
-      mpBattleParent().mpBattles.returned(this.campaignOutcome);
-      return;
-    }
-    if (this.campaignOutcome && this.world.tacticalSessions) this.campaignOutcome.credits = this.tacticalCredits();
+    if (this.campaignOutcome && this.world.tacticalSessions)
+      this.campaignOutcome.credits = this.mirrorCampaign ? this.campaignCredits : this.tacticalCredits();
     const { galaxy, ...result } = this.campaignOutcome || {};
     result.storyDelayed = this.storyDelayed || [];
     if (this.builtUpgrades?.length) result.upgradesBuilt = this.builtUpgrades.slice();
+    if (mpBattleParent()) {
+      mpBattleParent().mpBattles.returned(result);
+      return;
+    }
     stageStart({ mode: 'galactic', players: [], teamFactions: [], campaign: cb.campaignName, restore: galaxy || cb.galaxy, result });
   }
 
   tacticalCredits() {
-    const out = {};
-    for (const p of this.world.players) {
-      const s = p.id >= 0 && this.world.tacticalSessions?.[p.id];
-      if (!s) continue;
-      const id = String(p.factionName).toUpperCase(),
-        left = p.credits || 0;
-      if (!s.ai) {
-        out[id] = { credits: Math.max(0, left), ai: false };
-        continue;
-      }
-      const delta = left - s.released;
-      out[id] = { credits: Math.max(0, s.reserve + (delta > 0 ? delta * s.adjust : delta)), ai: true, delta, parts: s.parts };
-    }
-    return out;
+    return tacticalCredits(this.world);
   }
 
   knockedOut() {
@@ -2148,8 +2020,12 @@ class Game {
     old.human = false;
     old.difficulty ||= 'medium';
     next.human = true;
-    this.ais = (this.ais || []).filter(a => a.player !== next);
-    if (!old.team.mapSide) this.ais.push(new SkirmishAI(this.world, old, old.difficulty));
+    // With the battle on its own thread the computer players live there; it switches its sides too.
+    if (this.mirror) this.mirror.command({ c: 'switchSides', to: next.id });
+    else {
+      this.ais = (this.ais || []).filter(a => a.player !== next);
+      if (!old.team.mapSide) this.ais.push(new SkirmishAI(this.world, old, old.difficulty));
+    }
     this.human = next;
     this.audio.human = next;
     this.world.viewer = next;
@@ -2197,16 +2073,32 @@ class Game {
   wantsWorker() {
     return (
       (this.setup.spaceWorker !== undefined ? !!this.setup.spaceWorker : !new URLSearchParams(location.search).has('nospaceworker')) &&
-      !this.setup.campaign &&
-      !this.setup.linkedTactical &&
-      !(authoredBattle(this.setup) && !this.setup.instant) &&
+      // These Universal battle setups have page-owned reserve tickets, boarding, or authored deployment.
+      !this.setup.campaign?.galaxy?.universalPath && !this.setup.campaign?.vesselBattle &&
+      !this.setup.campaign?.stationSupport && !this.setup.campaign?.recovery &&
+      !(!this.setup.campaign && authoredBattle(this.setup) && !this.setup.instant) &&
+      (!this.setup.campaign || this.conquestOnBattleThread()) &&
       !this.setup.attract
     );
   }
 
+  // Campaign space battles run on the battle thread: conquest, story plots, linked missions, tutorials and tactical
+  // superweapons, alone or in multiplayer. ?nocampaignworker (here or on the page holding this frame) keeps them on the page.
+  conquestOnBattleThread() {
+    const off = w => {
+      try {
+        return new URLSearchParams(w.location.search).has('nocampaignworker');
+      } catch {
+        return false;
+      }
+    };
+    // Battles in a galaxy's frame follow the switch on the page that holds them.
+    return !!this.setup.campaign && !off(window) && !(window.top !== window && off(window.top));
+  }
+
   shouldRecord() {
     const setup = this.setup;
-    if (!this.wantsWorker() || setup.net || setup.restore || setup.benchmark || setup.spectate) return false;
+    if (!this.wantsWorker() || setup.campaign || setup.net || setup.restore || setup.benchmark || setup.spectate) return false;
     return !!setup.replay || window.recordBattles !== false;
   }
 
@@ -2260,39 +2152,7 @@ class Game {
 
   remember() {
     const w = this.world;
-    for (const u of w.units) {
-      if (u.dead) continue;
-      const roll = u.roll || 0;
-      if (u.cx === undefined) {
-        u.px = u.x;
-        u.py = u.y;
-        u.pz = u.z;
-        u.ph = u.heading;
-        u.pr = roll;
-      } else {
-        u.px = u.cx;
-        u.py = u.cy;
-        u.pz = u.cz;
-        u.ph = u.ch;
-        u.pr = u.cr;
-      }
-      u.cx = u.x;
-      u.cy = u.y;
-      u.cz = u.z;
-      u.ch = u.heading;
-      u.cr = roll;
-      if (u.isFighter) {
-        const pitch = u.pitch || 0;
-        u.pp = u.cp ?? pitch;
-        u.cp = pitch;
-        if (u.flip) {
-          u.flip = false;
-          u.ph += u.ph > 0 ? -Math.PI : Math.PI;
-          u.pp = (u.pp < 0 ? -Math.PI : Math.PI) - u.pp;
-          u.pr += u.pr > 0 ? -Math.PI : Math.PI;
-        }
-      }
-    }
+    (this.poses ||= new UnitPoses()).remember(w.units);
     for (const q of w.squads) {
       if (q.dead) continue;
       if (q.cx === undefined) {
@@ -2332,90 +2192,7 @@ class Game {
     su.length = 0;
     sq.length = 0;
     sp.length = 0;
-    const units = w.units;
-    for (let i = 0; i < units.length; i++) {
-      const u = units[i];
-      if (u.dead || u.cx === undefined) continue;
-      const cx = u.cx,
-        cy = u.cy,
-        cz = u.cz,
-        ch = u.ch,
-        cr = u.cr,
-        px = u.px,
-        py = u.py,
-        pz = u.pz,
-        ph = u.ph,
-        pr = u.pr;
-      if (
-        px === cx &&
-        py === cy &&
-        pz === cz &&
-        ph === ch &&
-        pr === cr &&
-        cx === u.x &&
-        cy === u.y &&
-        cz === u.z &&
-        ch === u.heading &&
-        cr === (u.roll || 0)
-      ) {
-        if (u.wasShown) {
-          u.wasShown = false;
-          u.syncObj();
-        }
-        continue;
-      }
-      u.tx = u.x;
-      u.ty = u.y;
-      u.tz = u.z;
-      u.th = u.heading;
-      u.tr = u.roll;
-      let dh = ch - ph;
-      if (dh > Math.PI) dh -= 2 * Math.PI;
-      else if (dh < -Math.PI) dh += 2 * Math.PI;
-      const x = (u.x = u.ix = px + (cx - px) * k),
-        y = (u.y = u.iy = py + (cy - py) * k),
-        z = (u.z = u.iz = pz + (cz - pz) * k);
-      const h = (u.heading = u.ih = ph + dh * k),
-        roll = (u.roll = u.ir = pr + (cr - pr) * k);
-      const o = u.obj,
-        e = o.matrix.elements,
-        s = o.scale.x,
-        a = h + Math.PI / 2,
-        ca = Math.cos(a) * s,
-        sa = Math.sin(a) * s;
-      o.position.set(x, y, z);
-      if (roll) {
-        const cro = Math.cos(roll),
-          sro = Math.sin(roll);
-        e[0] = ca * cro;
-        e[1] = sa * cro;
-        e[2] = -sro * s;
-        e[8] = ca * sro;
-        e[9] = sa * sro;
-        e[10] = cro * s;
-      } else {
-        e[0] = ca;
-        e[1] = sa;
-        e[2] = 0;
-        e[8] = 0;
-        e[9] = 0;
-        e[10] = s;
-      }
-      e[4] = -sa;
-      e[5] = ca;
-      e[6] = 0;
-      e[12] = x;
-      e[13] = y;
-      e[14] = z;
-      if (u.cp || u.pp) {
-        u.tp = u.pitch;
-        u.pitch = u.pp + (u.cp - u.pp) * k;
-        u.syncObj();
-        u.pitched = true;
-      }
-      u.wasShown = true;
-      su.push(u);
-    }
+    if (this.poses) this.poses.present(w.units, k, su);
     for (const q of w.squads) {
       if (q.dead || q.cx === undefined || (q.px === q.cx && q.py === q.cy && q.cx === q.x && q.cy === q.y)) continue;
       q.tx = q.x;
@@ -2445,18 +2222,7 @@ class Game {
       sq = this.shownSquads,
       sp = this.shownShots;
     if (!su) return;
-    for (let i = 0; i < su.length; i++) {
-      const u = su[i];
-      if (u.x === u.ix) u.x = u.tx;
-      if (u.y === u.iy) u.y = u.ty;
-      if (u.z === u.iz) u.z = u.tz;
-      if (u.heading === u.ih) u.heading = u.th;
-      if (u.roll === u.ir) u.roll = u.tr;
-      if (u.pitched) {
-        u.pitch = u.tp;
-        u.pitched = false;
-      }
-    }
+    if (this.poses) this.poses.settle(su);
     for (const q of sq) {
       if (q.x === q.ix) q.x = q.tx;
       if (q.y === q.iy) q.y = q.ty;
@@ -2548,6 +2314,8 @@ class Game {
   frame(now) {
     if (this.modeSuspended) return;
     requestAnimationFrame(this.frame);
+    // a battle draws at most the frame cap (the menu backdrop at most MENU_FPS); the benchmark measures uncapped
+    if ((this.frameGate ||= new FrameGate(this.setup.benchmark ? 0 : this.setup.attract ? menuFrameCap : frameCap)).skip(now)) return;
     diag.begin(now);
     const real = Math.max(0, Math.min(0.1, (now - this.last) / 1000));
     if (this.bench) this.bench.tick(now - this.last, now);
@@ -2658,6 +2426,7 @@ async function boot() {
     sessionStorage.removeItem('swr-relinked');
     sessionStorage.removeItem('swr-module-retry');
   } catch {}
+  await offerDesktopApp(new URLSearchParams(location.search));
   const tag = document.createElement('div');
   tag.id = 'buildTag';
   tag.textContent = 'build ' + build;
@@ -2991,8 +2760,10 @@ async function boot() {
       return;
     }
     try {
-      await putSave(await snapshotNow(g));
-      saveStatus('Game saved.', 'good');
+      const snap = await snapshotNow(g);
+      await putSave(snap);
+      if (snap.scriptsLost) saveStatus(SCRIPTS_LOST_WARNING, 'bad');
+      else saveStatus('Game saved.', 'good');
       renderSaves();
     } catch (e) {
       console.error(e);
@@ -3057,7 +2828,7 @@ async function boot() {
         benchmark: lbench,
         direct: true,
         preBuilt: params.get('prebuilt') !== '0',
-        mapFile: quickLand.find(m => m.toUpperCase().includes(want)) || quickLand[0],
+        mapFile: [...quickLand, ...customMaps.land].find(m => m.toUpperCase().includes(want)) || quickLand[0],
         credits: getCredits(),
         popCap: lbench ? 9999 : getPop(),
         fog: lbench ? false : getFog(),
@@ -3281,6 +3052,23 @@ async function boot() {
     };
   }
   {
+    const box = $('optPlanetFinder');
+    let on = false;
+    try {
+      on = localStorage.getItem('swr-planet-finder') === '1';
+    } catch {}
+    box.checked = on;
+    window.planetFinder = on;
+    box.parentElement.title =
+      'In galactic conquest, a panel listing the planets with a search box and the recent events you could see. Drag it by its title, resize it from its corner, and use its cog to choose what it lists.';
+    box.onchange = () => {
+      window.planetFinder = box.checked;
+      try {
+        localStorage.setItem('swr-planet-finder', box.checked ? '1' : '0');
+      } catch {}
+    };
+  }
+  {
     const box = $('optClearShots');
     let on = false;
     try {
@@ -3394,6 +3182,8 @@ async function boot() {
       }
       w.autofire = box.checked;
       for (const u of w.units) if (u.player?.human) for (const a of u.abilities || []) if (a.def.autofire) a.auto = box.checked;
+      // the battle thread only sends an ability when it changes: have it send them all again over what was just set here
+      window.game.mirror?.worker.postMessage({ k: 'resendAbilities' });
     };
   }
   window.applyGraphics = renderer => {
@@ -3643,6 +3433,7 @@ async function boot() {
     await launch(await r.json());
     return;
   }
+  if (topFrame() && !params.has('benchmark')) warnSlowGpu();
   let pending = null;
   try {
     pending = sessionStorage.getItem('swr-load');

@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <script src="js/consolelog.js"></script>
+    <script src="js/keycodefallback.js"></script>
     <title>Empire War Remastered</title>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <link rel="icon" href="favicon.ico" sizes="48x48" />
@@ -111,6 +112,7 @@
       }
 
       main {
+        position: relative;
         width: min(1080px, 100%);
         margin: 0 auto;
         padding: 64px 32px 80px;
@@ -119,6 +121,45 @@
         box-shadow: 0 0 60px 30px rgba(1, 3, 7, 0.74);
       }
 
+      .channel {
+        position: absolute;
+        top: 24px;
+        right: 32px;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font: 500 11px/1 var(--mono);
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        color: var(--bone-3);
+      }
+      .channel-options {
+        display: flex;
+        border: 1px solid var(--line-hi);
+      }
+      .channel-options button {
+        padding: 9px 16px;
+        border: 0;
+        background: none;
+        color: var(--bone-2);
+        font: 600 12px/1 var(--disp);
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        cursor: pointer;
+      }
+      .channel-options button + button {
+        border-left: 1px solid var(--line-hi);
+      }
+      .channel-options button:hover {
+        color: var(--bone);
+        background: var(--imp-3);
+      }
+      .channel-options button.on {
+        color: var(--bone);
+        background: var(--imp);
+        cursor: default;
+      }
       header {
         display: grid;
         grid-template-columns: var(--rail) 1fr;
@@ -959,6 +1000,10 @@
         main {
           padding: 36px 16px 56px;
         }
+        .channel {
+          position: static;
+          margin-bottom: 24px;
+        }
         header {
           grid-template-columns: 1fr;
           margin-bottom: 32px;
@@ -1076,13 +1121,17 @@
     <div class="scan" aria-hidden="true"></div>
 
     <main>
+      <div id="channel" class="channel hidden">
+        <span class="channel-label">Game build</span>
+        <div id="channelOptions" class="channel-options" role="radiogroup" aria-label="Game build"></div>
+      </div>
       <header>
         <div class="kicker">Star Wars</div>
         <h1>Empire War Remastered</h1>
         <div class="sub"><span id="subName">Forces of Corruption</span> · in the browser</div>
         <div class="credit">
-          Browser engine by RIRA · Fork by 0xHayd3n
-          <div id="kofi"><a class="ask" href="https://ko-fi.com/Z4S429CUIG" target="_blank" rel="noopener">Support RIRA on Ko-fi</a></div>
+          Browser engine by Glenn332 · Fork by 0xHayd3n
+          <div id="kofi"><a class="ask" href="https://ko-fi.com/Z4S429CUIG" target="_blank" rel="noopener">Support Glenn332 on Ko-fi</a></div>
           <a class="repo" href="https://github.com/0xHayd3n/Empire-War-Remastered" target="_blank" rel="noopener">
             <svg viewBox="0 0 16 16" aria-hidden="true">
               <path
@@ -2078,6 +2127,12 @@
         const own = foldersSupported() ? await getGame().catch(() => null) : null;
         const live = !own && !info && (await assetsAvailable());
         const ok = !!(own || info || live);
+        let appGame = null;
+        if (app)
+          try {
+            if (!setup) setup = await appSetup().catch(() => null);
+            appGame = setup?.game || null;
+          } catch {}
         $('link').classList.toggle('ok', ok);
         $('current').textContent = own
           ? `Reading your installed game, “${own.name}” (${own.count.toLocaleString()} files)${own.compat ? ', in compatibility mode' : ''}.`
@@ -2085,7 +2140,11 @@
             ? `Using the game archive stored in this browser (${info.files.toLocaleString()} files).`
             : live
               ? 'This server reads the game straight from an install.'
-              : 'None yet. Choose your game folder or import an archive of it below.';
+              : appGame?.path
+                ? 'The game folder is missing files the game needs to run. See Your game below.'
+                : appGame
+                  ? 'No game folder found. Choose it under Your game below.'
+                  : 'None yet. Choose your game folder or import an archive of it below.';
         $('storeNote').textContent =
           own && info
             ? 'A stored archive is kept but not used while the folder is set.'
@@ -2813,6 +2872,7 @@
       const HOW = {
         steam: 'found through Steam',
         gog: 'found through GOG',
+        copied: 'copied into the app',
         chosen: 'chosen by you',
         env: 'set by SWR_GAME',
         dev: 'the copy next to the app (development)'
@@ -2860,10 +2920,27 @@
           busy = false;
         }
       }
+      function gameFolderProblem(g) {
+        if (!g.path || (g.ready && !g.incomplete)) return null;
+        const some = g.missing.slice(0, 3).join(', ') + (g.missingCount > 3 ? ` and ${g.missingCount - 3} more` : '');
+        const missing = g.missingCount ? ` Missing: ${some}.` : '';
+        const fix =
+          g.how === 'steam'
+            ? ' Steam may have moved the game to another library or left this copy behind: verify the game files in Steam, or choose the folder the game is in now.'
+            : ' Choose the folder the game is installed in (the one with GameData and corruption, or GameData and EAWX for the GOG release), or repair the install.';
+        return g.ready
+          ? { text: `Some of the game's files are missing from this folder, so parts of the game may not work.${missing}${fix}`, cls: '' }
+          : {
+              text: `This folder does not have the files the game needs to run, so the game cannot start from it.${missing}${fix}`,
+              cls: 'bad'
+            };
+      }
       function showAppGame() {
         const el = $('appGame'),
           g = setup.game;
         el.replaceChildren();
+        const problem = gameFolderProblem(g);
+        gameStatus(problem ? problem.text : '', problem ? problem.cls : '');
         const h = document.createElement('p');
         h.className = 'note';
         h.style.marginTop = '0';
@@ -2876,6 +2953,10 @@
           gameStatus('Opening the game…');
           if (await changeSetup('game', { path }, gameStatus)) location.reload();
         });
+        if (g.copyTo) {
+          showCopiedGame(el, h, g);
+          return;
+        }
         const parts = g.path ? [span('path', g.path, g.path), span('meta', HOW[g.how] || g.how)] : [];
         if (g.how === 'chosen' && g.steam)
           parts.push(
@@ -2892,6 +2973,22 @@
         p.className = 'modadd';
         p.append(choose);
         el.append(p);
+      }
+      // phones and tablets have no folder dialog: the player copies the game into the app's folder
+      function showCopiedGame(el, heading, g) {
+        heading.textContent = g.path
+          ? 'The game is played from the copy in the app folder:'
+          : 'No game was found. Copy your game folder (the one with GameData and corruption) from a computer into this folder on the device, over USB, then look again:';
+        const parts = [span('path', g.path || g.copyTo, g.path || g.copyTo)];
+        if (g.path) parts.push(span('meta', HOW[g.how] || g.how));
+        const look = document.createElement('p');
+        look.className = 'modadd';
+        look.append(
+          button('Look again', async () => {
+            if (await changeSetup('game', { path: '' }, gameStatus)) location.reload();
+          })
+        );
+        el.append(heading, row(...parts), look);
       }
       function showAppSources() {
         const el = $('appSources');

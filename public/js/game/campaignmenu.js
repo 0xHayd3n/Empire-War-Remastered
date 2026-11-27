@@ -4,7 +4,15 @@ import { iconAtlas, iconCanvasRect } from '../icons.js';
 import { loadTextureCanvas } from '../dds.js';
 import { openDialog } from './dialogs.js';
 import { loadCampaignData } from './galaxy.js';
-import { campaignLimits, campaignDefaults, creditSteps, creditsAt, techRange } from './campaignsettings.js';
+import {
+  campaignLimits,
+  campaignDefaults,
+  creditSteps,
+  creditsAt,
+  techRange,
+  optionBoxes,
+  offersRandomEvents
+} from './campaignsettings.js';
 
 const key = s =>
   String(s || '')
@@ -93,8 +101,8 @@ export async function openCampaignMenu({ start, cancel = null, audio = null, tut
       custom = !!c && campaignLimits(c).custom;
     settings = c ? campaignDefaults(c, c.str('Starting_Active_Player')) : null;
     dlg.enable('IDC_PLAY_BUTTON', !!c);
-    dlg.show('IDC_SELECT_OPTIONS', !!selection && (!c || custom));
-    dlg.enable('IDC_SELECT_OPTIONS', custom);
+    dlg.show('IDC_SELECT_OPTIONS', !!selection);
+    dlg.enable('IDC_SELECT_OPTIONS', !!c);
   };
   const pick = row => {
     selection = row;
@@ -117,7 +125,12 @@ export async function openCampaignMenu({ start, cancel = null, audio = null, tut
       difficulty,
       players: [],
       teamFactions: [],
-      ...(settings?.custom ? { campaignSettings: { ...settings } } : {})
+      ...(settings?.custom ? { campaignSettings: { ...settings } } : {}),
+      // off unless the player ticks it, and never in a tutorial, which teaches the ground battles
+      options: {
+        groundAutoResolve: !tutorial && settings?.groundAutoResolve === true,
+        ...(offersRandomEvents() ? { randomEvents: settings?.randomEvents !== false } : {})
+      }
     });
   };
   dlg.show('IDC_DIALOG_CLOSE_BUTTON', false);
@@ -148,7 +161,7 @@ export async function openCampaignMenu({ start, cancel = null, audio = null, tut
   dlg.on('IDC_PLAY_BUTTON', play);
   dlg.on('IDC_SELECT_OPTIONS', async () => {
     const c = variant();
-    if (!c || !settings || !campaignLimits(c).custom) return;
+    if (!c || !settings) return;
     const scratch = { ...settings };
     if (await campaignOptionsDialog(scratch, c, c.str('Starting_Active_Player'))) settings = scratch;
   });
@@ -258,10 +271,11 @@ export function bindCampaignSettings(dlg, st, campaign, faction) {
         mark();
       }
     );
-    dlg.check('IDC_ALLOW_RANDOM_EVENTS', false, () => {});
+    optionBoxes(dlg, st, 'Auto-resolve all ground battles');
   };
-  dlg.show('IDC_ALLOW_RANDOM_EVENTS', false);
-  dlg.enable('IDC_ALLOW_RANDOM_EVENTS', false);
+  if (!limits.custom)
+    for (const id of ['IDC_SKIRMISH_CREDITS_SLIDER', 'IDC_SKIRMISH_STARTING_TECH_LEVEL_SLIDER', 'IDC_SKIRMISH_MAX_TECH_LEVEL_SLIDER', 'IDC_ALLOW_AUTORESOLVE_COMBO'])
+      dlg.enable(id, false);
   show();
   return () => { Object.assign(st, campaignDefaults(campaign, faction)); show(); };
 }

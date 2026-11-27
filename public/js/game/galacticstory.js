@@ -3,7 +3,7 @@ import { pool as slicePool } from './galacticslicer.js';
 import { db, typeHasProperty } from '../gamedata.js';
 import { diplomacy, setRelation } from './galacticrelation.js';
 import { activeLanguage } from '../language.js';
-import { changeController } from './galacticpolitics.js';
+import { changeController, surfaceReachable } from './galacticpolitics.js';
 import { planetFactionChange } from './galacticobliterate.js';
 import { StoryPlots } from './storyplots.js';
 import { GalacticSources, moduleKey, mountedSourceLibrary } from './galacticsources.js';
@@ -13,6 +13,7 @@ import { LuaVM, LuaRef, Multi, loadFengari, engineLacksMethod } from '../lua.js'
 import { GalacticNeutralizePopup } from './galacticpopup.js';
 import { NeutralizeShell } from './neutralizeshell.js';
 import { readBrain, Reason, typeParam, catParam } from './landbrain.js';
+import { level } from './galacticai.js';
 import { placeStartingForce, forceKind, replaceFirstFleet } from './galaxy.js';
 import { planetAllowsCompany } from './invasion.js';
 import { planetIncome, playerIncome, adjustCredits } from './galacticeconomy.js';
@@ -33,7 +34,7 @@ import { playScriptMusic, startStrategicMusic } from './galacticmusic.js';
 import { galacticStoryReward } from './storyrewards.js';
 import { aidebug as D, who, group, nameOf } from '../aidebug.js';
 import { flashSpawned, tutorialFx } from './tutorialrewards.js';
-import { planetCreditValue, planetMaxStarbase } from './planetstats.js';
+import { planetCreditValue, planetMaxStarbase, planetMaxGroundSlots } from './planetstats.js';
 import { generatedPlotSave, restoreGeneratedPlot } from './randomstory.js';
 
 const SIDE_LIVE = new Set([
@@ -52,6 +53,7 @@ const key = s =>
     .replace(/\\/g, '/')
     .toUpperCase();
 const yes = s => /^(true|yes|1)$/i.test(String(s));
+const WARM_PASSES = 600;
 const scriptNames = new WeakMap();
 const objectScriptName = type => {
   if (!type?.str) return undefined;
@@ -91,8 +93,7 @@ const addTypes = (out, u, depth = 0) => {
   add(u.type);
   add(u.carries);
 };
-const runsInGalaxy = src =>
-  /["']Galactic["']/.test(src) || !/Get_Game_Mode\s*\(\s*\)\s*~=\s*["'](Space|Land)["']/.test(src);
+const runsInGalaxy = src => /["']Galactic["']/.test(src) || !/Get_Game_Mode\s*\(\s*\)\s*~=\s*["'](Space|Land)["']/.test(src);
 
 export class GalacticStoryHost extends StoryPlots {
   static async prepare(restoring) {
@@ -134,6 +135,7 @@ export class GalacticStoryHost extends StoryPlots {
       await host.restoreCombatEvents(game.galaxy.storySaved || []);
       host.suspended = true;
       host.errors.set('Tactical return', 'The story scripts were not saved with this game: they stay stopped');
+      if (host.index.size) game.message?.('The story scripts could not be saved with this game, so the story stays stopped.');
       return host;
     }
     await host.initialize(warm);
@@ -315,7 +317,8 @@ export class GalacticStoryHost extends StoryPlots {
     const inst = this.current;
     if (inst?.side && !this.sideContext && inst.randoms.length) return inst.randoms.shift();
     const r = simRandom();
-    if (inst && !inst.side && inst.copies?.length && !this.sideContext) for (const copy of inst.copies) if (copy.state !== 'over') copy.randoms.push(r);
+    if (inst && !inst.side && inst.copies?.length && !this.sideContext)
+      for (const copy of inst.copies) if (copy.state !== 'over') copy.randoms.push(r);
     return r;
   }
 
@@ -450,10 +453,21 @@ export class GalacticStoryHost extends StoryPlots {
   }
   speechQueued(name) {
     if (this.game.setup?.net) (this.speechDone ||= []).push(name);
+    else {
+      // lines still playing are saved, so STORY_SPEECH_DONE still comes after a load or a battle
+      const list = (this.speaking ||= []);
+      list.push(name);
+      if (list.length > 16) list.shift();
+    }
+  }
+  speechFinished(name) {
+    const i = this.speaking ? this.speaking.findIndex(n => key(n) === key(name)) : -1;
+    if (i >= 0) this.speaking.splice(i, 1);
   }
 
   absent(kind) {
-    return name => (/^[A-Z]/.test(name) && !engineLacksMethod(kind, name) ? (...args) => this.unsupported(kind + '.' + name, args) : undefined);
+    return name =>
+      /^[A-Z]/.test(name) && !engineLacksMethod(kind, name) ? (...args) => this.unsupported(kind + '.' + name, args) : undefined;
   }
   unsupported(name) {
     this.missing.set(name, (this.missing.get(name) || 0) + 1);
@@ -477,71 +491,77 @@ export class GalacticStoryHost extends StoryPlots {
         : 'Galactic'
     );
     vm.global('Is_Multiplayer_Mode', () => !!game.setup?.net);
-    vm.global('WeightedTypeList', (this.weightedTypes = {
-      __wrap: true,
-      __name: 'WeightedTypeList',
-      Create: () => {
-        const types = [],
-          add = (name, weight) => {
-            const t = name?.__type || db.type(String(name));
-            if (t) types.push([t, +weight || 0]);
+    vm.global(
+      'WeightedTypeList',
+      (this.weightedTypes = {
+        __wrap: true,
+        __name: 'WeightedTypeList',
+        Create: () => {
+          const types = [],
+            add = (name, weight) => {
+              const t = name?.__type || db.type(String(name));
+              if (t) types.push([t, +weight || 0]);
+            };
+          return {
+            __wrap: true,
+            __name: 'WeightedTypeList',
+            __weighted: types,
+            Is_Valid: () => true,
+            Add_Type: add,
+            Parse: (names, weights) => {
+              if (Array.isArray(names)) names.forEach((n, i) => add(n, Array.isArray(weights) ? weights[i] : weights));
+              else {
+                const parts = String(names || '')
+                  .split(',')
+                  .map(x => x.trim());
+                if (Array.isArray(weights)) parts.forEach((n, i) => add(n, weights[i]));
+                else for (let i = 0; i + 1 < parts.length; i += 2) add(parts[i], parts[i + 1]);
+              }
+            },
+            Get_Count: () => types.length,
+            Get_Weight: name => types.find(([t]) => t === (name?.__type || db.type(String(name))))?.[1] || 0,
+            Get_Type_At: i => (types[+i - 1] ? self.type(types[+i - 1][0]) : undefined),
+            __missing: this.absent('WeightedTypeList')
           };
-        return {
-          __wrap: true,
-          __name: 'WeightedTypeList',
-          __weighted: types,
-          Is_Valid: () => true,
-          Add_Type: add,
-          Parse: (names, weights) => {
-            if (Array.isArray(names)) names.forEach((n, i) => add(n, Array.isArray(weights) ? weights[i] : weights));
-            else {
-              const parts = String(names || '')
-                .split(',')
-                .map(x => x.trim());
-              if (Array.isArray(weights)) parts.forEach((n, i) => add(n, weights[i]));
-              else for (let i = 0; i + 1 < parts.length; i += 2) add(parts[i], parts[i + 1]);
-            }
-          },
-          Get_Count: () => types.length,
-          Get_Weight: name => types.find(([t]) => t === (name?.__type || db.type(String(name))))?.[1] || 0,
-          Get_Type_At: i => (types[+i - 1] ? self.type(types[+i - 1][0]) : undefined),
-          __missing: this.absent('WeightedTypeList')
-        };
-      },
-      __missing: this.absent('WeightedTypeList')
-    }));
+        },
+        __missing: this.absent('WeightedTypeList')
+      })
+    );
     vm.global('Is_Campaign_Game', () => true);
     vm.global('Enable_AI_Fleet_Pathfinders', on => {
       if (game.galaxy) game.galaxy.aiPathfinders = !!on;
     });
-    vm.global('DiscreteDistribution', (this.distributions = {
-      __wrap: true,
-      __name: 'DiscreteDistribution',
-      __missing: this.absent('DiscreteDistribution'),
-      Create: () => {
-        const items = [];
-        return {
-          __wrap: true,
-          __name: 'DiscreteDistribution',
-          __dist: items,
-          Is_Valid: () => true,
-          __missing: this.absent('DiscreteDistribution'),
-          Insert: (value, weight) => {
-            items.push([value, Math.max(0, +weight || 0)]);
-          },
-          Sample: () => {
-            let sum = 0;
-            for (const [, x] of items) sum += x;
-            let r = simRandom() * sum;
-            for (const [v, x] of items) {
-              r -= x;
-              if (r <= 0) return v;
+    vm.global(
+      'DiscreteDistribution',
+      (this.distributions = {
+        __wrap: true,
+        __name: 'DiscreteDistribution',
+        __missing: this.absent('DiscreteDistribution'),
+        Create: () => {
+          const items = [];
+          return {
+            __wrap: true,
+            __name: 'DiscreteDistribution',
+            __dist: items,
+            Is_Valid: () => true,
+            __missing: this.absent('DiscreteDistribution'),
+            Insert: (value, weight) => {
+              items.push([value, Math.max(0, +weight || 0)]);
+            },
+            Sample: () => {
+              let sum = 0;
+              for (const [, x] of items) sum += x;
+              let r = simRandom() * sum;
+              for (const [v, x] of items) {
+                r -= x;
+                if (r <= 0) return v;
+              }
+              return items.length ? items[items.length - 1][0] : undefined;
             }
-            return items.length ? items[items.length - 1][0] : undefined;
-          }
-        };
-      }
-    }));
+          };
+        }
+      })
+    );
     vm.global('StringCompare', (a, b) => key(a) === key(b));
     vm.global('GetCurrentTime', {
       __wrap: true,
@@ -581,7 +601,7 @@ export class GalacticStoryHost extends StoryPlots {
       __call: (owner, equation, flags, probability, range) =>
         game.ai?.findTarget(owner?.__faction, equation, flags, probability, null, null, range),
       Reachable_Target: (owner, equation, flags, reach, probability, target, range) =>
-        game.ai?.findTarget(owner?.__faction, equation, flags, probability, target?.__planet, reach, range)
+        game.ai?.findTarget(owner?.__faction, equation, flags, probability, target?.__planet || target?.__object?.planet, reach, range)
     });
     vm.global('FindPlanet', {
       __wrap: true,
@@ -591,23 +611,59 @@ export class GalacticStoryHost extends StoryPlots {
     });
     vm.global('Get_Story_Plot', name => this.plotWrapper(name));
     vm.global('Story_Event', name => this.signal('STORY_AI_NOTIFICATION', name));
-    vm.global('GUI_Component_Visibility', (name, on) => game.scriptUI?.visibility(String(name), on !== false && on !== 0));
+    // What a script shows in answer to one player's click (a menu opening, a label, a highlight) is drawn on that
+    // player's screen only. Enabling a button stays shared: it decides whether a click is carried out at all.
+    const view =
+      f =>
+      (...args) =>
+        game.scriptUI?.elsewhere?.() ? undefined : f(...args);
+    vm.global(
+      'GUI_Component_Visibility',
+      view((name, on) => game.scriptUI?.visibility(String(name), on !== false && on !== 0))
+    );
     vm.global('GUI_Component_Enable', (name, on) => game.scriptUI?.enable(String(name), on !== false && on !== 0));
-    vm.global('GUI_Component_Text', (name, text) => game.scriptUI?.text(String(name), String(text ?? '')));
-    vm.global('GUI_Component_Color', (name, r, g, b, a) => game.scriptUI?.color(String(name), r, g, b, a));
-    vm.global('GUI_Text_Color', (name, r, g, b, a) => game.scriptUI?.textColor(String(name), r, g, b, a));
-    vm.global('GUI_Component_Blink', (name, on) => game.scriptUI?.blink(String(name), !!on));
-    vm.global('GUI_Component_Flash', (name, perpetual, duration, count) => {
-      if (/^b_story_arc/i.test(String(name)) && !game.scriptUI?.elements?.(String(name)).length) game.storyButtonFlash?.(true);
-      else game.scriptUI?.flash(String(name), !!perpetual, +duration || 0, +count || 0);
-    });
-    vm.global('GUI_Component_Stop_Flash', name => {
-      if (/^b_story_arc/i.test(String(name))) game.storyButtonFlash?.(false);
-      game.scriptUI?.stopFlash(String(name));
-    });
-    vm.global('GUI_Component_Play_Anim', (name, anim, at, loop) => game.scriptUI?.play(String(name), 0, !!loop));
-    vm.global('GUI_Component_Stop_Anim', name => game.scriptUI?.stopAnim(String(name)));
-    vm.global('GUI_Button_Icon', (name, icon, ...args) => game.scriptUI?.icon(String(name), String(icon), ...args));
+    vm.global(
+      'GUI_Component_Text',
+      view((name, text) => game.scriptUI?.text(String(name), String(text ?? '')))
+    );
+    vm.global(
+      'GUI_Component_Color',
+      view((name, r, g, b, a) => game.scriptUI?.color(String(name), r, g, b, a))
+    );
+    vm.global(
+      'GUI_Text_Color',
+      view((name, r, g, b, a) => game.scriptUI?.textColor(String(name), r, g, b, a))
+    );
+    vm.global(
+      'GUI_Component_Blink',
+      view((name, on) => game.scriptUI?.blink(String(name), !!on))
+    );
+    vm.global(
+      'GUI_Component_Flash',
+      view((name, perpetual, duration, count) => {
+        if (/^b_story_arc/i.test(String(name)) && !game.scriptUI?.elements?.(String(name)).length) game.storyButtonFlash?.(true);
+        else game.scriptUI?.flash(String(name), !!perpetual, +duration || 0, +count || 0);
+      })
+    );
+    vm.global(
+      'GUI_Component_Stop_Flash',
+      view(name => {
+        if (/^b_story_arc/i.test(String(name))) game.storyButtonFlash?.(false);
+        game.scriptUI?.stopFlash(String(name));
+      })
+    );
+    vm.global(
+      'GUI_Component_Play_Anim',
+      view((name, anim, at, loop) => game.scriptUI?.play(String(name), 0, !!loop))
+    );
+    vm.global(
+      'GUI_Component_Stop_Anim',
+      view(name => game.scriptUI?.stopAnim(String(name)))
+    );
+    vm.global(
+      'GUI_Button_Icon',
+      view((name, icon, ...args) => game.scriptUI?.icon(String(name), String(icon), ...args))
+    );
     vm.global('Check_Story_Flag', (player, name, target, clear) => {
       const flags = this.aiFlags.get(key(player?.__faction)),
         id = key(name) + '|' + key(target?.__planet?.name || target?.__object?.type.name);
@@ -649,7 +705,8 @@ export class GalacticStoryHost extends StoryPlots {
     vm.global('Add_Planet_Highlight', (planet, id) => {
       const p = planet?.__planet,
         scene = game.scene || game.renderer?.scene;
-      if (p && scene) tutorialFx(game).highlight('planet:' + String(id), true, { scene, position: { x: p.pos[0], y: p.pos[1], z: p.pos[2] || 0 } });
+      if (p && scene)
+        tutorialFx(game).highlight('planet:' + String(id), true, { scene, position: { x: p.pos[0], y: p.pos[1], z: p.pos[2] || 0 } });
     });
     vm.global('Remove_Planet_Highlight', id => tutorialFx(game).highlight('planet:' + String(id), false));
     vm.global('Game_Message', name => game.message?.(db.t(String(name))));
@@ -815,7 +872,7 @@ export class GalacticStoryHost extends StoryPlots {
         if (!p || typeof level !== 'number') return;
         raiseTech(this.game, p.faction, level);
       },
-      Get_Difficulty: () => ({ easy: 'Easy', medium: 'Normal', hard: 'Hard' })[this.game.setup?.difficulty] || 'Normal',
+      Get_Difficulty: () => ({ easy: 'Easy', normal: 'Normal', hard: 'Hard' })[level(data()?.difficulty || this.game.setup?.difficulty)],
       Lock_Tech: type => this.tech(faction.name, type?.__type, false),
       Unlock_Tech: type => this.tech(faction.name, type?.__type, true),
       Is_Enemy: other => {
@@ -911,9 +968,8 @@ export class GalacticStoryHost extends StoryPlots {
     const matching = object =>
       (!types.length || types.includes(key(object.type.name))) && (!categories || categories.some(c => object.type.categories().has(c)));
     if (name === 'VARIABLE_TARGET.MAXGROUNDBASELEVEL') return target.planet?.type.num('Max_Ground_Base_Level', 0) || 0;
-    if (name === 'VARIABLE_TARGET.MAXSTRUCTURESLOTSUNNORMALIZED')
-      return p?.structureSlots ?? p?.type.num('Special_Structures_Land', 3) ?? 0;
-    if (name === 'VARIABLE_TARGET.MAXSTARBASELEVEL') return (target.planet ? planetMaxStarbase(target.planet, 0) : 0);
+    if (name === 'VARIABLE_TARGET.MAXSTRUCTURESLOTSUNNORMALIZED') return p ? planetMaxGroundSlots(p) : 0;
+    if (name === 'VARIABLE_TARGET.MAXSTARBASELEVEL') return target.planet ? planetMaxStarbase(target.planet, 0) : 0;
     if (name === 'VARIABLE_SELF.TECHLEVEL') return owner?.Get_Tech_Level() || 0;
     if (name === 'VARIABLE_SELF.CREDITS') return owner?.Get_Credits() || 0;
     if (name === 'VARIABLE_SELF.GROSSINCOMEUNNORMALIZED') return playerIncome(g, owner?.__faction);
@@ -931,9 +987,9 @@ export class GalacticStoryHost extends StoryPlots {
     if (name === 'VARIABLE_TARGET.INCOMEUNNORMALIZED') return p ? planetIncome(g, p) : 0;
     if (name === 'VARIABLE_TARGET.GROUNDBASELEVELUNNORMALIZED') return p ? groundLevel(p, p.owner) : 0;
     if (name === 'VARIABLE_TARGET.STARBASELEVELUNNORMALIZED' || name === 'VARIABLE_TARGET.STARBASELEVEL') return p?.spaceLevel || 0;
-    if (name === 'VARIABLE_TARGET.MAXSTARBASELEVELUNNORMALIZED') return (p ? planetMaxStarbase(p, 0) : 0);
+    if (name === 'VARIABLE_TARGET.MAXSTARBASELEVELUNNORMALIZED') return p ? planetMaxStarbase(p, 0) : 0;
     if (name === 'VARIABLE_TARGET.OPENSTRUCTURESLOTSUNNORMALIZED')
-      return p ? Math.max(0, p.type.num('Special_Structures_Land', 0) - p.groundStructures.length) : 0;
+      return p ? Math.max(0, planetMaxGroundSlots(p, 0) - p.groundStructures.length) : 0;
     if (name === 'VARIABLE_TARGET.HASSTRUCTURE' || name === 'VARIABLE_SELF.HASSTRUCTURE')
       return this.objects().some(o => at(o) && matching(o)) ? 1 : 0;
     if (name === 'VARIABLE_TARGET.ACTIVETRADEROUTES') {
@@ -980,7 +1036,9 @@ export class GalacticStoryHost extends StoryPlots {
         (friendly ? owner?.Is_Ally(this.player(who)) : owner?.Is_Enemy(this.player(who))) &&
         (!factions.length || factions.includes(key(who)));
       return space
-        ? +g.fleets.some(f => f.planet === p.index && !f.leg && matches(f.owner) && f.units.some(u => !u.dead && !strategicStealth(u, f.owner)))
+        ? +g.fleets.some(
+            f => f.planet === p.index && !f.leg && matches(f.owner) && f.units.some(u => !u.dead && !strategicStealth(u, f.owner))
+          )
         : +p.garrison.some(u => !u.dead && matches(u.owner));
     }
     if (name === 'VARIABLE_TARGET.FRIENDLYFORCE.HASGROUNDUNITSBITFIELD')
@@ -1031,7 +1089,7 @@ export class GalacticStoryHost extends StoryPlots {
         },
         Is_Valid: () => true,
         Get_Type: () => this.type(p.type),
-        Get_Owner: () => this.player(p.owner),
+        Get_Owner: () => this.ownerPlayer(p.owner),
         Get_Position: () => this.position(...p.pos),
         Get_Planet_Location: () => wrapper,
         Get_Next_Starbase_Type: () => this.nextBase(p, true),
@@ -1281,13 +1339,14 @@ export class GalacticStoryHost extends StoryPlots {
       record.planet || record.pos
         ? record
         : { record, type: record.carries || record.type, owner: owner || planet?.owner, planet, dead: false };
+    if (record.noAI) object.noAI = true;
     result = {
       __wrap: true,
       __name: object.type.name,
       __object: object,
       Is_Valid: () => !object.dead && !record.dead,
       Get_Type: () => this.type(object.type),
-      Get_Owner: () => this.player(object.owner),
+      Get_Owner: () => this.ownerPlayer(object.owner),
       Get_Planet_Location: () => this.planet(object.planet),
       Get_Game_Scoring_Type: () => this.type(record.carries || object.type),
       Get_Final_Blow_Player: () => this.player(object.finalBlowOwner || this.neutralOwner()),
@@ -1317,15 +1376,17 @@ export class GalacticStoryHost extends StoryPlots {
         return (
           !!p &&
           forceKind(object.type) === 'company' &&
-          !p.destroyed &&
-          p.type.bool('Planet_Surface_Accessible', true) &&
+          surfaceReachable(p) &&
           planetAllowsCompany(p, object.type) &&
           p.garrison.length < db.constants.num('Max_Ground_Forces_On_Planet', 10)
         );
       },
       Get_Garrisoned_Units: () => [],
       Prevent_AI_Usage: on => {
+        // kept on the galaxy record too, so the save and the return from a battle keep it
         object.noAI = !!on;
+        if (on) record.noAI = true;
+        else delete record.noAI;
       },
       Mark_Parent_Mode_Object_For_Death: () => {
         object.deleteAfterBattle = true;
@@ -1422,7 +1483,10 @@ export class GalacticStoryHost extends StoryPlots {
   galacticFleet(f) {
     const g = this.game.galaxy,
       at = f.leg ? null : g.planets[f.planet];
-    const wrap = this.fleet(f.units.filter(u => !u.dead).map(u => this.object(u, at || undefined, f.owner)), f);
+    const wrap = this.fleet(
+      f.units.filter(u => !u.dead).map(u => this.object(u, at || undefined, f.owner)),
+      f
+    );
     return wrap;
   }
   fleet(list, galactic = null) {
@@ -1618,7 +1682,7 @@ export class GalacticStoryHost extends StoryPlots {
     this.choices.delete(id);
     if (key(this.game.localFaction ?? this.game.me) === c.owner) this.popup.close();
     if (index >= 0) this.neutralizeExecute(c.object, c.ability, c.planet, c.rows[index]);
-    if (gui) this.clickGUI(String(gui));
+    if (gui && NeutralizeShell.control(gui, index >= 0)) this.clickGUI(gui);
   }
   heroTypes(type) {
     const members = [...type.list('Company_Units'), ...type.list('Squadron_Units')].map(n => db.type(n)).filter(Boolean);
@@ -1758,7 +1822,9 @@ export class GalacticStoryHost extends StoryPlots {
     this.neutralizeNotice(object, row, planet);
     this.abilityLanded(planet, object);
     this.despawn(object);
-    scheduleHeroRespawn(this.game, mine, planet, object.owner, null, row.ownerTime ?? 0, true);
+    // Only a hero comes back after Owner_Respawn_Time; any other user of the ability is spent (the Thrawns Revenge
+    // popup activator is spawned anew for each popup, and a respawned one at another planet left the next popup empty).
+    if (this.heroTypes(object.type).length) scheduleHeroRespawn(this.game, mine, planet, object.owner, null, row.ownerTime ?? 0, true);
     return true;
   }
 
@@ -1794,6 +1860,9 @@ export class GalacticStoryHost extends StoryPlots {
     if (fn) inst.events.push({ fn, params });
   }
 
+  ownerPlayer(owner) {
+    return this.player(owner || this.neutralOwner());
+  }
   neutralOwner() {
     return [...db.factions.values()].find(t => t.bool('Is_Neutral'))?.name;
   }
@@ -2154,7 +2223,7 @@ export class GalacticStoryHost extends StoryPlots {
         break;
       }
       case 'LINK_TACTICAL':
-        if (!game.queueLinkedTactical?.(p))
+        if (!game.queueLinkedTactical?.(p, e.plot?.owner))
           this.errors.set(e.name, 'LINK_TACTICAL request rejected: invalid parameters or a transition is already queued');
         break;
       case 'LOAD_CAMPAIGN': {
@@ -2165,6 +2234,10 @@ export class GalacticStoryHost extends StoryPlots {
           campaign: p[0],
           faction: faction?.name,
           difficulty: ['easy', 'medium', 'hard'][+p[2]] || 'medium',
+          options: {
+            groundAutoResolve: !!game.galaxy?.groundAutoResolve,
+            ...(game.galaxy?.randomEvents !== undefined ? { randomEvents: !!game.galaxy.randomEvents } : {})
+          },
           ...(p[3] != null && p[3] !== '' && +p[3] >= 0 && +p[3] < 6 ? { startingTechLevel: +p[3] } : {})
         };
         break;
@@ -2235,7 +2308,7 @@ export class GalacticStoryHost extends StoryPlots {
         __call: (name, arg) => {
           const thread = vm.thread(inst.env, String(name));
           if (!thread) return -1;
-          thread.id = (inst.threadIds = Math.max(inst.threadIds || 0, inst.threads.length) + 1);
+          thread.id = inst.threadIds = Math.max(inst.threadIds || 0, inst.threads.length) + 1;
           thread.arg = arg;
           thread.values = new Map();
           inst.threads.push(thread);
@@ -2378,8 +2451,10 @@ export class GalacticStoryHost extends StoryPlots {
       this.objectCache = null;
       this.reasonCache.clear();
     }
+    // modeSuspended follows each peer's own battle window; in a net game hold on the lockstep battle state instead
+    const suspended = this.game.net ? !!this.game.busy : this.game.modeSuspended;
     try {
-      if (service && !this.game.paused && !this.game.modeSuspended) this.replayDelayed();
+      if (service && !this.game.paused && !suspended) this.replayDelayed();
       if (service) this.pollEvents(false, 'elapsed');
       if (service && !this.suspended)
         for (const inst of this.instances) {
@@ -2392,7 +2467,7 @@ export class GalacticStoryHost extends StoryPlots {
             this.service(inst);
           }
         }
-      if (service && !this.suspended && !this.game.paused && !this.game.modeSuspended) this.serviceObjectScripts(force);
+      if (service && !this.suspended && !this.game.paused && !suspended) this.serviceObjectScripts(force);
       if (service && this.eventTypes.get('STORY_BEGIN_ERA')?.length)
         this.signalEra(Math.max(0, ...this.game.galaxy.players.map(p => p.tech || 0)));
       if (this.techPending) {
@@ -2411,16 +2486,26 @@ export class GalacticStoryHost extends StoryPlots {
     }
   }
 
-  async warmInstance(inst, timeout = 12000) {
+  // A net game must reach the same story state on every peer before lockstep starts, so it waits for slow
+  // script loads and bounds the warm-up by passes instead of wall-clock time.
+  warmBudget(timeout) {
+    if (this.game.setup?.net) {
+      let passes = WARM_PASSES;
+      return () => passes-- > 0;
+    }
     const start = performance.now();
-    while (performance.now() - start < timeout && inst.state === 'new') {
+    return () => performance.now() - start < timeout;
+  }
+  async warmInstance(inst, timeout = 12000) {
+    const more = this.warmBudget(timeout);
+    while (inst.state === 'new' && more()) {
       if (this.pending.size) await Promise.all([...this.pending.values()]);
       else this.start(inst);
     }
   }
   async warm(timeout = 12000) {
-    const start = performance.now();
-    while (performance.now() - start < timeout && !this.disposed) {
+    const more = this.warmBudget(timeout);
+    while (!this.disposed && more()) {
       if (this.pending.size) await Promise.all([...this.pending.values()]);
       this.update(0, true);
       if (
@@ -2443,10 +2528,12 @@ export class GalacticStoryHost extends StoryPlots {
       if (objectScriptName(record.type)) out.push([record, planet, owner]);
       const holder = record.carries || record.type;
       if (holder && memberNames(holder).scripted)
-        for (const member of this.membersOf(record)) if (!member.dead && objectScriptName(member.type)) members.push([member, planet, owner]);
+        for (const member of this.membersOf(record))
+          if (!member.dead && objectScriptName(member.type)) members.push([member, planet, owner]);
     };
     for (const p of g.planets)
-      for (const list of [p.groundStructures, p.orbitalStructures, p.garrison]) for (const record of list || []) visit(record, p, record.owner || p.owner);
+      for (const list of [p.groundStructures, p.orbitalStructures, p.garrison])
+        for (const record of list || []) visit(record, p, record.owner || p.owner);
     for (const fleet of g.fleets || []) {
       const planet = fleet.leg ? null : g.planets[fleet.planet];
       for (const record of fleet.units) visit(record, planet, fleet.owner);
@@ -2461,7 +2548,10 @@ export class GalacticStoryHost extends StoryPlots {
     if (!names.length) return [];
     let members = (this.memberCache ||= new WeakMap()).get(record);
     if (!members || members.holder !== holder) {
-      members = names.map(n => db.type(n)).filter(Boolean).map(type => ({ type, memberOf: record, dead: false }));
+      members = names
+        .map(n => db.type(n))
+        .filter(Boolean)
+        .map(type => ({ type, memberOf: record, dead: false }));
       members.holder = holder;
       this.memberCache.set(record, members);
     }

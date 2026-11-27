@@ -100,7 +100,7 @@ class Element {
     return 'data:image/png;base64,AA==';
   }
 }
-globalThis.document = { createElement: tag => new Element(tag), body: new Element('body'), fonts: { add() {} } };
+globalThis.document = { querySelector: () => null, createElement: tag => new Element(tag), body: new Element('body'), fonts: { add() {} } };
 globalThis.ImageData = class {
   constructor(data, width, height) {
     Object.assign(this, { data, width, height });

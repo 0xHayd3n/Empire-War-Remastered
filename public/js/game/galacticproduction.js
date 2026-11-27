@@ -1,10 +1,10 @@
 import { db } from '../gamedata.js';
 import { techFactor } from './planetabilities.js';
-import { forceKind, placeStartingForce } from './galaxy.js';
+import { forceKind, placeStartingForce, isHumanFaction } from './galaxy.js';
 import { planetAllowsCompany } from './invasion.js';
 import { adjustCredits } from './galacticeconomy.js';
 import { strategicStealth } from './galacticfog.js';
-import { planetMaxStarbase } from './planetstats.js';
+import { planetMaxStarbase, planetMaxGroundSlots } from './planetstats.js';
 
 const mobile = t => ['company', 'starship', 'squadron'].includes(forceKind(t));
 export const techAdvance = t => t.num('Build_Advances_Tech_Level', 0);
@@ -150,7 +150,7 @@ function listed(list, type) {
   }
   return c.set.has(upperName(type));
 }
-export const payAsYouGo = (g, owner) => owner === g.active && (g.universalRules?.payAsYouGo ?? db.constants.bool('Pay_As_You_Go', true));
+export const payAsYouGo = (g, owner) => isHumanFaction(g, owner) && ((owner === g.active ? g.universalRules?.payAsYouGo : undefined) ?? db.constants.bool('Pay_As_You_Go', true));
 const queued = (g, owner) =>
   g.planets.flatMap(p =>
     Object.values(p.production || {})
@@ -380,7 +380,7 @@ function prerequisite(g, p, owner, type, strategic = false, snap = null) {
   if (type.num('Tech_Level', 0) > player.tech) return 'Requires a higher tech level';
   if (techAdvance(type) > 0 && !(player.tech === type.num('Tech_Level', 0) && player.maxTech >= techAdvance(type)))
     return 'Cannot be produced';
-  if (listed(player.disabledTypes, type) && owner !== g.active) return 'Cannot be produced';
+  if (listed(player.disabledTypes, type) && !isHumanFaction(g, owner)) return 'Cannot be produced';
   if (listed(player.lockedTypes, type) || (type.bool('Build_Initially_Locked') && !listed(player.unlockedTypes, type)))
     return 'Requires an unlock';
   if (groundLevel(p, owner) < type.num('Required_Ground_Base_Level', 0)) return 'Requires a ground base';
@@ -390,20 +390,20 @@ function prerequisite(g, p, owner, type, strategic = false, snap = null) {
   if (allowed.length && !allowed.includes(p.type.name.toUpperCase())) return 'Requires another production planet';
   if (!hasStructures(p, owner, type)) return 'Requires a special structure';
   if (!hasOrbiting(g, p, owner, type)) return 'Requires an orbiting unit';
-  if (strategic) {
-    const jobs = ['ground structure', 'orbital structure'].includes(force) ? (snap ? snap.jobs : queued(g, owner)) : [];
+  // Structure slots hold for every builder: what stands on the planet plus what is queued there must fit.
+  if (force === 'ground structure' || force === 'orbital structure') {
+    const pending = Object.values(p.production || {})
+      .flat()
+      .filter(q => forceKind(q.type) === force).length;
     if (
       force === 'ground structure' &&
-      p.groundStructures.length + jobs.filter(q => q.planet === p.index && forceKind(q.type) === 'ground structure').length >=
-        p.type.num('Special_Structures_Land', 3)
+      p.groundStructures.length + pending >= planetMaxGroundSlots(p)
     )
       return 'No ground structure slots';
-    if (
-      force === 'orbital structure' &&
-      p.orbitalStructures.length + jobs.filter(q => q.planet === p.index && forceKind(q.type) === 'orbital structure').length >=
-        p.type.num('Special_Structures_Space', 5)
-    )
+    if (force === 'orbital structure' && p.orbitalStructures.length + pending >= p.type.num('Special_Structures_Space', 5))
       return 'No orbital structure slots';
+  }
+  if (strategic) {
     if (force === 'station' && type.num('Base_Level', 0) !== nextStarbaseLevel(g, p)) return 'Invalid starbase level';
     if (force === 'station' && enemyInOrbit(g, p, owner)) return 'Cannot be produced here';
   }
@@ -453,7 +453,7 @@ export function aiTypeBlocked(g, owner, type, room = null, snap = null) {
   if (type.num('Build_Cost_Credits', 0) <= 0 || type.num('Build_Time_Seconds', -1) < 0) return true;
   if (type.num('Tech_Level', 0) > player.tech) return true;
   if (techAdvance(type) > 0 && !(player.tech === type.num('Tech_Level', 0) && player.maxTech >= techAdvance(type))) return true;
-  if (listed(player.disabledTypes, type) && owner !== g.active) return true;
+  if (listed(player.disabledTypes, type) && !isHumanFaction(g, owner)) return true;
   if (listed(player.lockedTypes, type) || (type.bool('Build_Initially_Locked') && !listed(player.unlockedTypes, type))) return true;
   const current = type.num('Build_Limit_Current_Per_Player', -1),
     lifetime = type.num('Build_Limit_Lifetime_Per_Player', -1);
@@ -485,7 +485,8 @@ export function queueAIProduction(g, planet, owner, type, adjustment = null) {
   const p = g.planets[planet],
     context = productionContext(g, p, owner),
     kind = strategicProductionKind(type);
-  const total = Math.max(0, Math.trunc(productionTime(g, p, owner, type, context) * (adjustment?.build[kind] ?? 1) * 30) / 30);
+  // Galactic production takes Galactic_Build_Time_Multiplier; Space_/Land_Build_Time_Multiplier are for tactical builds.
+  const total = Math.max(0, Math.trunc(productionTime(g, p, owner, type, context) * (adjustment?.build?.galactic ?? 1) * 30) / 30);
   const q = { type, owner, planet, cost: productionCost(g, p, owner, type, context), total, left: total, ai: true, paid: 0 };
   p.production[kind].push(q);
   tell('begin', p, type);
@@ -544,7 +545,7 @@ export function productionBlock(g, planet, owner, type, context) {
     return 'TEXT_PRODUCTION_POP_CAP_REACHED';
   if (!payAsYouGo(g, owner) && Math.trunc(playerOf(g, owner).credits) < productionCost(g, p, owner, type, context))
     return 'TEXT_PRODUCTION_INSUFFICIENT_FUNDS';
-  if (owner === g.active && list.length >= db.constants.num('Max_Build_Queue', 5)) return 'TEXT_PRODUCTION_QUEUE_FULL';
+  if (isHumanFaction(g, owner) && list.length >= db.constants.num('Max_Build_Queue', 5)) return 'TEXT_PRODUCTION_QUEUE_FULL';
   return null;
 }
 

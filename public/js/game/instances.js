@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { instanceable, skinBatchable } from '../model.js';
+import { instanceable, alphaInstanceable, skinBatchable } from '../model.js';
 import { worldDiameter } from './land-detail.js';
 import { detailPoolKey, splitDetailBatch, releaseDetailColor } from './model-detail.js';
 const tryFleetLod = typeof location !== 'undefined' && new URLSearchParams(location.search).get('fleetlod') === '1';
 import { CollectJobs } from './collectjobs.js';
+import { mergeableGeometry, mergeGeometries, mergeKey } from './landinstances.js';
 
 const ROW = 24 * 4;
 
@@ -29,11 +30,57 @@ function placeBranch(root, node) {
 }
 const HIDDEN = 1;
 
+// Writes a * b (column-major 4x4) straight into an instance row: a batched part's own matrixWorld is never read (with
+// collect jobs it is not even written), so the multiply and the copy into the batch are one step.
+export function mulInto(out, o, a, b) {
+  const a11 = a[0], a12 = a[4], a13 = a[8], a14 = a[12];
+  const a21 = a[1], a22 = a[5], a23 = a[9], a24 = a[13];
+  const a31 = a[2], a32 = a[6], a33 = a[10], a34 = a[14];
+  const a41 = a[3], a42 = a[7], a43 = a[11], a44 = a[15];
+  for (let c = 0; c < 4; c++) {
+    const b1 = b[c * 4], b2 = b[c * 4 + 1], b3 = b[c * 4 + 2], b4 = b[c * 4 + 3];
+    out[o + c * 4] = a11 * b1 + a12 * b2 + a13 * b3 + a14 * b4;
+    out[o + c * 4 + 1] = a21 * b1 + a22 * b2 + a23 * b3 + a24 * b4;
+    out[o + c * 4 + 2] = a31 * b1 + a32 * b2 + a33 * b3 + a34 * b4;
+    out[o + c * 4 + 3] = a41 * b1 + a42 * b2 + a43 * b3 + a44 * b4;
+  }
+}
+// Hull decals (alpha-blended hardpoint blast marks, girders) are batched like the opaque parts (ours) and drawn first
+// among transparent things: they sit on the hull and write no depth, so whatever is behind them is already hidden by
+// the hull and whatever is in front (shots, effects, shields) draws over them, as it did when each decal was sorted
+// on its own. Before, every decal was a draw call of its own and kept its ship in the renderer's scene walk.
+const DECAL_ORDER = -1000;
+// Opaque hull parts that never change (not decals, shields, engines, girders or collision meshes, which the game
+// shows and hides) are joined per material into one mesh per ship type (ours), so a ship type costs a draw call per
+// material instead of one per part. A unit whose joined part ever hides or changes material goes back to its parts.
+const MERGE_PARTS = !(typeof location !== 'undefined' && new URLSearchParams(location.search).has('nomerge'));
+const TOGGLED = /BLAST|DECAL|SHIELD|ENGINE|GIRDER|COLLISION|_ALT/i;
+const IDENTITY = new THREE.Matrix4();
+const mergedParts = new WeakMap();
+const SPACE_DECALS = !(typeof location !== 'undefined' && new URLSearchParams(location.search).has('nodecalbatch'));
+// A unit standing in its plain pose, with every part in a batch, keeps the list of batches it went into (its draw
+// plan) and is drawn from that list until one of its parts reports a change (ours, see reportVisibility in model.js).
+const DRAW_PLANS = !(typeof location !== 'undefined' && new URLSearchParams(location.search).has('nodrawplans'));
+const NOT_PLANNABLE = false;
+
+// Whether this part and everything between it and its unit is shown. Null when one of them cannot report a change:
+// such a unit is checked part by part every frame, as before. Every node on the way learns which unit it draws for.
+function shownUnder(unit, root, part) {
+  let shown = true;
+  for (let node = part; node !== root; node = node.parent) {
+    if (!node || node.reportsChanges !== true) return null;
+    node.drawnBy = unit;
+    if (!node.visible) shown = false;
+  }
+  return shown;
+}
+
 export class Instances {
   static check = false;
   static mismatches = 0;
   static checked = 0;
   static skins = true;
+  static drawPlans = DRAW_PLANS;
 
   constructor(scene) {
     this.scene = scene;
@@ -51,7 +98,7 @@ export class Instances {
     this.jobs = CollectJobs.create();
   }
 
-  poolFor(mesh, skinned = false) {
+  poolFor(mesh, skinned = false, decal = false) {
     let byGeo = this.pools.get(mesh.material);
     if (!byGeo) this.pools.set(mesh.material, (byGeo = new Map()));
     const key = detailPoolKey(mesh.geometry,mesh.detailHigh);
@@ -71,7 +118,7 @@ export class Instances {
         skinned,
         rows: skinned ? [] : null,
         ready: !skinned,
-        order: mesh.renderOrder,
+        order: decal ? DECAL_ORDER + mesh.renderOrder : mesh.renderOrder,
         n: 0,
         cap: 0,
         im: null,
@@ -177,6 +224,7 @@ export class Instances {
     obj.updateWorldMatrix(true, true);
     _inv.copy(obj.matrixWorld).invert();
     for (const e of list) {
+      if (e.members) continue;
       e.local.multiplyMatrices(_inv, e.mesh.matrixWorld);
       e.dirty = true;
     }
@@ -185,8 +233,13 @@ export class Instances {
       if (!o.isMesh || o.isInstancedMesh || this.known.has(o)) return;
       this.known.add(o);
       const e = { mesh: o, mat: o.material, pool: null, skin: null, local: new THREE.Matrix4().multiplyMatrices(_inv, o.matrixWorld) };
+      o.userData.instEntry = e;
       if (instanceable.has(o.material)) {
         e.pool = this.poolFor(o.geometry.battleSource ? {material:o.material,geometry:o.geometry.battleSource,renderOrder:o.renderOrder} : o);
+        this.taken.add(o);
+        o.layers.set(HIDDEN);
+      } else if (SPACE_DECALS && alphaInstanceable.has(o.material) && !o.isSkinnedMesh) {
+        e.pool = this.poolFor(o, false, true);
         this.taken.add(o);
         o.layers.set(HIDDEN);
       } else if (this.gpu && skinBatchable.has(o.material)) {
@@ -199,7 +252,10 @@ export class Instances {
       }
       list.push(e);
     });
-    if (list.length !== before) u.instWarm = 4;
+    if (list.length !== before) {
+      u.instWarm = 4;
+      if (MERGE_PARTS && !u.instMergeOff) this.mergeParts(u, list);
+    }
     u.instTurretsOnly =
       !!u.model &&
       !!u.model.flat &&
@@ -207,12 +263,144 @@ export class Instances {
       !u.hardpoints.some(h => h.model && (!h.model.flat || h.model.billboards.length > 0));
     u.instMoves = !u.instTurretsOnly || u.turrets.length > 0;
     u.instPosed = -1;
+    u.instPlan = null;
     this.units.add(u);
     return list;
   }
 
+  mergeParts(u, list) {
+    // animated units (spinning asteroid fields and junk, idle animations) and turrets move parts on their own
+    if (u.anim || u.buildAnim || u.construction || (u.turrets && u.turrets.length)) return;
+    const obj = u.obj,
+      decals = new Set(u.hardpoints.map(h => h.decal).filter(Boolean)),
+      groups = new Map();
+    const steady = m => {
+      if (u.engineMeshes && u.engineMeshes.includes(m)) return false;
+      for (let o = m; o && o !== obj; o = o.parent) if (!o.visible || decals.has(o) || TOGGLED.test(o.name || '')) return false;
+      return true;
+    };
+    for (const e of list) {
+      const p = e.pool;
+      if (!p || e.members || e.merged || e.skin || p.skinned || p.order <= DECAL_ORDER / 2 || e.mesh.isSkinnedMesh || !steady(e.mesh)) continue;
+      let g = groups.get(p.mat);
+      if (!g) groups.set(p.mat, (g = []));
+      g.push(e);
+    }
+    for (const [mat, g] of groups) {
+      if (g.length < 2) continue;
+      const names = Object.keys(g[0].mesh.geometry.attributes);
+      const parts = g.filter(e => e.mesh.renderOrder === g[0].mesh.renderOrder && mergeableGeometry(e.mesh.geometry, names));
+      if (parts.length < 2) continue;
+      const meshes = parts.map(e => e.mesh),
+        locals = parts.map(e => e.local),
+        key = mergeKey(meshes, locals);
+      let byKey = mergedParts.get(mat);
+      if (!byKey) mergedParts.set(mat, (byKey = new Map()));
+      let geometry = byKey.get(key);
+      if (!geometry) byKey.set(key, (geometry = mergeGeometries(meshes, locals)));
+      const entry = {
+        mesh: meshes[0],
+        mat,
+        pool: this.poolFor({ material: mat, geometry, renderOrder: meshes[0].renderOrder }),
+        skin: null,
+        local: IDENTITY.clone(),
+        members: meshes,
+        parts
+      };
+      for (const e of parts) e.merged = entry;
+      list.push(entry);
+    }
+    let n = 0;
+    for (const e of list) if (!e.merged) list[n++] = e;
+    list.length = n;
+    u.instMerges = list.some(e => e.members);
+  }
+
+  // A joined part hid or changed material: this unit draws its parts one by one from now on.
+  unmerge(u) {
+    const list = u.instList,
+      back = [];
+    let n = 0;
+    for (const e of list) {
+      if (e.members) {
+        for (const p of e.parts) {
+          p.merged = null;
+          p.dirty = true;
+          back.push(p);
+        }
+      } else list[n++] = e;
+    }
+    list.length = n;
+    list.push(...back);
+    u.instMerges = false;
+    u.instMergeOff = true;
+    u.instPlan = null;
+  }
+
+  // The batches a still unit's parts go into, as [batch, where its offset is kept, ...] in drawing order: the offset is
+  // a collect job slot with job threads, the part's matrix without (null for joined parts, which sit at the unit's
+  // own place). Not plannable when a part is drawn outside the batches, is skinned, or cannot report a change.
+  planFor(unit, list, withJobs) {
+    const root = unit.obj,
+      plan = [];
+    for (const entry of list) {
+      if (entry.skin || entry.away) return NOT_PLANNABLE;
+      if (entry.members) {
+        for (const part of entry.parts) {
+          if (part.mesh.material !== part.mat || shownUnder(unit, root, part.mesh) !== true) return NOT_PLANNABLE;
+        }
+      } else {
+        const mesh = entry.mesh,
+          shown = shownUnder(unit, root, mesh);
+        if (shown === null) return NOT_PLANNABLE;
+        // a hidden part is left out; it reports when it shows again
+        if (!shown && (!entry.pool || mesh.geometry === entry.pool.src)) continue;
+        if (!entry.pool || mesh.geometry !== entry.pool.src || mesh.material !== entry.mat) return NOT_PLANNABLE;
+      }
+      if (withJobs && (entry.slot === undefined || entry.dirty !== false)) return NOT_PLANNABLE;
+      plan.push(entry.pool, withJobs ? entry.slot : entry.members ? null : entry.local.elements);
+    }
+    return plan;
+  }
+
+  drawPlanned(plan, world, fading, tintRed, tintGreen, tintBlue, tintAlpha) {
+    const jobs = this.jobs,
+      unitKey = jobs ? jobs.addUnit(world) : -1;
+    for (let i = 0; i < plan.length; i += 2) {
+      const offset = plan[i + 1];
+      let pool = plan[i];
+      if (fading && !pool.mat.transparent) {
+        const fadePool = (pool.fadeTwin ||= this.fadePool(pool));
+        if (fadePool.ready) pool = fadePool;
+      }
+      if (pool.n === pool.cap) this.size(pool, pool.cap * 2);
+      if (jobs) jobs.add(unitKey, offset, pool.pid, pool.n);
+      else if (offset === null) {
+        const rows = pool.im.instanceMatrix.array,
+          at = pool.n * 16;
+        for (let k = 0; k < 16; k++) rows[at + k] = world[k];
+      } else mulInto(pool.im.instanceMatrix.array, pool.n * 16, world, offset);
+      const tints = pool.tint.array,
+        at = pool.n * 4;
+      tints[at] = tintRed;
+      tints[at + 1] = tintGreen;
+      tints[at + 2] = tintBlue;
+      tints[at + 3] = tintAlpha;
+      pool.n++;
+    }
+    return plan.length / 2;
+  }
+
   release(u) {
     for (const e of u.instList || []) {
+      if (e.members) {
+        for (const p of e.parts) {
+          p.mesh.layers.set(0);
+          this.taken.delete(p.mesh);
+          this.known.delete(p.mesh);
+        }
+        continue;
+      }
       if (e.pool) {
         e.mesh.layers.set(0);
         this.taken.delete(e.mesh);
@@ -221,17 +409,21 @@ export class Instances {
     }
     for (const e of u.instList || []) if (e.skin) e.mesh.layers.set(0);
     u.instList = null;
+    u.instPlan = null;
     this.units.delete(u);
     u.obj.userData.ship = false;
   }
 
-  collect(units, cam, surfaces) {
+  collect(units, cam, surfaces, castsShadowInView = () => false) {
     const stamp = ++this.stamp,
       scene = this.scene,
       put = this.put;
     _frustum.setFromProjectionMatrix(_pm.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
     for (const p of this.list) p.n = 0;
-    if (this.jobs?.broken) this.jobs = null;
+    if (this.jobs?.broken) {
+      this.jobs = null;
+      for (const unit of this.units) unit.instPlan = null;
+    }
     const J = this.jobs;
     const detail = this.fleetLod !== false && this.detail;
     if (J) J.begin();
@@ -258,17 +450,26 @@ export class Instances {
         !!u.construction ||
         u.pendingProxies.length > 0;
       if (u.instWarm > 0) u.instWarm--;
+      // the shadow pass places a static unit's parts from its current matrix and their offsets (see updateShadows)
+      u.instStatic = !whole;
       _sphere.center.set(u.x, u.y, u.z || 0);
       _sphere.radius = Math.max((u.visualRadius || 50) * 2.5, u.fxReach);
       const inView = _frustum.intersectsSphere(_sphere);
-      if (!inView && !u.casters) {
+      const castsShadow = !!u.casters && castsShadowInView(u);
+      if (!inView && !castsShadow) {
         obj.visible = false;
         put.push(obj);
         continue;
       }
       if (whole) obj.updateWorldMatrix(obj.parent !== scene, true);
       else obj.matrixWorld.copy(obj.matrix);
-      if (!inView) continue;
+      if (!inView) {
+        // Only the shadow pass, which has already drawn this frame, needs a ship off screen; it keeps
+        // its pose for the next frame's shadow map but stays out of the camera draw.
+        obj.visible = false;
+        put.push(obj);
+        continue;
+      }
       // Deferred collection may not update every child matrix. Use the whole
       // ship's conservative footprint: all hull panels and turrets agree.
       const pixels = detail && worldDiameter(cam,this.displayHeight,u.x,u.y,u.z || 0,
@@ -287,9 +488,33 @@ export class Instances {
       }
       const fading = ta < -1.001;
       const world = obj.matrixWorld;
+      const plannable = Instances.drawPlans && !whole && !castsShadow && !u.shieldMesh;
+      if (plannable && u.instPlan) {
+        drawn += this.drawPlanned(u.instPlan, world.elements, fading, tr, tg, tb, ta);
+        obj.visible = false;
+        put.push(obj);
+        continue;
+      }
+      if (u.instMerges && (u.anim || u.buildAnim)) this.unmerge(u);
+      if (u.instMerges)
+        for (let i = 0; i < list.length; i++) {
+          const e = list[i];
+          if (!e.members) continue;
+          let ok = true;
+          for (const p of e.parts) {
+            if (p.mesh.material !== p.mat) ok = false;
+            for (let o = p.mesh; ok && o && o !== obj; o = o.parent) if (!o.visible) ok = false;
+            if (!ok) break;
+          }
+          if (!ok) {
+            this.unmerge(u);
+            break;
+          }
+        }
       if (whole && pose >= 0) {
         _inv.copy(world).invert();
         for (let i = 0; i < list.length; i++) {
+          if (list[i].members) continue;
           list[i].local.multiplyMatrices(_inv, list[i].mesh.matrixWorld);
           list[i].dirty = true;
         }
@@ -297,10 +522,42 @@ export class Instances {
       }
       let rest = 0,
         uk = -1;
-      const defer0 = !!J && !whole && !u.casters, surface = surfaces?.get(u);
+      const defer0 = !!J && !whole && !castsShadow, surface = surfaces?.get(u);
       for (let i = 0; i < list.length; i++) {
         const e = list[i],
           m = e.mesh;
+        if (e.members) {
+          let p = e.pool;
+          if (fading && !p.mat.transparent) {
+            const fp = (e.fpool ||= this.fadePool(p));
+            if (fp.ready) p = fp;
+          }
+          if (p.n === p.cap) this.size(p, p.cap * 2);
+          if (defer0) {
+            if (uk < 0) uk = J.addUnit(world.elements);
+            if (e.slot === undefined) e.slot = J.slot();
+            if (e.dirty !== false) {
+              J.setLocal(e.slot, e.local.elements);
+              e.dirty = false;
+            }
+            J.add(uk, e.slot, p.pid, p.n);
+          } else {
+            const a = p.im.instanceMatrix.array,
+              we = world.elements,
+              at = p.n * 16;
+            for (let k = 0; k < 16; k++) a[at + k] = we[k];
+          }
+          if (castsShadow && !whole) for (const q of e.parts) q.mesh.matrixWorld.multiplyMatrices(world, q.local);
+          const t = p.tint.array,
+            tt = p.n * 4;
+          t[tt] = tr;
+          t[tt + 1] = tg;
+          t[tt + 2] = tb;
+          t[tt + 3] = ta;
+          p.n++;
+          drawn++;
+          continue;
+        }
         if (e.pool && m.geometry !== e.pool.src && m.geometry.battleSource !== e.pool.src) {
           m.layers.set(0);
           this.taken.delete(m);
@@ -350,8 +607,8 @@ export class Instances {
         }
         const pooled = !!p && !away && !(e.skin && !this.taken.has(m)),
           defer = defer0 && pooled;
-        if (!whole && !defer) m.matrixWorld.multiplyMatrices(world, e.local);
         if (!pooled) {
+          if (!whole) m.matrixWorld.multiplyMatrices(world, e.local);
           rest++;
           continue;
         }
@@ -364,12 +621,18 @@ export class Instances {
             e.dirty = false;
           }
           J.add(uk, e.slot, p.pid, p.n);
-        } else {
+        } else if (whole) {
           const a = p.im.instanceMatrix.array,
             me = m.matrixWorld.elements,
             at = p.n * 16;
           for (let k = 0; k < 16; k++) a[at + k] = me[k];
-        }
+        } else if (castsShadow) {
+          // shadow casters keep their own world matrix current, as other readers of a caster expect
+          const a = p.im.instanceMatrix.array,
+            me = m.matrixWorld.multiplyMatrices(world, e.local).elements,
+            at = p.n * 16;
+          for (let k = 0; k < 16; k++) a[at + k] = me[k];
+        } else mulInto(p.im.instanceMatrix.array, p.n * 16, world.elements, e.local.elements);
         if (e.skin) p.rows[p.n] = e.skin.mats;
         const t = p.tint.array,
           tt = p.n * 4;
@@ -396,9 +659,10 @@ export class Instances {
           });
         }
       }
-      if (!whole && !rest) {
+      if (!rest) {
         obj.visible = false;
         put.push(obj);
+        if (plannable && u.instPlan === null) u.instPlan = this.planFor(u, list, !!J);
       }
     }
     if (J) J.run();

@@ -8,7 +8,7 @@ const ink = [];
 const g = new Proxy({}, { get: (o, k) => o[k] ?? ((...args) => ink.push([k, ...args])) });
 const cv = { width: 100, height: 100, clientWidth: 100, getContext: () => g, getBoundingClientRect: () => ({ width: 100, height: 100 }) };
 globalThis.window = { devicePixelRatio: 1 };
-globalThis.document = { getElementById: () => cv };
+globalThis.document = { getElementById: () => cv, createElement: () => ({ ...cv }) };
 set('radarView', false);
 const def = { show: true, enemy: true, blip: 2 },
   own = { id: 0, bit: 1, team: 0 },
@@ -51,10 +51,15 @@ world.squads = [
   { type: def, player: enemy, fighters: [u(75, enemy), u(85, enemy)] },
   { type: def, player: enemy, fighters: [u(95, enemy, { cloaked: true })] }
 ];
+world.time = 0.5; // Squads move on a new simulation step; the radar caches intervening frames.
 assert.deepEqual(space().at(-1), ['moveTo', 80]);
 world.radarAlways = false;
 world.time = 1;
 R.radarOn = () => false;
+assert.deepEqual(space(), [['arc', 10], ['arc', 20], ['moveTo', 30], ['rect', 38], ['moveTo', 80]], 'visible contacts do not require a radar source');
+units[2].seenBy = 0;
+for (const q of world.squads) for (const f of q.fighters) f.seenBy = 0;
+world.time++;
 assert.deepEqual(
   space(),
   [
@@ -64,6 +69,7 @@ assert.deepEqual(
   ],
   'offline radar must not reveal hostile units or squadrons'
 );
+units[2].seenBy = 1;
 const w = { units, points: [], wild: 3, ally: (s, m) => s === m || s === 1 };
 const hud = {
   world: w,

@@ -1,6 +1,6 @@
 import { heroAttachRefused } from './heroattach.js';
 import { simRandom } from './simrandom.js';
-import { db } from '../gamedata.js';
+import { db, isCategoryList } from '../gamedata.js';
 import { forceKind, placeStartingForce } from './galaxy.js';
 import {
   aiProductionBlock,
@@ -77,7 +77,7 @@ function forceDefinition(def) {
         .split('|')
         .map(n => n.trim())
         .filter(Boolean),
-      types = [...new Set(names.flatMap(n => baseLevels(db.type(n))))];
+      types = isCategoryList(names) ? [] : [...new Set(names.flatMap(n => baseLevels(db.type(n))))];
     force.specs.push({
       types: types.length ? types : null,
       cats: types.length ? null : names.map(key),
@@ -271,7 +271,7 @@ export class GalacticPlanning {
         __call: (owner, equation, flags, probability, range) =>
           this.ai.findTarget(owner?.__faction || inst.ai?.player.faction, equation, flags, probability, null, null, range),
         Reachable_Target: (owner, equation, flags, reach, probability, target, range) =>
-          this.ai.findTarget(owner?.__faction, equation, flags, probability, target?.__planet, reach, range),
+          this.ai.findTarget(owner?.__faction, equation, flags, probability, target?.__planet || target?.__object?.planet, reach, range),
         Best_Of: (force, list, equation) => {
           const owner = force?.__force?.inst?.ai?.player.faction || inst.ai?.player.faction;
           let best,
@@ -315,7 +315,7 @@ export class GalacticPlanning {
         const c = this.ai.controllers.get(key(player?.__faction));
         if (!c) return;
         for (const other of [...this.live])
-          if (other !== inst && other.ai === c && other.state !== 'over' && other.removable !== false) this.stop(other, true);
+          if (other !== inst && other.ai === c && other.state !== 'over' && other.removable !== false) this.stop(other);
       }
     };
     return this.host.environment(inst, values);
@@ -810,7 +810,7 @@ export class GalacticPlanning {
           cache.contexts.set(p, context);
         }
         const kind = strategicProductionKind(type),
-          time = productionTime(g, p, owner, type, context) * (controller.adjustment?.build[kind] ?? 1),
+          time = productionTime(g, p, owner, type, context) * (controller.adjustment?.build?.galactic ?? 1),
           cost = productionCost(g, p, owner, type, context),
           base = productionCost(g, p, owner, type, []);
         const required = type.num('Required_Ground_Base_Level', 0) || type.num('Required_Star_Base_Level', 0),
@@ -1586,7 +1586,7 @@ export class GalacticPlanning {
       Test_Target_Contrast: value => {
         inst.testContrast = value !== false;
       },
-      Get_Goal_Type_Name: () => inst.goal,
+      Get_Goal_Type_Name: () => inst.ai.brain.defs.get(inst.goal)?.typeName ?? inst.goal,
       Get_Planet: () => this.host.planet(planet()),
       Add_Force: wrapped => {
         const object = wrapped?.__object,
@@ -1872,8 +1872,8 @@ export class GalacticPlanning {
             force,
             'Original_Target_Owner_Changed',
             force.wrapper,
-            this.host.player(force.lastOwner),
-            this.host.player(inst.thing?.owner)
+            this.host.ownerPlayer(force.lastOwner),
+            this.host.ownerPlayer(inst.thing?.owner)
           );
           force.lastOwner = inst.thing?.owner;
         }
@@ -1913,6 +1913,15 @@ export class GalacticPlanning {
     }
     for (const job of this.jobs) if (job.complete && job.inst.state === 'over') this.jobs.delete(job);
     this.live = this.live.filter(inst => inst.state !== 'over');
+  }
+  desireBonus(owner, goal, planet) {
+    let sum = 0;
+    const now = this.game.galaxy.time;
+    for (const s of this.bonuses || []) {
+      if (now >= s.end) this.bonuses.delete(s);
+      else if (s.p === planet && key(s.owner) === key(owner) && key(s.name) === key(goal)) sum += s.amount;
+    }
+    return sum;
   }
   stop(inst, kill = false) {
     if (inst.state === 'over') return;
@@ -2092,21 +2101,8 @@ export class GalacticPlanning {
       case 'unallocated':
         return [() => s.inst.budget.requested - s.amount >= -0.0001, () => true];
       case 'bonus':
-        return [
-          () => {
-            if (s.applied) return true;
-            const plan = this.live.find(
-              p => p.state === 'run' && key(p.ai.player.faction) === key(s.owner) && p.goal === key(s.name) && p.thing === s.p
-            );
-            if (plan) {
-              plan.gd = Math.fround((plan.gd || 0) + s.amount);
-              s.applied = true;
-              return true;
-            }
-            return this.game.galaxy.time >= s.end;
-          },
-          () => true
-        ];
+        (this.bonuses ||= new Set()).add(s);
+        return [() => this.game.galaxy.time >= s.end, () => true];
       default:
         return [() => true, () => true];
     }

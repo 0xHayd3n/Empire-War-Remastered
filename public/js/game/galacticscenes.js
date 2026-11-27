@@ -23,17 +23,23 @@ export function renderGalacticScenes(renderer, camera, main, background, midgrou
     } else renderer.render(scene, camera);
     restoreClip();
   };
+  const hold = 'holdResolve' in renderer,
+    held = hold && renderer.holdResolve;
   try {
     renderer.autoClear = false;
     renderer.clear();
+    // the main scene always draws last, so only its pass resolves the multisampled picture to the screen
+    if (hold) renderer.holdResolve = true;
     if (background?.children.length) distant(background);
     renderer.clearDepth();
     if (midground?.children.length) distant(midground);
     if (midforeground?.children.length) distant(midforeground);
+    if (hold) renderer.holdResolve = held;
     if (detail) detail.draw(main,camera,renderer.domElement.clientHeight || innerHeight,() => renderer.render(main,camera));
     else renderer.render(main, camera);
   } finally {
     if (camera.near !== near || camera.far !== far) restoreClip();
+    if (hold) renderer.holdResolve = held;
     renderer.autoClear = autoClear;
   }
 }

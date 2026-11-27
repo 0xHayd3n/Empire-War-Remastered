@@ -28,6 +28,7 @@ import { stateHash } from './netgame.js';
 import { loadSpaceBrain } from './spacebrain.js';
 import { placeSpecialWeapons, specialWeaponSource } from './superweapon.js';
 import { InstantRules } from './instantrules.js';
+import { campaignBattle } from './spacecampaignworker.js';
 
 const TICK = 1 / 30;
 const AI_STEP_MS = 4,
@@ -177,7 +178,7 @@ async function setUp(m, events) {
   }
   w.recountPop();
   lap('spawn');
-  return { w, ms, ids, map, thing };
+  return { w, ms, ids, map, thing, refs };
 }
 
 onmessage = async e => {
@@ -238,7 +239,7 @@ onmessage = async e => {
   }
 };
 
-async function minds(w, m, map, events, thing, scriptInputs) {
+async function minds(w, m, map, events, thing, refs, scriptInputs) {
   const fixed = fixedSeed(m) !== null;
   const has = k => (m.switches || []).includes(k);
   const tell =
@@ -257,6 +258,7 @@ async function minds(w, m, map, events, thing, scriptInputs) {
     setEnvironmentIndex: tell('setEnvironmentIndex'),
     startCinematicRetreat: tell('startCinematicRetreat')
   };
+  const campaign = m.campaignWorld ? await campaignBattle(game, m, refs, thing, events) : null;
   const scripts = has('noscripts')
     ? null
     : await ScriptHost.create(game, scriptInputs).catch(e => {
@@ -307,6 +309,7 @@ async function minds(w, m, map, events, thing, scriptInputs) {
   let scriptsFrom = scripts ? (saved ? 'the save' : 'the start') : 'none';
   if (scripts && !saved) await scripts.prime().catch(e => console.warn('space worker: scripts', e));
   if (scripts) await scripts.compileAll(3000).catch(() => null);
+  if (campaign) await campaign.story(scripts, !!saved);
   if (saved) {
     try {
       restoreBattleScripts(game, saved, null, thing);
@@ -321,7 +324,8 @@ async function minds(w, m, map, events, thing, scriptInputs) {
     if (scripts) await scripts.preloadAll();
   }
   let turn = 0;
-  const think = () => {
+  const think = phaseMs => {
+    const aiFrom = performance.now();
     if (ais.length && !w.aiSuspended) {
       const G = w.goals,
         first = (turn = (turn + 1) % ais.length);
@@ -338,7 +342,11 @@ async function minds(w, m, map, events, thing, scriptInputs) {
         }
       }
     }
+    const scriptsFrom = performance.now();
+    phaseMs.ai += scriptsFrom - aiFrom;
     if (scripts) scripts.update(TICK);
+    if (campaign) campaign.step();
+    phaseMs.scripts += performance.now() - scriptsFrom;
   };
   const takeOver = p => {
     const pre = takeovers.get(p);
@@ -349,7 +357,20 @@ async function minds(w, m, map, events, thing, scriptInputs) {
     ais.push(ai);
     freeStore(ai, pre.fs);
   };
-  return { think, game, takeOver, scriptsFrom };
+  // A tutorial's switch of sides: the human plays `to`, the side it leaves goes to the computer.
+  const switchSides = to => {
+    const old = w.players.find(p => p.human && p === (game.human || w.viewer)) || w.viewer,
+      next = w.players.find(p => p.id === to);
+    if (!old || !next || old === next) return;
+    old.human = false;
+    old.difficulty ||= 'medium';
+    next.human = true;
+    for (let i = ais.length - 1; i >= 0; i--) if (ais[i].player === next) ais.splice(i, 1);
+    if (!old.team.mapSide) ais.push(new SkirmishAI(w, old, old.difficulty));
+    game.human = next;
+    w.viewer = next;
+  };
+  return { think, game, takeOver, scriptsFrom, campaign, switchSides };
 }
 
 async function run(m) {
@@ -357,11 +378,15 @@ async function run(m) {
   const events = [],
     spawns = [];
   const scriptInputs = !m.switches?.includes('noscripts') && (scriptReady || ScriptHost.prepare().catch(() => null));
-  const { w, ms, ids, map, thing } = await setUp(m, events);
+  const { w, ms, ids, map, thing, refs } = await setUp(m, events);
   w.onEvent = (kind, data) => {
     events.push(['world', 'onEvent', [kind, plain(data)]]);
   };
-  const { think, game, takeOver, scriptsFrom } = await minds(w, m, map, events, thing, scriptInputs);
+  const { think, game, takeOver, scriptsFrom, campaign, switchSides } = await minds(w, m, map, events, thing, refs, scriptInputs);
+  // The viewer is this page's own player: what it is shown and hears (fog-gated sounds, income numbers, effects).
+  // In multiplayer the first human is another peer for all but one page, so the page names its player. Scripts keep
+  // game.human, which every peer agrees on.
+  if (!m.observer && m.viewer !== null && m.viewer !== undefined) w.viewer = w.players.find(p => p.id === m.viewer) || w.viewer;
   events.length = 0;
   const told = w.onEvent;
   hookBattle(w, events, spawns);
@@ -378,6 +403,7 @@ async function run(m) {
   const rec = new SpaceRecorder(w);
   let stepMs = 0,
     steps = 0;
+  const phaseMs = { sim: 0, ai: 0, scripts: 0, rules: 0, record: 0, routeWait: 0 };
   const hashLog = [];
   const said = new Set();
   const replay = m.record?.replay || null,
@@ -432,6 +458,12 @@ async function run(m) {
       const player = w.players.find(p => p.id === pid);
       if (!player) continue;
       if (cmd.c === 'left' && !player.left) takeOver(player);
+      if (cmd.c === 'switchSides') {
+        // a tutorial's own switch, sent by the page for its local player: never a multiplayer peer's order
+        if (!m.net && player === (game.human || w.viewer)) switchSides(cmd.to);
+        continue;
+      }
+      if (campaign && campaign.command(player, cmd)) continue;
       let r;
       try {
         r = execute(w, player, cmd) || {};
@@ -441,6 +473,7 @@ async function run(m) {
       }
       if (r.why && player === w.viewer) postMessage({ k: 'result', cmd, why: r.why });
     }
+    const simFrom = performance.now();
     guard(said, 'the battle step', () => {
       w.updateBegin(TICK);
       try {
@@ -449,17 +482,33 @@ async function run(m) {
         w.updateEnd();
       }
     });
-    guard(said, 'the computer players and scripts', think);
+    phaseMs.sim += performance.now() - simFrom;
+    guard(said, 'the computer players and scripts', () => think(phaseMs));
+    const rulesFrom = performance.now();
     if (rules) guard(said, 'the battle rules', () => rules.step(TICK));
+    phaseMs.rules += performance.now() - rulesFrom;
     stepMs += performance.now() - s;
     steps++;
+    const recordFrom = performance.now();
     guard(said, 'sending the step', () => {
       const { message, transfer } = stepRecord(w, rec, spawns, events);
       message.hash = hash;
       message.stepMs = steps % 30 === 0 ? stepMs / 30 : undefined;
+      if (steps % 30 === 0) {
+        message.stepPhases = {};
+        for (const phase in phaseMs) {
+          message.stepPhases[phase] = phaseMs[phase] / 30;
+          phaseMs[phase] = 0;
+        }
+        for (const part in w.stepTimes) {
+          message.stepPhases['sim.' + part] = w.stepTimes[part] / 30;
+          w.stepTimes[part] = 0;
+        }
+      }
       message.jobs = steps % 30 === 0 && w.ahead ? w.ahead.report() : undefined;
       send(postMessage, message, transfer, said);
     });
+    phaseMs.record += performance.now() - recordFrom;
     if (steps % 30 === 0) stepMs = 0;
     if (replaying && steps >= replay.until) {
       replaying = false;
@@ -470,6 +519,8 @@ async function run(m) {
   };
   const held = [];
   let heldFor = null;
+  let heldSince = 0,
+    heldTimer = 0;
   const drain = () => {
     while (held.length && (!w.paths || w.paths.ready())) {
       const c = held.shift();
@@ -477,6 +528,8 @@ async function run(m) {
     }
     const why = held.length ? 'route planning' : null;
     if (why !== heldFor) {
+      if (why) heldSince = performance.now();
+      else if (heldSince) phaseMs.routeWait += performance.now() - heldSince;
       heldFor = why;
       postMessage({ k: 'held', why });
     }
@@ -522,13 +575,15 @@ async function run(m) {
       stepInput({ k: 'rules', rules: c.rules }, () => (w.tacticalRules = setTacticalRules(c.rules)));
     } else if (c.k === 'viewer') {
       stepInput({ k: 'viewer', id: c.id }, () => (w.viewer = w.players.find(p => p.id === c.id) || null));
-    } else if (c.k === 'direct') stepInput({ k: 'direct', id: c.id, m: c.m }, () => applyDirect(w, c.id, c.m));
+    } else if (c.k === 'story') campaign?.input(c);
+    else if (c.k === 'direct') stepInput({ k: 'direct', id: c.id, m: c.m }, () => applyDirect(w, c.id, c.m));
     else if (c.k === 'replaylog') {
       postMessage({ k: 'replaylog', id: c.id, step: steps, inputs: recording ? recording.inputs : null, checks: recording ? recording.checks : null });
     }
     else if (c.k === 'jobs') {
       if (w.ahead) w.ahead.on = !!c.on;
-    } else if (c.k === 'pace') {
+    } else if (c.k === 'resendAbilities') rec.sentAbilities.clear();
+    else if (c.k === 'pace') {
       speed = c.speed || 1;
       paused = !!c.paused && !replaying;
     } else if (c.k === 'save') {
@@ -540,8 +595,8 @@ async function run(m) {
           speed: v.speed,
           renderer: { rig: v.camera },
           ui: { groups: new Map(v.groups.map(([n, l]) => [n, list(l)])), selection: list(v.selection) },
-          retreat: null,
-          campaignBook: null
+          retreat: game.retreat || null,
+          campaignBook: game.campaignBook || null
         };
         postMessage({ k: 'saved', id: c.id, save: snapshot(g, c.name) });
       } catch (err) {
@@ -560,7 +615,22 @@ async function run(m) {
     while (!paused && next <= now && n < (replaying ? 16 : 4) && unseen < AHEAD) {
       if (fixed && w.paths && !w.paths.ready()) {
         routesPending = true;
+        // a wait of more than half a second is reported, as lockstep does, so the page can tell it from a stopped
+        // battle thread
+        heldTimer ||= setTimeout(() => {
+          heldTimer = 0;
+          if (routesPending && heldFor !== 'route planning') {
+            heldFor = 'route planning';
+            heldSince = performance.now();
+            postMessage({ k: 'held', why: heldFor });
+          }
+        }, 500);
         return;
+      }
+      if (heldFor && !held.length) {
+        phaseMs.routeWait += performance.now() - heldSince;
+        heldFor = null;
+        postMessage({ k: 'held', why: null });
       }
       step(commands.splice(0), false);
       unseen++;

@@ -15,8 +15,21 @@ const DELAY = 2;
 const MAX_AHEAD = 8;
 const HASH_EVERY = 10;
 const MAX_RESYNCS = 5;
+const MAX_TURN_CMDS = 64;
+const MAX_CMD_CHARS = 32768,
+  // a battle report lists every surviving unit and structure, so it may be much larger than an order
+  MAX_RESULT_CHARS = 1 << 21;
 const REPORT_WAIT = 15000;
 const TAGGED = new Set(['cmd', 'loaded', 'go', 'turn', 'ack', 'desync', 'resume']);
+// an order as a peer receives it: plain data made in this window
+export function wireCopy(cmd) {
+  if (!cmd || typeof cmd !== 'object') return cmd;
+  try {
+    return JSON.parse(JSON.stringify(cmd));
+  } catch {
+    return cmd;
+  }
+}
 
 const F64 = new Float64Array(1),
   U32 = new Uint32Array(F64.buffer);
@@ -195,12 +208,16 @@ export class Lockstep {
     if (this.host && this.net.speed && this.net.speed !== 1 && this.net.sessionSpeed === undefined) this.setSpeed(this.net.speed);
   }
 
+  // The host runs its own order from a JSON copy, exactly as its peers get it over the wire. That also keeps the order
+  // log from holding objects made in a battle window that has closed: any one of them keeps that whole window alive.
   command(cmd) {
-    if (this.host) this.collected.push([this.hostPlayer, cmd]);
+    if (this.host) this.collected.push([this.hostPlayer, wireCopy(cmd)]);
     else this.tx(0, { k: 'cmd', cmd });
   }
 
   receive(from, m) {
+    // the host hears only the players and spectators of this game
+    if (this.host && !this.peers.includes(from)) return;
     if (m.k === 'ping') {
       this.session.send(from, { k: 'pong', t: m.t });
       return;
@@ -233,16 +250,21 @@ export class Lockstep {
     if (TAGGED.has(m.k) && (m.e | 0) !== this.epoch) return;
     if (this.host) {
       const pid = this.playerOf.get(from);
-      if (m.k === 'cmd' && pid !== undefined && !this.gone.has(from) && m.cmd && typeof m.cmd.c === 'string')
-        this.collected.push([pid, m.cmd]);
+      if (m.k === 'cmd' && pid !== undefined && !this.gone.has(from) && m.cmd && typeof m.cmd.c === 'string') {
+        // a peer flooding orders could stall every machine: keep a turn's worth that a person could give, of a sane size
+        if (this.collected.filter(([p]) => p === pid).length < MAX_TURN_CMDS && JSON.stringify(m.cmd).length <= (m.cmd.c === 'result' ? MAX_RESULT_CHARS : MAX_CMD_CHARS))
+          this.collected.push([pid, m.cmd]);
+      }
       else if (m.k === 'loaded') {
         this.loaded.add(from);
         if (this.started) this.tx(from, { k: 'go' });
         else this.checkLoaded();
       } else if (m.k === 'chat' && this.chatId(from) !== undefined) this.chat(this.chatId(from), m.text, !!m.team);
       else if (m.k === 'ack') {
+        // only a turn the host has issued, never backwards; only players' hashes can call a desync
+        if (!Number.isInteger(m.n) || m.n > this.issued || m.n < (this.ackOf.get(from) ?? -1)) return;
         this.ackOf.set(from, m.n);
-        if (m.h !== undefined) {
+        if (m.h !== undefined && pid !== undefined) {
           const ours = this.hashes.get(m.n);
           if (ours !== undefined && ours !== m.h && !this.desynced) {
             this.desynced = true;
@@ -394,7 +416,8 @@ export class Lockstep {
 
   async gotReport(from, packed, rec = null) {
     const R = this.reportFor;
-    if (!R) return;
+    // only the peers this report asked, once each, before anything is unpacked
+    if (!R || (from !== 0 && (!R.peers.has(from) || R.got.has(from)))) return;
     try {
       if (!rec) rec = await (this.saveMod || (await import('./savegame.js'))).unpackSave(packed);
     } catch (e) {
@@ -453,7 +476,7 @@ export class Lockstep {
   }
 
   nextSetup() {
-    const { net, restore, ...rest } = this.game.setup;
+    const { net, restore, keepReport, ...rest } = this.game.setup;
     const s = JSON.parse(JSON.stringify(rest));
     s.resyncs = (s.resyncs || 0) + 1;
     s.restoreSlot = -1;
@@ -506,8 +529,16 @@ export class Lockstep {
       rig = g.renderer?.rig,
       view = rig ? { x: rig.x, y: rig.y, dist: rig.dist, yaw: rig.yaw, pitch: rig.pitch } : null;
     const net = { ...this.net, epoch, gone: this.host ? [...this.gone] : [], speed: this.host ? g.speed || 1 : 1 };
+    // the battle report so far (who built and lost what, the graphs over time) lives outside the saved battle:
+    // it goes on into the relaunched battle instead of starting again at nothing
+    let keepReport = null;
+    try {
+      keepReport = g.keepReport?.() || null;
+    } catch (e) {
+      console.warn('[lockstep] battle report', e);
+    }
     this.close();
-    this.net.relaunch({ ...setup, restore: snap, keepView: view, net });
+    this.net.relaunch({ ...setup, restore: snap, keepView: view, keepReport, net });
   }
 
   behind() {
@@ -604,12 +635,21 @@ export class Lockstep {
   }
 
   stepped() {
+    const ended = this.advance();
+    if (ended >= 0) this.ackTurn(ended);
+  }
+
+  // Moves on to the next tick; returns the turn that just ended, or -1. A battle stepping on another thread
+  // advances as it sends each step and acknowledges the turn once that thread has answered with its hash.
+  advance() {
     this.tick++;
-    if (this.tick % TURN === 0) {
-      this.turnBegun = false;
-      const n = this.tick / TURN - 1;
-      if (!this.host) this.tx(0, n % HASH_EVERY === 0 ? { k: 'ack', n, h: this.hashes.get(n) } : { k: 'ack', n });
-    }
+    if (this.tick % TURN !== 0) return -1;
+    this.turnBegun = false;
+    return this.tick / TURN - 1;
+  }
+
+  ackTurn(n) {
+    if (!this.host) this.tx(0, n % HASH_EVERY === 0 ? { k: 'ack', n, h: this.hashes.get(n) } : { k: 'ack', n });
   }
 }
 

@@ -1,4 +1,4 @@
-import { db } from '../gamedata.js';
+import { db, isCategoryList } from '../gamedata.js';
 import { buildCost, isUpgradeType } from './sim.js';
 import { fetchText } from '../vfs.js';
 import { simRandom } from './simrandom.js';
@@ -10,6 +10,16 @@ import { difficultyAdjustment } from './landbrain.js';
 const lead = e => (e && e.isSquad ? e.fighters[0] : e);
 const gone = e => !e || e.dead || (e.isSquad && !e.fighters.length);
 const bodies = e => (e.isSquad ? e.fighters : e.members) || [e];
+// Whether a task force unit is of one of the kinds a script names: a category of its lead body, or the name of
+// that body's type, of the team type its company makes (Plex_Soldier_Team) or of the company or squadron itself
+export const ofKind = (e, want) => {
+  const lead = bodies(e)[0],
+    t = lead && (lead.scriptType || lead.type);
+  if (!t) return false;
+  if (!want.length) return true;
+  const names = [t, e.scriptType, e.type].filter(x => x && x.name).map(x => x.name.toUpperCase());
+  return want.some(k => t.categories().has(k) || names.includes(k));
+};
 const unset = e => {
   if (e)
     for (const b of bodies(e)) {
@@ -19,6 +29,9 @@ const unset = e => {
     }
 };
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+// Staffing a plan walks every unit the AI owns. The goal system's per-step work budget is charged one unit of
+// work for this many of them, so a big army spreads its staffing over more steps instead of stalling one.
+const UNITS_PER_STAFFING_WORK = 40;
 const idle = e => !e.order || e.order.kind === 'idle' || !!e.order.fs || (!!e.fsKind && e.fsKind === e.order.kind);
 const SERVICE = 0.5;
 const HP_KINDS = [
@@ -110,6 +123,23 @@ function fits(e, spec) {
   );
 }
 
+const FORCE_LINE = /"([A-Za-z_0-9 |-]+?)=\s*(\d+)\s*(?:,\s*(\d+))?\s*"/g;
+const FORCE_TOTAL = /^MinimumTotal(Size|Force)$/i;
+
+// The unit lines of every task force in a plan script: the names before "=", the minimum and the maximum.
+// MinimumTotalSize and MinimumTotalForce set limits on the whole force and are not unit lines.
+function* forceLines(code) {
+  for (const match of code.matchAll(FORCE_LINE)) {
+    const names = match[1]
+      .split('|')
+      .map(name => name.trim())
+      .filter(Boolean);
+    if (names.length === 1 && FORCE_TOTAL.test(names[0])) continue;
+    const min = +match[2];
+    yield { names, min, max: match[3] !== undefined ? +match[3] : min };
+  }
+}
+
 export function readForce(def) {
   const f = { name: String(def[0]), specs: [], flags: new Set(), minSize: 0, minForce: 0 },
     not = [];
@@ -136,7 +166,7 @@ export function readForce(def) {
         .split('|')
         .map(x => x.trim())
         .filter(Boolean),
-      types = names.map(n => db.type(n)).filter(Boolean);
+      types = isCategoryList(names) ? [] : names.map(n => db.type(n)).filter(Boolean);
     f.specs.push({
       types: types.length ? types : null,
       cats: types.length ? null : names.map(n => n.toUpperCase()),
@@ -213,10 +243,12 @@ export class Plans {
     this.needs = new Map();
     this.builds = new Map();
     this.goalName = new Map();
+    this.staffingWork = 0;
     if (!host.land && this.world && typeof this.world.applyDamage === 'function') {
       this.world.onUnitHit = (t, from, loss) => this.hit(t, from, loss);
       this.world.onUnitSignal = (e, name, extra) => this.signal(e, name, extra);
     }
+    if (host.land && this.world) this.world.onUnitHit = (e, a, deliberate) => this.landHit(e, a, deliberate);
     this.find();
   }
 
@@ -247,39 +279,32 @@ export class Plans {
       const needs = [],
         code = src.replace(/--[^\n]*/g, '').replace(/"\s*\.\.\s*"/g, '');
       const built = [];
-      for (const x of code.matchAll(/"([A-Za-z_0-9 |-]+?)=\s*(\d+)\s*(?:,\s*(\d+))?\s*"/g)) {
-        const types = x[1]
-          .split('|')
-          .map(n => db.type(n.trim()))
-          .filter(Boolean)
-          .filter(t => t.has('Tactical_Buildable_Constructed'));
-        if (types.length) built.push({ types, max: Math.max(1, x[3] !== undefined ? +x[3] : +x[2]) });
+      for (const line of forceLines(code)) {
+        const types = isCategoryList(line.names)
+          ? []
+          : line.names
+              .map(n => db.type(n))
+              .filter(Boolean)
+              .filter(t => t.has('Tactical_Buildable_Constructed'));
+        if (types.length) built.push({ types, max: Math.max(1, line.max) });
       }
       if (built.length) this.builds.set(key, built);
       if (!/^[ \t]*AllowFreeStoreUnits\s*=\s*false/m.test(code))
-        for (const x of code.matchAll(/"([A-Za-z_0-9 |-]+?)=\s*(\d+)\s*(?:,\s*\d+)?\s*"/g)) {
-          const names = x[1]
-              .split('|')
-              .map(n => n.trim())
-              .filter(Boolean),
-            types = names.map(n => db.type(n)).filter(Boolean);
+        for (const { names, min } of forceLines(code)) {
+          const types = isCategoryList(names) ? [] : names.map(n => db.type(n)).filter(Boolean);
           if (types.length && types.every(t => t.has('Tactical_Buildable_Constructed'))) continue;
-          if (+x[2] > 0 && names.length)
-            needs.push({ types: types.length ? types : null, cats: types.length ? null : names.map(n => n.toUpperCase()), min: +x[2] });
+          if (min > 0 && names.length)
+            needs.push({ types: types.length ? types : null, cats: types.length ? null : names.map(n => n.toUpperCase()), min });
         }
       else {
         const specs = [];
-        for (const x of code.matchAll(/"([A-Za-z_0-9 |-]+?)=\s*(\d+)\s*(?:,\s*(\d+))?\s*"/g)) {
-          const names = x[1]
-              .split('|')
-              .map(n => n.trim())
-              .filter(Boolean),
-            types = names.map(n => db.type(n)).filter(Boolean);
+        for (const { names, min, max } of forceLines(code)) {
+          const types = isCategoryList(names) ? [] : names.map(n => db.type(n)).filter(Boolean);
           specs.push({
             types: types.length ? types : null,
             cats: types.length ? null : names.map(n => n.toUpperCase()),
-            min: +x[2],
-            max: x[3] !== undefined ? +x[3] : +x[2]
+            min,
+            max
           });
         }
         const req = /RequiredCategories\s*=\s*\{([^}]*)\}/.exec(code);
@@ -347,6 +372,13 @@ export class Plans {
     const r = simRandom() * sum;
     for (let i = 0; i < list.length; i++) if (r < cum[i]) return list[i];
     return list[list.length - 1];
+  }
+
+  // Work spent staffing since the goal system last asked, then cleared.
+  takeStaffingWork() {
+    const work = this.staffingWork;
+    this.staffingWork = 0;
+    return work;
   }
 
   can(goal) {
@@ -445,6 +477,7 @@ export class Plans {
     const at = t && t.x !== undefined ? t : null;
     const mine = new Map();
     const pool = ai.mine();
+    this.staffingWork += Math.ceil(pool.length / UNITS_PER_STAFFING_WORK);
     if (lines.some(l => l.s.types && l.s.types.some(t => t.bool('Is_Special_Weapon_In_Space'))))
       for (const sw of w0.specialWeapons || []) if (sw.player === ai.player && sw.charge >= 0.99 && sw.enabled()) pool.push(sw);
     const floor = db.constants.num('Health_Low_Percent_Threshold', 0.33);
@@ -1394,6 +1427,15 @@ export class Plans {
     }
   }
 
+  // a company of a land plan was hurt: Unit_Damaged with the company that did it and whether it was aiming at this one
+  landHit(e, a, deliberate) {
+    const inst = e && e.aiPlan;
+    if (!inst || !inst.forces || inst.state !== 'run' || gone(e)) return;
+    const f = inst.forces.find(x => x.units.includes(e));
+    if (!f) return;
+    this.queueOnce(inst, f, 'Unit_Damaged', () => [f.wrapper, this.host.wrap(e), a && !gone(a) ? this.host.wrap(a) : undefined, !!deliberate]);
+  }
+
   decayThreats(inst, f, e) {
     const k = e.threats;
     if (!k || !k.map.size) return;
@@ -1997,7 +2039,9 @@ export class Plans {
         }
         const at = this.at(v);
         f.pool = f.pool.filter(x => x.owner === inst && (p.aiPool || []).includes(x));
-        if (!at || !f.pool.length || (w.skirmish && (!p.station || p.station.dead))) return undefined;
+        // A position worked out from a division by zero (NaN) has no place to arrive at.
+        if (!at || Number.isNaN(at.x) || Number.isNaN(at.y)) return undefined;
+        if (!f.pool.length || (w.skirmish && (!p.station || p.station.dead))) return undefined;
         return this.reinforceWait(f, at, most > 0 ? w.time + +most : Infinity);
       },
       Move_To: (v, tol, zones) =>
@@ -2043,9 +2087,7 @@ export class Plans {
             .filter(Boolean);
         if (!set) return;
         for (const e of alive()) {
-          const lead = bodies(e)[0],
-            t = lead && (lead.scriptType || lead.type);
-          if (!t || (want.length && !want.some(k => t.categories().has(k) || t.name.toUpperCase() === k))) continue;
+          if (!ofKind(e, want)) continue;
           for (const b of bodies(e)) if (b) b.prioSet = set;
         }
       },
@@ -2122,9 +2164,7 @@ export class Plans {
           .map(s => s.trim().toUpperCase())
           .filter(Boolean);
         for (const e of f.units) {
-          const lead = bodies(e)[0],
-            t = lead && (lead.scriptType || lead.type);
-          if (!t || (want.length && !want.some(k => t.categories().has(k) || t.name.toUpperCase() === k))) continue;
+          if (!ofKind(e, want)) continue;
           host.wrap(e)?.Set_Targeting_Stickiness_Time_Threshold?.(seconds);
         }
       },
@@ -2260,6 +2300,8 @@ export class Plans {
           this.decayThreats(inst, f, e);
           continue;
         }
+        // the land world reports each hit with its attacker (landHit); a view that does not is watched for lost health
+        if (w.reportsHits) continue;
         const u = lead(e),
           total = u ? u.health + (u.shield || 0) : 0,
           was = f.seen.get(e);

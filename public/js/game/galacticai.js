@@ -15,7 +15,8 @@ import { relation } from './galacticrelation.js';
 import { blackMarketItems } from './blackmarket.js';
 import { antiStealth } from './galacticdetect.js';
 import { loadHeroAttach } from './heroattach.js';
-import { planetCreditValue, planetMaxStarbase } from './planetstats.js';
+import { planetCreditValue, planetMaxStarbase, planetMaxGroundSlots } from './planetstats.js';
+import { retainsResidualInfluence, surfaceReachable } from './galacticpolitics.js';
 
 const KEYS = new Map(),
   key = x => {
@@ -60,7 +61,7 @@ const nameMatch = (re, name) => {
   }
   return r;
 };
-const level = value =>
+export const level = value =>
   ({ easy: 'easy', medium: 'normal', normal: 'normal', hard: 'hard' })[
     key(String(value || '').match(/\[([^\]]+)\]$/)?.[1] ?? value).toLowerCase()
   ] || 'normal';
@@ -136,7 +137,8 @@ export function galacticControllerName(game, player) {
 }
 
 export function galacticTargetMatches(game, player, planet, bits) {
-  if (planet.background || planet.destroyed || planet.restricted || (game.galaxy.autoReveal === false && !planet.revealed)) return false;
+  if (planet.background || planet.destroyed || planet.restricted || (game.galaxy.autoReveal === false && !planet.revealed && !game.galaxy.humans)) return false;
+  // (in multiplayer the story's reveal state is the humans' map: AI opponents still see the whole galaxy)
   if (key(planet.owner) === key(player.faction)) return !!(bits & 1);
   const faction = db.faction(planet.owner);
   if (faction?.bool('Is_Neutral')) return !!(bits & 4);
@@ -164,6 +166,10 @@ export class GalacticMind extends Reason {
     this.unsupported = new Set();
     this.invalid = new Map();
     this.perceptions = new WeakMap();
+  }
+  desire(goal, t = null) {
+    const base = super.desire(goal, t);
+    return base > 0 && t?.planet ? base + this.ai.plans.desireBonus(this.controller.player.faction, goal, t.planet) : base;
   }
   fn(name, target) {
     const type = target?.type || target?.planet?.type,
@@ -514,7 +520,7 @@ export class GalacticMind extends Reason {
         count = targets.filter(p => (p.currentCorruption ?? -1) !== -1).length;
       return name.endsWith('UNNORMALIZED') ? count : targets.length ? count / targets.length : 0;
     }
-    if (name === 'VARIABLE_TARGET.RETAINSRESIDUALINFLUENCE') return +!!p?.type.bool('Planet_Retains_Residual_Influence');
+    if (name === 'VARIABLE_TARGET.RETAINSRESIDUALINFLUENCE') return +(!!p && retainsResidualInfluence(p.type));
     if (name.startsWith('VARIABLE_TARGET.HINTS.')) {
       const value = this.ai.hint(c, p, name.slice(22));
       if (value !== undefined) return value;
@@ -653,14 +659,14 @@ export class GalacticMind extends Reason {
         ? own.filter(p =>
             name.endsWith('STARBASES')
               ? (p.spaceLevel || 0) === planetMaxStarbase(p)
-              : groundLevel(p, p.owner) === Math.min(5, p.type.num('Special_Structures_Land', 3))
+              : groundLevel(p, p.owner) === Math.min(5, planetMaxGroundSlots(p))
           ).length / own.length
         : 0;
     }
     if (p?.type && !!nameMatch(NAME_RE[10], name)) {
       if (name === 'VARIABLE_TARGET.TYPE.ISTYPE') return +typeSet.has(key(p.type.name));
-      if (name === 'VARIABLE_TARGET.ISSURFACEACCESSIBLE') return +p.type.bool('Planet_Surface_Accessible', true);
-      const structureSlots = p.structureSlots ?? p.type.num('Special_Structures_Land', 3),
+      if (name === 'VARIABLE_TARGET.ISSURFACEACCESSIBLE') return +surfaceReachable(p);
+      const structureSlots = planetMaxGroundSlots(p),
         ground = groundLevel(p, p.owner),
         space = p.spaceLevel || 0;
       const scalar = {
@@ -771,7 +777,8 @@ export class GalacticMind extends Reason {
       const story = this.ai.game.story;
       return story ? Math.max(0, (story.time || 0) - (story.storyGoalAt || 0)) : 0;
     }
-    if (name === 'GAME.INTERVENTIONSENABLED') return 1;
+    // the setup's "Allow random events" box; on unless the player turned it off
+    if (name === 'GAME.INTERVENTIONSENABLED') return this.ai.game.galaxy?.randomEvents === false ? 0 : 1;
     if (host && nameMatch(KNOWN_HOST_RE, name)) return host.perception(variable, params, host.player(c.player.faction), target || {});
     this.ai.missing.set(variable, (this.ai.missing.get(variable) || 0) + 1);
     throw new UnknownPerception(variable);
@@ -857,7 +864,6 @@ export class GalacticAI {
     this.forceAt = -Infinity;
     this.forceCache = new Map();
     this.evaluators = new Map();
-    this.bonuses = [];
     this.freeStores = new Map();
   }
   async initialize(brain) {
@@ -937,7 +943,7 @@ export class GalacticAI {
         }
         if (key(galacticControllerName(this.game, player)) !== key(name)) continue;
         this.errors.delete(id);
-        const difficulty = level(this.game.setup?.difficulty),
+        const difficulty = level(player.difficulty || this.game.setup?.difficulty),
           adjustment = await difficultyAdjustment(player.faction, difficulty, profile.type);
         if (this.disposed) return;
         if (key(galacticControllerName(this.game, player)) !== key(name)) continue;
@@ -1326,7 +1332,7 @@ export class GalacticAI {
     if (!c) {
       const player = this.game.galaxy.players.find(p => key(p.faction) === id);
       if (!player) return null;
-      c = { player, brain: this.shared, budget: new GalacticBudget(), difficulty: level(this.game.setup?.difficulty) };
+      c = { player, brain: this.shared, budget: new GalacticBudget(), difficulty: level(player.difficulty || this.game.setup?.difficulty) };
       this.perceptionPlayers.set(id, c);
     }
     if (!c.mind || this.game.galaxy.time - c.mindAt > 0.5 || this.game.galaxy.time < c.mindAt) {

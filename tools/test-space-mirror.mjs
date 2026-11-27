@@ -176,14 +176,21 @@ const simOnly = {
     'lastNormalHit',
     'lossAt',
     'lossRate',
+    'vulnerable',
     'pathExt',
     'pathOff',
     'pickAt',
+    'abilities.data',
+    'tickedAbilities',
+    'deflectFrom',
+    'deflectShield',
+    'deflectJamming',
     'scanTimer',
     'shieldAt',
     'shieldDownTimer',
     'shieldTick',
     'spawnTimer',
+    'startingPlaced',
     'weapon',
     'weapons',
     'going',
@@ -196,10 +203,13 @@ const simOnly = {
     'hyper.h'
   ],
   squad: [
+    'huntTimer',
     'aim',
+    'aimHp',
     'chase',
     'fireTarget',
     'pickHp',
+    'aimHp',
     'pickOf',
     'goal',
     'guardAt',
@@ -214,6 +224,7 @@ const simOnly = {
     'order.group',
     'order.pace',
     'order.wing',
+    'order.guard',
     'order.force',
     'cruise',
     'scanTimer',
@@ -269,9 +280,17 @@ const show = v =>
     : v instanceof S.Player
       ? 'player ' + v.id
       : v && typeof v === 'object'
-        ? JSON.stringify(v, (k, x) =>
-            isEntity(x) ? x.type.name + '#' + x.id : x instanceof S.Player ? 'P' + x.id : x && x.isColor ? '#' : x
-          )?.slice(0, 120)
+        ? (seen =>
+            JSON.stringify(v, (k, x) => {
+              if (isEntity(x)) return x.type.name + '#' + x.id;
+              if (x instanceof S.Player) return 'P' + x.id;
+              if (x && x.isColor) return '#';
+              if (x && typeof x === 'object') {
+                if (seen.has(x)) return '(seen)';
+                seen.add(x);
+              }
+              return x;
+            }))(new WeakSet())?.slice(0, 120)
         : String(v);
 const plainObject = v => v && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype;
 function where(a, b, key) {
@@ -360,6 +379,42 @@ function cover() {
   if (me.stats.killed || foe.stats.killed) covered.add('kills');
   if (me.everBought?.size) covered.add('lifetime build count');
 }
+// Hardpoints reach the page only when they change, so every one is checked against the worker's.
+let hardpointsCompared = 0,
+  hardpointsDamaged = 0,
+  hardpointsLost = 0;
+function compareHardpoints(unit, pageUnit) {
+  const label = unit.type.name + '#' + unit.id;
+  if (unit.hardpoints.length !== pageUnit.hardpoints.length) return note('hardpoints.count', label);
+  unit.hardpoints.forEach((hardpoint, index) => {
+    const pageHardpoint = pageUnit.hardpoints[index],
+      target = hardpoint.target && !hardpoint.target.dead ? hardpoint.target : null;
+    hardpointsCompared++;
+    if (!hardpoint.alive) hardpointsLost++;
+    else if (hardpoint.health < hardpoint.maxHealth) hardpointsDamaged++;
+    if (hardpoint.alive !== pageHardpoint.alive) note('hardpoint.alive', label + ' ' + index + ': worker ' + hardpoint.alive);
+    if (!same(hardpoint.health, pageHardpoint.health, 0, 'hardpoint.health'))
+      note('hardpoint.health', label + ' ' + index + ': worker ' + hardpoint.health + ' page ' + pageHardpoint.health);
+    if ((target ? twin(target) : null) !== (pageHardpoint.target || null)) note('hardpoint.target', label + ' ' + index);
+  });
+}
+// Abilities reach the page only when they change, too.
+let abilitiesCompared = 0,
+  abilitiesBusy = 0;
+function compareAbilities(unit, pageUnit) {
+  const label = unit.type.name + '#' + unit.id;
+  if (unit.abilities.length !== pageUnit.abilities.length) return note('abilities.count', label);
+  unit.abilities.forEach((ability, index) => {
+    const pageAbility = pageUnit.abilities[index];
+    abilitiesCompared++;
+    if (ability.timer > 0 || ability.cooldown > 0) abilitiesBusy++;
+    for (const field of ['active', 'auto'])
+      if (!!ability[field] !== !!pageAbility[field]) note('ability.' + field, label + ' ' + ability.def.kind + ': worker ' + ability[field]);
+    for (const field of ['timer', 'cooldown'])
+      if (!same(ability[field] || 0, pageAbility[field] || 0, 0, 'ability.' + field))
+        note('ability.' + field, label + ' ' + ability.def.kind + ': worker ' + ability[field] + ' page ' + pageAbility[field]);
+  });
+}
 function compare() {
   cover();
   for (const u of truth.units) {
@@ -370,6 +425,8 @@ function compare() {
       continue;
     }
     compareObject(u.isFighter ? 'Fighter' : 'Unit', u, p);
+    compareHardpoints(u, p);
+    compareAbilities(u, p);
   }
   for (const q of truth.squads) {
     if (q.dead) continue;
@@ -455,6 +512,12 @@ const at = {
   },
   300: () => {
     for (const f of truth.squads.find(s => !s.dead && s.player === foe)?.fighters || []) [f.x, f.y] = [me.station.x + 300, me.station.y];
+  },
+  // abilities are given a cooldown to run down, so that a changing ability reaches the page step by step
+  380: () => {
+    const cooling = truth.units.filter(u => !u.dead && u.abilities.length).slice(0, 6);
+    assert(cooling.length, 'units with abilities');
+    for (const unit of cooling) unit.abilities[0].cooldown = 8;
   }
 };
 for (let i = 1; i <= steps; i++) {
@@ -486,4 +549,8 @@ assert.equal(list.length, 0, `${list.length} fields differ between the battle wo
 const missed = want.filter(k => !covered.has(k));
 assert.deepEqual(missed, [], 'the battle never reached: ' + missed.join(', '));
 assert.equal(mirror.stats.failed, 0, 'every battle event plays on the page');
-console.log('space mirror parity ok');
+assert(hardpointsDamaged > 0 && hardpointsLost > 0, 'the battle damaged and destroyed hardpoints');
+assert(abilitiesBusy > 0, 'an ability was running or cooling down while the worlds were compared');
+console.log(
+  `space mirror parity ok (${hardpointsCompared} hardpoint checks, ${hardpointsDamaged} damaged, ${hardpointsLost} lost; ${abilitiesCompared} ability checks, ${abilitiesBusy} running or cooling down)`
+);

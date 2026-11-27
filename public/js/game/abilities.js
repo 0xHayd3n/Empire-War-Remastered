@@ -4,6 +4,7 @@ import { swapped } from './weaponswap.js';
 import { simRandom } from './simrandom.js';
 import { MOD } from './combatmods.js';
 import { abilityText } from './abilitytext.js';
+import { getALA, animName } from '../ala.js';
 
 const sound = (world, u, name) => {
   const a = world.audio,
@@ -151,11 +152,20 @@ function showOwnerParticle(world, unit, abilityState) {
 }
 
 function namedSpec(type, name) {
+  name = name.trim().toUpperCase();
   if (!name) return null;
   for (let t = type; t; t = t.parent) {
-    for (const blk of t.subs.get('abilities') || []) for (const a of blk.children) if (a.attrs.Name === name) return a;
+    for (const blk of t.subs.get('abilities') || [])
+      for (const a of blk.children) if ((a.attrs.Name || '').trim().toUpperCase() === name) return a;
   }
   return null;
+}
+
+// An ability with no handler of its own that names a projectile sets it off on its owner (area heal, stun, bomb).
+function blastOf(ab, kind, target) {
+  if (target !== 'none' || (SELF.has(kind) && kind !== 'HARMONIC_BOMB')) return null;
+  const obj = db.type(ab.val('Spawned_Object_Type').trim());
+  return obj && /^projectile$/i.test(obj.tag) ? obj : null;
 }
 
 export function parseAbilities(type) {
@@ -170,8 +180,9 @@ export function parseAbilities(type) {
         const f = parseFloat(v);
         if (k && Number.isFinite(f)) mods.set(k.toUpperCase(), f);
       }
-      const target = TARGET[kind] || 'none';
-      if (!mods.size && target === 'none' && !SELF.has(kind)) continue;
+      const target = TARGET[kind] || 'none',
+        blast = blastOf(ab, kind, target);
+      if (!mods.size && target === 'none' && !SELF.has(kind) && !blast) continue;
       const spec = namedSpec(type, ab.val('GUI_Activated_Ability_Name'));
       const sn = (k, d = 0) => (spec ? spec.num(k, d) : d);
       let duration = ab.num('Expiration_Seconds', 0);
@@ -195,6 +206,7 @@ export function parseAbilities(type) {
         }),
         node: ab,
         spec,
+        blast,
         target,
         duration,
         mustBuy:
@@ -203,7 +215,7 @@ export function parseAbilities(type) {
         gui: ab.val('GUI_Activated_Ability_Name').trim(),
         recharge: ab.num('Recharge_Seconds', 0),
         byDefault: /^(yes|true|1)$/i.test(ab.val('Active_By_Default').trim()),
-        toggle: TOGGLE.has(kind) || (mods.size > 0 && duration === 0 && target === 'none' && !SELF.has(kind)),
+        toggle: TOGGLE.has(kind) || (mods.size > 0 && duration === 0 && target === 'none' && !SELF.has(kind) && !blast),
         range:
           sn('Activation_Max_Range', 0) ||
           ab.num('Effective_Radius', 0) ||
@@ -215,8 +227,15 @@ export function parseAbilities(type) {
         sfxOff: ab.val('SFXEvent_GUI_Unit_Ability_Deactivated'),
         sfxTarget: ab.val('SFXEvent_Target_Ability').trim(),
         autofire: /^(yes|true)$/i.test(ab.val('Supports_Autofire')),
-        ownerParticle: target === 'none' ? particleFile(ab.val('Particle_Effect')) : '',
-        ownerParticleBones: specList(ab, 'Owner_Attachment_Bone'),
+        // The effect on the user: the unit ability's Particle_Effect, else the Owner_Particle_Effect of the ability it
+        // names (a Sensor_Jamming_Ability's jammer field), on that ability's Owner_Particle_Bone_Name.
+        ownerParticle: target === 'none' ? particleFile(ab.val('Particle_Effect')) || (spec ? particleFile(spec.val('Owner_Particle_Effect')) : '') : '',
+        ownerParticleBones:
+          target !== 'none' || particleFile(ab.val('Particle_Effect')) || !spec
+            ? specList(ab, 'Owner_Attachment_Bone')
+            : specList(spec, 'Owner_Particle_Bone_Name').length
+              ? specList(spec, 'Owner_Particle_Bone_Name')
+              : specList(ab, 'Owner_Attachment_Bone'),
         label,
         description
       });
@@ -234,12 +253,14 @@ export function autoSpecials(type) {
   for (const block of type.sub('Abilities'))
     for (const spec of block.all('Laser_Defense_Ability')) {
       if (!AUTO_STYLE.test(spec.val('Activation_Style').trim()) || named.has((spec.attrs.Name || '').trim())) continue;
+      if (/^(no|false|0)$/i.test(spec.val('Initially_Enabled').trim())) continue;
       out.push({
         kind: 'LASER_DEFENSE',
         mods: new Map(),
         noDiminish: false,
         node: spec,
         spec,
+        blast: null,
         target: 'none',
         duration: spec.num('Defense_Duration_In_Secs', 30),
         mustBuy: false,
@@ -259,13 +280,13 @@ export function autoSpecials(type) {
         passive: true,
         ...abilityText(null, 'LASER_DEFENSE', 'Laser defense')
       });
-      break;
     }
   return out;
 }
 
 export function attachAbilities(unit, defs, passive = []) {
-  const auto = !!(unit.player && unit.player.human && (unit.player.autofire ?? (unit.world && unit.world.autofire)));
+  const p = unit.player,
+    auto = !!(p && (p.human ? (p.autofire ?? (unit.world && unit.world.autofire)) : p.id >= 0));
   unit.passives = passive.map(def => ({ def, active: false, timer: 0, cooldown: 0, data: null, acc: 0, auto: false, pend: true }));
   unit.abilities = defs.map(def => ({
     def,
@@ -277,6 +298,8 @@ export function attachAbilities(unit, defs, passive = []) {
     auto: auto && def.autofire,
     pend: !!def.byDefault
   }));
+  // what tickAbilities walks every step: the abilities, then the passives. Joined once here, not for every step.
+  unit.tickedAbilities = unit.passives.length ? unit.abilities.concat(unit.passives) : unit.abilities;
 }
 
 export function refreshMods(u) {
@@ -390,6 +413,7 @@ export function useAbility(world, e, kind, on = true, target = null, approach = 
   let any = false;
   for (const u of members(e)) {
     const st = u.abilities.find(s => s.def.kind === kind);
+    if (on && st && st.active && kind === 'SUPER_LASER') continue;
     if (on && st && st.active && !def.toggle && def.duration > 0 && def.target !== 'none' && target) {
       retarget(u, st, target);
       any = true;
@@ -452,13 +476,6 @@ function start(world, u, st, target) {
           r = Math.sqrt(simRandom()) * 170;
         world.launchPoint(proj, u, u.x, u.y, u.z + 10, target.x + Math.cos(a) * r, target.y + Math.sin(a) * r, 0, { delay: i * 0.08 });
       }
-      break;
-    }
-    case 'HARMONIC_BOMB': {
-      const proj = db.type(def.node.val('Spawned_Object_Type'));
-      if (proj)
-        world.delayed(def.node.num('Bomb_Countdown_Seconds', 1.5), u.x, u.y, u.z, () => world.detonate(proj, u.player, u.x, u.y, u.z, 1));
-      world.fx.flash(u.x, u.y, u.z, 30, 0xffcc66);
       break;
     }
     case 'FOW_REVEAL_PING': {
@@ -553,9 +570,21 @@ function start(world, u, st, target) {
     case 'LEECH_SHIELDS':
       if (!u.squad) u.target = target;
       break;
+    default: {
+      const proj = def.blast;
+      if (!proj || (u.squad && u.squad.fighters[0] !== u)) break;
+      const bomb = kind === 'HARMONIC_BOMB',
+        secs = def.node.num('Bomb_Countdown_Seconds', bomb ? 1.5 : 0),
+        { x, y, z } = u,
+        go = () => world.detonate(proj, u.player, x, y, z, 1);
+      if (secs > 0) world.delayed(secs, x, y, z, go);
+      else go();
+      if (bomb) world.fx.flash(x, y, z, 30, 0xffcc66);
+      else if (def.sfxTarget) sound(world, u, def.sfxTarget);
+    }
   }
   refreshMods(u);
-  if (kind === 'SPOILER_LOCK') u.playAnim('UNDEPLOY');
+  if (kind === 'SPOILER_LOCK') u.playAnim('DEPLOY', { reverses: 'UNDEPLOY' });
   sound(world, u, def.sfxOn);
 }
 
@@ -577,7 +606,8 @@ function stop(world, u, st) {
   }
   st.data = null;
   refreshMods(u);
-  if (def.kind === 'SPOILER_LOCK') u.playAnim('DEPLOY');
+  if (def.kind === 'SPOILER_LOCK') u.playAnim('UNDEPLOY', { reverses: 'DEPLOY' });
+  if (def.kind === 'SUPER_LASER') u.playAnim?.('IDLE', { loop: true });
   sound(world, u, def.sfxOff);
 }
 
@@ -601,7 +631,13 @@ export function tickAbilities(world, u, dt) {
     }
     if (changed) refreshMods(u);
   }
-  for (const st of u.passives?.length ? u.abilities.concat(u.passives) : u.abilities) {
+  const ticked =
+    u.tickedAbilities && (u.passives?.length ? u.tickedAbilities.length === u.abilities.length + u.passives.length : u.tickedAbilities === u.abilities)
+      ? u.tickedAbilities
+      : u.passives?.length
+        ? u.abilities.concat(u.passives)
+        : u.abilities;
+  for (const st of ticked) {
     if (st.pend && !u.hyper) {
       st.pend = false;
       if (st.def.passive) {
@@ -633,7 +669,7 @@ export function tickAbilities(world, u, dt) {
           const a = simRandom() * TAU,
             r = Math.sqrt(simRandom()) * radius;
           world.launchPoint(proj || h.proj, u, p.x, p.y, p.z, d.target.x + Math.cos(a) * r, d.target.y + Math.sin(a) * r, 0, {});
-          if (h.fireSfx && simRandom() < 0.3) world.audio.play(h.fireSfx, p.x, p.y);
+          if (h.fireSfx && simRandom() < 0.3 && (!world.audible || world.audible(p.x, p.y, u.player))) world.audio.play(h.fireSfx, p.x, p.y);
         }
         break;
       }
@@ -684,41 +720,9 @@ export function tickAbilities(world, u, dt) {
         });
         world.beam(u, tgt, [0.4, 1, 0.5], 14, 'HP_trac_bone');
         break;
-      case 'SUPER_LASER': {
-        const sp = def.spec,
-          fireAt = (sp ? sp.num('Fire_Frame', 60) : 60) / 30;
-        if (!tgt || tgt.dead) {
-          ended(world, u, st);
-          continue;
-        }
-        if (d.t < fireAt) break;
-        if (!d.fired) {
-          d.fired = true;
-          world.audio.playFrom(u.isSquad ? u.fighters[0] || u : u, def.node.val('SFXEvent_Special_Ability_Loop').trim(), u.x, u.y);
-        }
-        const c = sp
-          ? sp
-              .val('Line_Color')
-              .trim()
-              .split(/[\s,]+/)
-              .map(Number)
-          : [];
-        world.damage(tgt, (sp ? sp.num('Damage_Per_Frame', 500) : 500) * 30 * dt, {
-          damageType: 'Damage_Default',
-          attacker: u.player,
-          x: tgt.x,
-          y: tgt.y,
-          z: tgt.z,
-          quiet: simRandom() > dt * 12
-        });
-        world.beam(
-          u,
-          tgt,
-          c.length >= 3 && c.every(Number.isFinite) ? [c[0] / 255, c[1] / 255, c[2] / 255] : [0, 0.93, 0.47],
-          sp ? sp.num('Line_Width', 35) : 35
-        );
+      case 'SUPER_LASER':
+        if (superLaserStep(world, u, st, tgt, dt)) continue;
         break;
-      }
       case 'LEECH_SHIELDS': {
         if (!tgt || tgt.dead || !inRange(u, tgt, def.range * 1.1)) {
           ended(world, u, st);
@@ -743,11 +747,33 @@ export function tickAbilities(world, u, dt) {
           gone = def.spec ? def.spec.num('Projectile_Dist_Travelled', 0) : 0;
         if ((st.acc += dt) < every) break;
         st.acc = 0;
-        for (const p of world.projectiles) {
-          if (p.dead || !p.owner || p.owner.team === u.player.team) continue;
-          if (kinds.length ? !(p.def && kinds.includes(p.def.str('Projectile_Category').trim().toUpperCase())) : !p.missile) continue;
+        // The first shot in the list that passes every test is taken, so the tests may run in any order: distance
+        // first, which rules out nearly every shot of a big battle, and the shot type's category is read once per type.
+        const team = u.player.team,
+          unitX = u.x,
+          unitY = u.y,
+          unitZ = u.z || 0,
+          reach = r * r;
+        // where the battle keeps its shots in rows of numbers (shots.js), far shots are passed over from those
+        const shots = world.projectiles,
+          store = world.shots,
+          rows = world.shotRows,
+          inRows = !!store && world.shotRowsOf === shots && world.shotRowCount === shots.length;
+        for (let i = 0; i < shots.length; i++) {
+          if (inRows) {
+            const row = rows[i];
+            if (store.dead[row]) continue;
+            if ((store.x[row] - unitX) ** 2 + (store.y[row] - unitY) ** 2 + ((store.z[row] || 0) - unitZ) ** 2 > reach) continue;
+          }
+          const p = shots[i];
+          if (!inRows) {
+            if (p.dead) continue;
+            if ((p.x - unitX) ** 2 + (p.y - unitY) ** 2 + ((p.z || 0) - unitZ) ** 2 > reach) continue;
+          }
+          if (!p.owner || p.owner.team === team) continue;
+          if (kinds.length ? !(p.def && kinds.includes((p.def.upperCategory ??= p.def.str('Projectile_Category').trim().toUpperCase()))) : !p.missile)
+            continue;
           if ((p.flown || 0) <= gone) continue;
-          if ((p.x - u.x) ** 2 + (p.y - u.y) ** 2 + ((p.z || 0) - (u.z || 0)) ** 2 > r * r) continue;
           p.dead = true;
           world.fx.hit(p.x, p.y, p.z, 10);
           laserDefenseZap(world, u, def, p);
@@ -782,7 +808,7 @@ export function tickAbilities(world, u, dt) {
         break;
     }
     if (!st.active) continue;
-    if (def.duration > 0 && (st.timer -= dt) <= 0) {
+    if (def.duration > 0 && !def.passive && def.kind !== 'SUPER_LASER' && (st.timer -= dt) <= 0) {
       if (def.kind === 'SELF_DESTRUCT') {
         const proj = db.type(def.node.val('Spawned_Object_Type'));
         const { x, y, z } = u;
@@ -793,6 +819,97 @@ export function tickAbilities(world, u, dt) {
       ended(world, u, st);
     }
   }
+}
+
+// The Death Star II superlaser, as in the original game: after Fire_Delay the station turns toward its target
+// (Face_Target) until the target is inside Firing_Cone, plays its ATTACK clip (Attack_Anim_Sub_Index), opens fire on
+// the clip's Fire_Frame and burns the target with Damage_Per_Frame for Expiration_Seconds. It stops early when the
+// target dies or leaves Activation_Max_Range. Returns true once the ability has ended.
+function superLaserStep(world, unit, abilityState, target, dt) {
+  const def = abilityState.def,
+    spec = def.spec,
+    data = abilityState.data;
+  if (!target || target.dead || (def.range && !inRange(unit, target, def.range))) {
+    ended(world, unit, abilityState);
+    return true;
+  }
+  if (!data.phase) data.phase = 'delay';
+  if (data.phase === 'delay') {
+    if (data.t < (spec ? spec.num('Fire_Delay', 0) : 0)) return false;
+    data.phase = spec && /^(yes|true|1)$/i.test(spec.val('Face_Target').trim()) ? 'turn' : 'charge';
+    if (data.phase === 'charge') startSuperLaserClip(unit, spec, data);
+  }
+  if (data.phase === 'turn') {
+    if (!turnTowardTarget(unit, target, spec, dt)) return false;
+    data.phase = 'charge';
+    startSuperLaserClip(unit, spec, data);
+  }
+  if (data.phase === 'charge') {
+    data.clipTime += dt;
+    if (!superLaserFireFrameReached(unit, spec, data.clipTime)) return false;
+    data.phase = 'fire';
+    data.fireLeft = def.node.num('Expiration_Seconds', 0);
+    if (!world.audible || world.audible(unit.x, unit.y, unit.player))
+      world.audio.playFrom(unit, def.node.val('SFXEvent_Special_Ability_Loop').trim(), unit.x, unit.y);
+    return false;
+  }
+  if ((data.fireLeft -= dt) <= 0) {
+    ended(world, unit, abilityState);
+    return true;
+  }
+  world.damage(target, (spec ? spec.num('Damage_Per_Frame', 500) : 500) * 30 * dt, {
+    damageType: 'Damage_Default',
+    attacker: unit.player,
+    x: target.x,
+    y: target.y,
+    z: target.z,
+    quiet: simRandom() > dt * 12
+  });
+  world.beam(unit, target, superLaserColor(spec), spec ? spec.num('Line_Width', 35) : 35, superLaserBone(spec), 'superlaser');
+  return false;
+}
+
+function startSuperLaserClip(unit, spec, data) {
+  data.clipTime = 0;
+  unit.playAnim?.('ATTACK', { index: spec ? spec.num('Attack_Anim_Sub_Index', 0) : 0 });
+}
+
+// Fire_Frame counts frames of the ATTACK clip; with no such clip the laser fires at once.
+function superLaserFireFrameReached(unit, spec, clipTime) {
+  const clip = getALA(animName(unit.type.str('Space_Model_Name'), 'ATTACK', spec ? spec.num('Attack_Anim_Sub_Index', 0) : 0));
+  if (!clip) return true;
+  return clipTime >= clip.duration || clipTime * clip.fps >= (spec ? spec.num('Fire_Frame', 0) : 0);
+}
+
+// Yaw only, at Turn_Rate degrees per logic frame (the unit's own Max_Rate_Of_Turn when Turn_Rate is not above 0).
+function turnTowardTarget(unit, target, spec, dt) {
+  const coneDegrees = spec ? spec.num('Firing_Cone', 45) : 45,
+    cone = ((coneDegrees >= 90 ? 0.01 : coneDegrees) * Math.PI) / 180,
+    wanted = Math.atan2(target.y - unit.y, target.x - unit.x);
+  let difference = wanted - (unit.heading || 0);
+  difference = Math.atan2(Math.sin(difference), Math.cos(difference));
+  if (Math.abs(difference) <= cone) return true;
+  const ownRate = spec ? spec.num('Turn_Rate', -1) : -1,
+    degreesPerFrame = ownRate > 0 ? ownRate : unit.type.num('Max_Rate_Of_Turn', 0),
+    step = ((degreesPerFrame * 30 * Math.PI) / 180) * dt;
+  unit.heading = (unit.heading || 0) + Math.sign(difference) * Math.min(Math.abs(difference), step);
+  unit.syncObj?.();
+  return false;
+}
+
+function superLaserColor(spec) {
+  const rgb = spec
+    ? spec
+        .val('Line_Color')
+        .trim()
+        .split(/[\s,]+/)
+        .map(Number)
+    : [];
+  return rgb.length >= 3 && rgb.every(Number.isFinite) ? [rgb[0] / 255, rgb[1] / 255, rgb[2] / 255] : [0, 0.93, 0.47];
+}
+
+function superLaserBone(spec) {
+  return (spec ? spec.val('Owner_Particle_Bone_Name') : '').trim().split(/[\s,]+/)[0] || null;
 }
 
 const supportSwarm = def =>
@@ -813,15 +930,52 @@ function hurtAlly(world, lead, range) {
   return best;
 }
 
+// A unit ability whose spawned object heals on detonation (a fleet tender's fighter repair pulse, a HARMONIC_BOMB
+// spawning Proj_Fleet_Tender_Fighter_Heal): what it heals, and how far.
+export function healPulseOf(def) {
+  if (def.kind !== 'HARMONIC_BOMB') return null;
+  if (def._heal !== undefined) return def._heal;
+  const proj = db.type(def.node.val('Spawned_Object_Type'));
+  if (!proj || !proj.bool('Projectile_Instant_Heal_On_Detonation')) return (def._heal = null);
+  const cats = proj
+    .str('Projectile_Instant_Heal_Targets_Category_Mask')
+    .split(/[|,\s]+/)
+    .filter(Boolean)
+    .map(c => c.toUpperCase());
+  return (def._heal = { radius: proj.num('Projectile_Instant_Heal_Radius', 100), cats });
+}
+
+function blastUseful(world, lead, proj) {
+  if (proj.bool('Projectile_Instant_Heal_On_Detonation')) return world.instantHeal(proj, lead.player, lead.x, lead.y, true);
+  const r = proj.num('Projectile_Blast_Area_Range', 150) * 0.8;
+  for (const o of world.units)
+    if (
+      !o.dead &&
+      !o.hyper &&
+      o.targetableUnit &&
+      hostile(lead, o) &&
+      (!world.canSee || world.canSee(lead.player, o)) &&
+      inRange(lead, o, r)
+    )
+      return true;
+  return false;
+}
+
 export function aiUseAbilities(world, e, onlyAuto = false) {
   const lead = posOf(e);
   if (!lead || !lead.abilities || !lead.abilities.length) return;
+  // Area abilities go off around their owner and need no attack target.
+  for (const st of lead.abilities) {
+    const def = st.def;
+    if (!def.blast || (onlyAuto && !st.auto) || st.active || st.cooldown > 0 || (lead.abilityLock || 0) > world.time) continue;
+    if (blastUseful(world, lead, def.blast) && !useAbility(world, e, def.kind, true)) return;
+  }
   const victim = e.isSquad ? (e.target && !e.target.dead ? posOf(e.target) : null) : lead.target && !lead.target.dead ? lead.target : null;
   if (!victim || victim.x === undefined || !victim.type) return;
   const ready = [];
   for (const st of lead.abilities) {
     const def = st.def;
-    if ((onlyAuto && !st.auto) || st.active || st.cooldown > 0 || !def.spec) continue;
+    if ((onlyAuto && !st.auto) || st.active || st.cooldown > 0 || !def.spec || def.blast) continue;
     if (def.target === 'unit' && (!hostile(lead, victim) || !validTarget(def, victim))) continue;
     if (def.target !== 'none' && def.range && !inRange(lead, victim, def.range)) continue;
     const chance = def.spec.val('Activation_Chance').trim() === '' ? 1 : def.spec.num('Activation_Chance', 1);

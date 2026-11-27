@@ -3,12 +3,15 @@ import { PALETTE, ROWS, MAX_SLOTS, slotWindow, rowsOf } from './slotrows.js';
 import { openDialog } from './dialogs.js';
 import { playlistPool, ballotSlate } from './mappool.js';
 import { mapHeader, mapTitle, controlMap, loadMapPreview } from '../ted.js';
-import { NetSession, Hall, listGames, newGameId } from '../net.js';
-import { advancedOptions, SPECTATOR_TEAM } from './lobby.js';
+import { NetSession, Hall, listGames, newGameId, lobbyUrl, lobbyFromLink } from '../net.js';
+import { LOBBY, SITE } from '../deploy.js';
+import { advancedOptions, SPECTATOR_TEAM, listingNote } from './lobby.js';
 import { openInstantBattle } from './instantmenu.js';
-import { dynamicMaps, isDynamic, seedBar, dockSeedBar } from './dynamicmap.js';
+import { dynamicMaps, isDynamic, parseDynamic, adoptDynamic, seedBar, dockSeedBar } from './dynamicmap.js';
 import { startMarks } from './mapstarts.js';
 import { loadCampaignData } from './galaxy.js';
+import { contentNow } from '../content.js';
+import { listingContent, listLocalPref, setListLocalPref, describeListing, detailLines } from './lobbycontent.js';
 import { listSaves, getSave, deleteSave, importSaveFile, validate, packSave, unpackSave } from './savegame.js';
 import { inApp } from '../platform.js';
 import { loadContent } from '../content.js';
@@ -17,6 +20,7 @@ import { instantRoster } from './instantbattle.js';
 import { stagingInvite } from './staginginvite.js';
 import { playlistKey, searchRelay } from './playlistrelay.js';
 import { lobbyRecord, rankedFinish } from './matchrank.js';
+import { optionBoxes, offersRandomEvents } from './campaignsettings.js';
 
 const T = (id, fallback) => {
   const s = db.text.get(id);
@@ -58,17 +62,19 @@ export function dataFingerprint() {
 }
 
 export function inviteLink(gameId, kind = 'internet') {
-  const u = new URL(location.pathname, location.origin);
+  const u = inApp() ? new URL('play.html', SITE + '/') : new URL(location.pathname, location.origin);
   u.search = (kind === 'lan' ? 'multiplayer=lan' : 'multiplayer') + '&join=' + gameId;
-  const lobby = new URLSearchParams(location.search).get('lobby');
+  const lobby = inApp() ? (lobbyUrl() !== LOBBY ? lobbyUrl() : null) : lobbyFromLink();
   if (lobby) u.search += '&lobby=' + encodeURIComponent(lobby);
   return u.href;
 }
 
 export function inviteLines(gameId, kind = 'internet') {
   const lines = [];
-  if (!inApp())
-    lines.push({ text: 'Invite link (click to copy, send it to whoever you want to play): ' + inviteLink(gameId, kind), copy: inviteLink(gameId, kind) });
+  lines.push({
+    text: 'Invite link (click to copy, send it to whoever you want to play): ' + inviteLink(gameId, kind),
+    copy: inviteLink(gameId, kind)
+  });
   lines.push({
     text: `Join code (click to copy, players enter it at Join by Code in the ${kind === 'lan' ? 'LAN' : 'internet'} lobby): ${gameId}`,
     copy: gameId
@@ -164,7 +170,15 @@ function resizeFramed(box, w0, h0, w1, h1) {
 }
 
 export const GAME_TYPES = [
-  { id: 1, type: 'campaign', text: 'TEXT_GAME_TYPE_CAMPAIGN', desc: 'TEXT_GAME_DESCRIPTION_CAMPAIGN', fallback: 'Campaign' },
+  {
+    id: 1,
+    type: 'campaign',
+    text: 'TEXT_GAME_TYPE_CAMPAIGN',
+    desc: 'TEXT_GAME_DESCRIPTION_CAMPAIGN',
+    fallback: 'Campaign',
+    about:
+      'Galactic conquest for several players. Players who join the host side play it together; other players may take a side of their own.'
+  },
   { id: 2, type: 'land', text: 'TEXT_GAME_TYPE_TEAM_LAND', desc: 'TEXT_GAME_DESCRIPTION_TEAM_LAND', fallback: 'Land' },
   { id: 3, type: 'space', text: 'TEXT_GAME_TYPE_TEAM_SPACE', desc: 'TEXT_GAME_DESCRIPTION_TEAM_SPACE01', fallback: 'Space' },
   {
@@ -185,10 +199,19 @@ export const GAME_TYPES = [
   }
 ];
 const gameType = t => GAME_TYPES.find(g => g.type === t) || GAME_TYPES[2];
-const typeLabel = mode => {
-  const g = gameType(mode === 'galactic' ? 'campaign' : mode);
-  return T(g.text, g.fallback);
+// Game data (the stock text or a mod's) may mark a game type as not supported, as the original multiplayer did for
+// campaigns. This engine runs every type it lists, so such a note is left out of the name and such a description is
+// replaced with our own.
+const UNSUPPORTED = /not\s+supported|unsupported/i;
+export const gameTypeName = g =>
+  T(g.text, g.fallback)
+    .replace(/\s*[([][^)\]]*(?:not\s+supported|unsupported)[^)\]]*[)\]]/gi, '')
+    .trim() || g.fallback;
+export const gameTypeAbout = g => {
+  const text = T(g.desc, g.about || '');
+  return UNSUPPORTED.test(text) ? g.about || '' : text;
 };
+const typeLabel = mode => gameTypeName(gameType(mode === 'galactic' ? 'campaign' : mode));
 const TYPE_KEY = 'swr.mptype';
 
 const SCREEN = { stretch: true, nativeFrame: true };
@@ -274,16 +297,28 @@ async function hostOptions({ name, campaigns, landMaps, customMaps = { land: [] 
     passBox.maxLength = 24;
     passBox.type = 'password';
   }
+  // local (non-workshop) mods are listed only by count unless the host opts in to showing their names
+  const localCount = (contentNow()?.mods || []).filter(m => !/^\d{1,20}$/.test(String(m.workshop ?? ''))).length;
+  if (passBox && localCount) {
+    const label = document.createElement('label'),
+      box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = listLocalPref();
+    box.onchange = () => setListLocalPref(box.checked);
+    label.append(box, ' Show my local mod names on the game list');
+    label.style.cssText = `position:absolute;left:${passBox.style.left || passBox.offsetLeft + 'px'};top:calc(${passBox.style.top || passBox.offsetTop + 'px'} + ${passBox.offsetHeight + 8}px);font-size:12px;color:inherit;white-space:nowrap`;
+    passBox.parentElement?.appendChild(label);
+  }
   const describe = () => {
     const g = gameType(type);
-    dlg.setText('IDC_GAME_TYPE_DESCRIPTION_TEXT', T(g.desc, g.about || ''));
+    dlg.setText('IDC_GAME_TYPE_DESCRIPTION_TEXT', gameTypeAbout(g));
     const d = dlg.ctl('IDC_GAME_TYPE_DESCRIPTION_TEXT');
     if (d) d.style.whiteSpace = 'normal';
   };
   dlg
     .list(
       'IDC_GAME_TYPE_LIST',
-      types.map(g => ({ key: g.type, label: T(g.text, g.fallback) })),
+      types.map(g => ({ key: g.type, label: gameTypeName(g) })),
       row => {
         type = row.key;
         describe();
@@ -605,11 +640,12 @@ export async function openMultiplayer({
       games = [];
     }
     const ours = g => g.version === version && g.mod === data;
+    const ids = new Map(games.map(g => [g.id, describeListing(g, { version, data })]));
     const rows = games.map(g => ({
       key: g.id,
       label: g.name,
       parts: [
-        (g.locked ? '* ' : '') + g.name + (ours(g) ? '' : ' (other version)'),
+        (g.locked ? '* ' : '') + g.name + (ours(g) ? '' : ' (other version)') + `  [${ids.get(g.id).label} #${ids.get(g.id).hash}]`,
         typeLabel(g.mode),
         `${g.players}/${g.slots}`,
         g.mode === 'galactic' ? campaignName(g.map) : mapName(g.map),
@@ -624,6 +660,7 @@ export async function openMultiplayer({
       rows,
       row => {
         picked = games.find(g => g.id === row.key);
+        if (picked) for (const line of detailLines(picked, { version, data })) say(line);
       },
       row => {
         picked = games.find(g => g.id === row.key);
@@ -632,6 +669,7 @@ export async function openMultiplayer({
     );
     const els = dlg.ctl('IDC_GAME_LIST')?.querySelectorAll('.dlg-row') || [];
     rows.forEach((r, i) => els[i] && lay(els[i], r.parts));
+    games.forEach((g, i) => els[i] && (els[i].title = detailLines(g, { version, data }).join('\n')));
     if (picked && games.some(g => g.id === picked.id)) list?.select(picked.id);
     else picked = null;
     if (failed) say('The game list could not be reached: ' + failed.message);
@@ -651,7 +689,7 @@ export async function openMultiplayer({
     storeName(myName());
     const net = new NetSession();
     try {
-      await net.connect(gameId, { host, name: myName() });
+      await net.connect(gameId, { host, name: myName(), gated: true });
     } catch (e) {
       busy = false;
       say((host ? 'Could not open the game: ' : 'Could not join: ') + e.message);
@@ -737,8 +775,15 @@ export async function openMultiplayer({
       u.searchParams.delete('join');
       history.replaceState(null, '', u.pathname + '?' + u.searchParams.toString().replace(/=(&|$)/g, '$1'));
     } catch {}
-    say('Joining the game you were invited to…');
-    enter(invited, false);
+    // an invite link only opens the lobby: joining (and with it the host's game and saved game) waits for a yes
+    (async () => {
+      const listed = await listGames().catch(() => []);
+      const g = Array.isArray(listed) ? listed.find(x => x && x.id === invited) : null;
+      const what = g ? `Join "${String(g.name).slice(0, 48)}", hosted by ${String(g.host).slice(0, 32)}?` : 'Join the game you were invited to?';
+      if (!(await confirmBox(what))) return;
+      say('Joining the game you were invited to…');
+      enter(invited, false);
+    })();
   }
   dlg.on(K.join, join);
   {
@@ -843,13 +888,10 @@ async function campaignOptions(st, campaign) {
         st.autoResolve = +v;
       }
     );
-    dlg.check('IDC_ALLOW_RANDOM_EVENTS', !!st.randomEvents, v => {
-      st.randomEvents = v;
-    });
+    optionBoxes(dlg, st, T('TEXT_GROUND_AUTORESOLVE', 'Auto-resolve all ground battles'));
   };
   for (const id of ['IDC_SKIRMISH_CREDITS_SLIDER', 'IDC_SKIRMISH_STARTING_TECH_LEVEL_SLIDER', 'IDC_SKIRMISH_MAX_TECH_LEVEL_SLIDER'])
     dlg.enable(id, custom);
-  dlg.enable('IDC_ALLOW_RANDOM_EVENTS', false);
   show();
   return new Promise(done => {
     dlg.on('IDC_BUTTON_ACCEPT', () => {
@@ -867,7 +909,8 @@ async function campaignOptions(st, campaign) {
         tech: C.num('MP_Default_Start_Tech_Level', 1),
         maxTech: C.num('MP_Default_Max_Tech_Level', 5),
         autoResolve: C.num('MP_Default_Allow_Auto_Resolve', 2) === 0 ? 0 : 2,
-        randomEvents: C.bool('MP_Default_Allow_Random_Events', false)
+        groundAutoResolve: false,
+        randomEvents: true
       });
       show();
     });
@@ -1100,7 +1143,8 @@ async function openStaging(args) {
     tech: C.num('MP_Default_Start_Tech_Level', 1),
     maxTech: C.num('MP_Default_Max_Tech_Level', 5),
     autoResolve: C.num('MP_Default_Allow_Auto_Resolve', 2) === 0 ? 0 : 2,
-    randomEvents: C.bool('MP_Default_Allow_Random_Events', false)
+    groundAutoResolve: false,
+    randomEvents: true
   };
   const rules = kind === 'playlist' && variantOf(args.variant);
   if (rules)
@@ -1231,7 +1275,8 @@ async function openStaging(args) {
       players: humans().length,
       slots: slots.filter(s => s.kind === 'human' || s.kind === 'open').length,
       version,
-      mod: data
+      mod: data,
+      content: listingContent(contentNow(), { listLocal: listLocalPref() })
     });
   const single = () => campaign() && !!campaignOf(st.mapFile)?.variants,
     menuEntry = () => campaign() && !!campaignOf(st.mapFile)?.menu;
@@ -1281,7 +1326,7 @@ async function openStaging(args) {
           return;
         }
         if (password && m.password !== password) {
-          net.send(from, { k: 'password', wrong: m.password !== undefined });
+          net.askPassword(from, m.password !== undefined);
           return;
         }
         if (slots.some(s => s.kind === 'human' && s.peer === from)) return;
@@ -1293,6 +1338,7 @@ async function openStaging(args) {
           return;
         }
         Object.assign(free, { kind: 'human', peer: from, name: who, ready: false, auto: !free.saved });
+        net.admit(from);
         if (single() && lead() && !free.saved) free.faction = lead();
         unready();
         publish();
@@ -1331,6 +1377,7 @@ async function openStaging(args) {
         }
       }
     });
+    track('listing', (ok, why) => addChat('', listingNote(ok, why)));
     track('leave', peer => {
       const s = slots.find(x => x.kind === 'human' && x.peer === peer);
       if (!s) return;
@@ -1370,6 +1417,8 @@ async function openStaging(args) {
       } else if (m.k === 'kicked') leave('The host removed you from the game.');
       else if (m.k === 'start') {
         if (rules && (m.setup?.variant !== rules.id || m.setup?.ladder !== args.ladder || m.setup?.mapFile !== args.matchMap)) return leave('The host sent a different map or ruleset.');
+        // only a game this player said it was ready for
+        if (!slots.find(s => s.kind === 'human' && s.peer === net.id)?.ready) return;
         if (!m.save) begin(m.setup);
         else {
           note.textContent = 'Opening the saved game...';
@@ -1454,15 +1503,21 @@ async function openStaging(args) {
         credits: o.credits ?? st.credits,
         tech: o.tech ?? st.tech,
         maxTech: o.maxTech ?? st.maxTech,
-        autoResolve: o.autoResolve ?? st.autoResolve
+        autoResolve: o.autoResolve ?? st.autoResolve,
+        // a save from before the option keeps the old prompt until the host turns it on
+        groundAutoResolve: o.groundAutoResolve ?? false,
+        randomEvents: o.randomEvents ?? true
       });
     } else {
-      if (![maps, landMaps, customMaps.space, customMaps.land].some(l => l.includes(base.mapFile))) {
+      const knownMap = isDynamic(base.mapFile)
+        ? !!parseDynamic(base.mapFile)
+        : [maps, landMaps, customMaps.space, customMaps.land].some(list => list.includes(base.mapFile));
+      if (!knownMap) {
         addChat('', 'The map of that save is not in this game data.');
         return;
       }
       Object.assign(st, {
-        mapFile: base.mapFile,
+        mapFile: isDynamic(base.mapFile) ? adoptDynamic(base.mapFile) : base.mapFile,
         teamFactions: base.teamFactions.slice(),
         credits: base.credits,
         popCap: base.popCap,
@@ -1770,7 +1825,9 @@ async function openStaging(args) {
             [
               T('TEXT_ALLOW_AUTORESOLVE', 'Auto-resolve combat'),
               st.autoResolve === 0 ? T('TEXT_ALLOW_AUTORESOLVE_ALWAYS', 'Always') : T('TEXT_ALLOW_AUTORESOLVE_ASK', 'Ask')
-            ]
+            ],
+            [T('TEXT_GROUND_AUTORESOLVE', 'Auto-resolve all ground battles'), st.groundAutoResolve === true ? yes : no],
+            ...(offersRandomEvents() ? [[T('TEXT_ALLOW_RANDOM_EVENTS', 'Allow random events'), st.randomEvents !== false ? yes : no]] : [])
           ]
         : [
             [
@@ -1901,6 +1958,21 @@ async function openStaging(args) {
         note.textContent = 'Pick a campaign.';
         return;
       }
+      // a computer slot on a side someone else already has would be dropped from the galaxy
+      const sideOf = s => String((s.kind === 'human' && entry.menu) || s.faction).toUpperCase(),
+        held = new Set(players.filter(s => s.kind === 'human').map(sideOf));
+      let clash = null;
+      for (const s of players.filter(s => s.kind !== 'human')) {
+        if (held.has(sideOf(s))) {
+          clash = s;
+          break;
+        }
+        held.add(sideOf(s));
+      }
+      if (clash) {
+        note.textContent = `${fLabel(clash.faction)} already has a player. Give the computer player a side of its own.`;
+        return;
+      }
       note.textContent = '';
       const variant = campaignVariant(entry, players.find(s => s.peer === 0)?.faction || players[0].faction);
       const humanTypes = entry.variants
@@ -1925,7 +1997,14 @@ async function openStaging(args) {
         humanTypes,
         ...(globalThis.shooterMode ? { shooter: true } : {}),
         seed: crypto.getRandomValues(new Uint32Array(1))[0],
-        options: { credits: st.credits, tech: st.tech, maxTech: st.maxTech, autoResolve: st.autoResolve, randomEvents: !!st.randomEvents },
+        options: {
+          credits: st.credits,
+          tech: st.tech,
+          maxTech: st.maxTech,
+          autoResolve: st.autoResolve,
+          groundAutoResolve: st.groundAutoResolve === true,
+          ...(offersRandomEvents() ? { randomEvents: st.randomEvents !== false } : {})
+        },
         players: players.map(s =>
           s.kind === 'human'
             ? { human: true, peer: s.peer, name: s.name, faction: entry.menu || s.faction, color: s.color, livery: paintFor(s) }
@@ -1985,6 +2064,7 @@ async function openStaging(args) {
   const begin = setup => {
     if (started) return;
     started = true;
+    if (host) net.lock(true);
     clearInterval(beat);
     for (const off of offs) off();
     dlg.close();
@@ -2002,8 +2082,10 @@ async function openStaging(args) {
     launch({ ...setup, net: link });
   };
 
-  if (host) publish();
-  else render();
+  if (host) {
+    net.lock(false);
+    publish();
+  } else render();
   const beat = host && kind === 'internet' ? setInterval(listing, 30000) : 0;
   if (host && st.type === 'campaign' && !campaigns.some(c => !c.variants))
     addChat(

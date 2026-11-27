@@ -28,6 +28,7 @@ const MOVING_GOAL_REPLAN = 150;
 const BATCH_DELAY = 20;
 const BATCH_MAX = 8;
 const RETRY = 2;
+const LATE_MS = 3000;
 const newRouteThread = () => {
   if (typeof Worker !== 'undefined' && !globalThis.SWR_PAGE_ROUTES)
     return new Worker(new URL('./pathworker.js', import.meta.url), { type: 'module' });
@@ -115,6 +116,7 @@ export class Pathfinder extends PathCore {
     this.batch = [];
     this.due = new Map();
     this.arrived = new Map();
+    this.sent = new Map();
     await this.wasmReady;
     if (!this.worker) {
       this.expBudget = searchBudget(this.K);
@@ -149,6 +151,8 @@ export class Pathfinder extends PathCore {
     for (const wk of this.pool) {
       wk.onmessage = e => {
         if (e.data.kind === 'batch') {
+          // a batch sent again after a lost answer may come back twice; the first answer counts
+          if (!this.sent.delete(e.data.bid)) return;
           this.arrived.set(e.data.bid, e.data.answers);
           this.onArrive?.();
         }
@@ -165,15 +169,38 @@ export class Pathfinder extends PathCore {
   ready() {
     if (!this.fixed || !this.worker) return true;
     const bid = this.due.get(this.stepNo + 1);
-    return bid === undefined || this.arrived.has(bid);
+    if (bid === undefined || this.arrived.has(bid)) return true;
+    this.watchLate(bid);
+    return false;
+  }
+
+  // A step waits for its route batch. If the answer is lost (a route thread that died or dropped it), the same batch
+  // goes to the next route thread after a few seconds. Answers depend only on the batch, so this cannot change the
+  // battle or split lockstep peers; before, the battle stopped for good without a word.
+  watchLate(bid) {
+    if (this.lateTimer) return;
+    this.lateTimer = setTimeout(() => {
+      this.lateTimer = null;
+      const s = this.sent.get(bid);
+      if (!s || this.arrived.has(bid)) return;
+      const pool = this.pool || [this.worker];
+      s.thread = (s.thread + 1) % pool.length;
+      s.tries++;
+      console.warn('route planning: batch ' + bid + ' had no answer after ' + s.tries * LATE_MS + ' ms, sent again to route thread ' + s.thread);
+      pool[s.thread].postMessage(s.msg);
+      this.onArrive?.();
+    }, LATE_MS);
   }
 
   flush() {
     if (!this.fixed || !this.worker || !this.batch.length) return;
     const bid = ++this.bid;
     this.due.set(this.stepNo + BATCH_DELAY, bid);
-    const pool = this.pool || [this.worker];
-    pool[bid % pool.length].postMessage({ kind: 'batch', bid, world: this.snapshot(), finds: this.batch });
+    const pool = this.pool || [this.worker],
+      msg = { kind: 'batch', bid, world: this.snapshot(), finds: this.batch },
+      thread = bid % pool.length;
+    this.sent.set(bid, { msg, thread, tries: 0 });
+    pool[thread].postMessage(msg);
     this.batch = [];
   }
 
@@ -512,8 +539,7 @@ export class Pathfinder extends PathCore {
     }
     const p = r.pts[r.i];
     if (p.turn || p.arc) {
-      r.wp.x = u.x + Math.cos(p.h) * 1000;
-      r.wp.y = u.y + Math.sin(p.h) * 1000;
+      this.ahead(u, p.h, r.wp);
       r.wp.speed = p.turn ? 0 : p.speed;
     } else {
       r.wp.x = p.x;
@@ -524,10 +550,27 @@ export class Pathfinder extends PathCore {
   }
 
   stopAhead(u, r) {
-    r.wp.x = u.x + Math.cos(u.heading) * 1000;
-    r.wp.y = u.y + Math.sin(u.heading) * 1000;
+    this.ahead(u, u.heading, r.wp);
     r.wp.speed = 0;
     return r.wp;
+  }
+
+  // A point straight ahead along heading h that only gives the direction to steer: 1000 out, but never past the
+  // map edge, where the ship steering takes no waypoint (it would steer for the order goal instead, so a turn on
+  // the spot near the edge never came round and a held ship kept flying).
+  ahead(u, h, wp) {
+    const w = this.world,
+      c = Math.cos(h),
+      s = Math.sin(h);
+    let L = 1000;
+    if (c > 1e-9) L = Math.min(L, (w.max.x - u.x) / c);
+    else if (c < -1e-9) L = Math.min(L, (w.min.x - u.x) / c);
+    if (s > 1e-9) L = Math.min(L, (w.max.y - u.y) / s);
+    else if (s < -1e-9) L = Math.min(L, (w.min.y - u.y) / s);
+    L = Math.max(1, L * 0.999);
+    wp.x = Math.min(w.max.x, Math.max(w.min.x, u.x + c * L));
+    wp.y = Math.min(w.max.y, Math.max(w.min.y, u.y + s * L));
+    return wp;
   }
 
   holdOld(u, t) {
@@ -542,15 +585,15 @@ export class Pathfinder extends PathCore {
     const q = this.ext(u),
       v = Math.max(1, u.maxSpeed || 40);
     this.fieldsAvoidedOn(u, goal.x, goal.y);
-    const here = this.sweep(u, q, u.x, u.y, u.x, u.y, 0, 0) & ~MOVING;
-    if (!r.pts) return here || !(this.sweep(u, q, u.x, u.y, goal.x, goal.y, 0, Math.hypot(goal.x - u.x, goal.y - u.y) / v) & ~MOVING);
+    const here = this.sweep(u, q, u.x, u.y, u.x, u.y, 0, 0, true) & ~MOVING;
+    if (!r.pts) return here || !(this.sweep(u, q, u.x, u.y, goal.x, goal.y, 0, Math.hypot(goal.x - u.x, goal.y - u.y) / v, true) & ~MOVING);
     let ax = u.x,
       ay = u.y,
       t0 = 0;
     for (let i = r.i; i < r.pts.length; i++) {
       const p = r.pts[i],
         dt = Math.hypot(p.x - ax, p.y - ay) / Math.max(1, p.speed || v);
-      if (this.sweep(u, q, ax, ay, p.x, p.y, t0, t0 + dt) & STILL && !(i === r.i && here & STILL)) return false;
+      if (this.sweep(u, q, ax, ay, p.x, p.y, t0, t0 + dt, true) & STILL && !(i === r.i && here & STILL)) return false;
       ax = p.x;
       ay = p.y;
       t0 += dt;

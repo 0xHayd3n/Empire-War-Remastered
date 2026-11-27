@@ -3,11 +3,12 @@ import { movieSubtitles, setMovieSubtitles } from './subtitles.js';
 import { db } from '../gamedata.js';
 import { openDialog, loadDialogs } from './dialogs.js';
 import { toMainMenu, loadSaved } from './transit.js';
-import { gfx, storeGfx, presets, shadowReach, SHADOW_RANGE_MAX, SUPERSAMPLE_STEPS, supersampling } from '../gfx.js';
+import { gfx, storeGfx, presets, shadowReach, SHADOW_RANGE_MAX, SUPERSAMPLE_STEPS, supersampling, frameCap } from '../gfx.js';
 import { particleCap, setParticleCap } from '../particles.js';
 import { PARTICLE_CAP } from '../particlesim.js';
 import { snapshot, snapshotNow, listSaves, putSave, getSave, deleteSave, downloadSave, importSaveFile } from './savegame.js';
-import { STRATEGIC_FRAMES, STRATEGIC_DEFAULT, strategicIndexOf, strategicMultiplier, saveStrategicIndex, tacticalSpeed, saveTacticalSpeed } from './galacticspeed.js';
+import { SCRIPTS_LOST_WARNING } from './tacticalsave.js';
+import { STRATEGIC_FRAMES, STRATEGIC_DEFAULT, strategicIndexOf, strategicMultiplier, saveStrategicIndex } from './galacticspeed.js';
 import { inApp } from '../platform.js';
 import '../bugreportui.js';
 import { loadContent, contentDifferences } from '../content.js';
@@ -31,7 +32,11 @@ import {
   bothButtonsRotate,
   setBothButtonsRotate,
   edgePan,
-  setEdgePan
+  scrollSpeed,
+  setScrollSpeed,
+  setEdgePan,
+  mouseCode,
+  isMouseAction
 } from './keybinds.js';
 
 const T = (id, fallback) => db.t(id) || fallback;
@@ -75,6 +80,7 @@ const TWEAKS = [
   { id: 'IDC_TWEAK_LINE_MOVE', input: 'optLineMove', label: 'Send selected units to a line with a right-drag' },
   { id: 'IDC_TWEAK_DIRECT_CONTROL', input: 'optDirectControl', label: 'Direct control of a unit' },
   { id: 'IDC_TWEAK_CLEAR_SHOTS', input: 'optClearShots', label: 'Land units move to get a clear shot' },
+  { id: 'IDC_TWEAK_PLANET_FINDER', input: 'optPlanetFinder', label: 'Planet finder and events panel (galactic conquest)' },
   { id: 'IDC_TWEAK_DISCORD', input: 'optDiscord', label: 'Show what you are playing on Discord', app: true }
 ].filter(t => !t.app || inApp());
 
@@ -82,7 +88,28 @@ const NATIVE = { nativeImages: true, nativeFonts: true, nativeLists: true };
 const checkBox = (id, x, y, w, h) => ({ kind: 'CONTROL', text: '', id, cls: 'Button', style: 'BS_AUTOCHECKBOX | WS_TABSTOP', x, y, w, h });
 const FULLSCREEN_MOUSE_TIP =
   'Keeps the mouse inside the game so it cannot slip onto another monitor: in fullscreen, and in the desktop app in a window too. Esc or Alt+Tab frees it.';
-const EDGE_PAN_TIP = 'Moving the mouse against the edge of the screen pans the camera, in land and space strategy views and on the galaxy map. Move back toward the center to stop.';
+const FRAME_CAP_TIP =
+  'Draws the galaxy map and battles at most 60 times a second instead of at the screen refresh rate, which cuts graphics card load on fast monitors and laptops. The battle behind the main menu draws at most 30 times a second either way.';
+const EDGE_PAN_TIP = 'Moving the mouse against the edge of the screen pans the camera, in space and land battles and on the galaxy map.';
+
+// Where the added keyboard rows go on a keyboard options page: the two columns of the page's own key boxes, the
+// labels inside the frame and left of the divider, and rows that stay inside the frame. The Forces of Corruption and
+// Empire at War pages differ in width, so everything is read from the page.
+function keyboardGrid(def) {
+  const controls = def?.controls || [];
+  const groups = controls.filter(c => c.kind === 'GROUPBOX').sort((a, b) => b.w - a.w);
+  const frame = groups[0] || { x: 15, y: 45, w: 851, h: 378 },
+    divider = groups[1] || { x: 435 };
+  const edits = controls.filter(c => c.kind === 'EDITTEXT').map(c => c.x);
+  const leftEditX = edits.length ? Math.min(...edits) : 303,
+    rightEditX = edits.length ? Math.max(...edits) : 729;
+  return {
+    labelX: [frame.x + 15, divider.x + 24],
+    editX: [leftEditX, rightEditX],
+    firstRowY: frame.y + 20,
+    lastRowY: frame.y + frame.h - 33
+  };
+}
 
 // Both menu presentations drive the same live inputs and tweak definitions.
 export { setInput, TWEAKS, TWEAK_SLIDERS, BATTLEFRONT, BATTLEFRONT_CHECKS };
@@ -268,7 +295,8 @@ export class Menus {
     });
   }
 
-  listenKeys(command, current) {
+  // A mouse action (a camera drag) takes a mouse button with any modifier keys held; the other actions take keys.
+  listenKeys(command, current, mouse = false) {
     return new Promise(async done => {
       const LEFT = 'IDC_DIALOG_BOX_BUTTON_LEFT',
         ADD = 'IDC_DIALOG_BOX_BUTTON_SWR_ADD',
@@ -298,6 +326,12 @@ export class Menus {
         removeEventListener('keydown', down, true);
         removeEventListener('keyup', up, true);
         removeEventListener('blur', lost);
+        if (mouse) {
+          removeEventListener('mousedown', press, true);
+          removeEventListener('mouseup', swallow, true);
+          removeEventListener('auxclick', swallow, true);
+          removeEventListener('contextmenu', swallow, true);
+        }
         this.pop();
         done(r);
       };
@@ -317,8 +351,23 @@ export class Menus {
         held.add(e.code);
         if (m) {
           if (!mods.includes(m)) mods.push(m);
-        } else if (!codes.includes(e.code) && codes.length < 4) codes.push(e.code);
+        } else if (!mouse && !codes.includes(e.code) && codes.length < 4) codes.push(e.code);
         paint();
+      };
+      // A left click needs a modifier held, so a plain click still presses the dialog's buttons.
+      const press = e => {
+        const code = mouseCode(e.button);
+        if (!code || (e.button === 0 && !e.ctrlKey && !e.shiftKey && !e.altKey)) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        mods = [e.ctrlKey && 'Ctrl', e.shiftKey && 'Shift', e.altKey && 'Alt'].filter(Boolean);
+        codes = [code];
+        paint();
+      };
+      const swallow = e => {
+        if (e.button === 0 && e.type !== 'contextmenu') return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
       };
       const up = e => {
         e.preventDefault();
@@ -330,8 +379,17 @@ export class Menus {
       addEventListener('keydown', down, true);
       addEventListener('keyup', up, true);
       addEventListener('blur', lost);
+      if (mouse) {
+        addEventListener('mousedown', press, true);
+        addEventListener('mouseup', swallow, true);
+        addEventListener('auxclick', swallow, true);
+        addEventListener('contextmenu', swallow, true);
+      }
       dlg.setText('IDC_CAPTION', command);
-      dlg.setText('IDC_USER_TEXT_STRING_1', 'Hold the keys for this command together.');
+      dlg.setText(
+        'IDC_USER_TEXT_STRING_1',
+        mouse ? 'Hold any modifiers and press a mouse button.' : 'Hold the keys for this command together.'
+      );
       dlg.setText('IDC_USER_TEXT_STRING_3', 'Now: ' + keyNames(current));
       dlg.setText(LEFT, 'Set');
       dlg.setText(ADD, 'Add');
@@ -372,6 +430,11 @@ export class Menus {
     const own = page === 5,
       rows = ACTIONS.filter(a => a.page === page);
     const editOf = a => a.edit || 'IDC_EDIT_SWR_' + a.id;
+    const placed = rows.filter(a => a.extra);
+    const grid = keyboardGrid((await loadDialogs())?.dialogs.get(PAGES[page]));
+    const rowCount = Math.max(1, ...placed.map(a => a.extra.row + 1)),
+      rowStep = Math.min(23.4375, (grid.lastRowY - grid.firstRowY) / Math.max(1, rowCount - 1)),
+      rowY = a => Math.round(grid.firstRowY + rowStep * a.extra.row);
     const extra = [
       {
         kind: 'CONTROL',
@@ -385,16 +448,14 @@ export class Menus {
         w: 93,
         h: 18
       },
-      ...rows
-        .filter(a => a.extra)
-        .flatMap(a => [
-          { kind: 'LTEXT', text: a.label, id: 'IDC_STATIC_SWR_' + a.id, x: a.extra.col ? 459 : 30, y: a.extra.y, w: 235, h: 23, style: '' },
+      ...placed.flatMap(a => [
+          { kind: 'LTEXT', text: a.label, id: 'IDC_STATIC_SWR_' + a.id, x: grid.labelX[a.extra.col], y: rowY(a), w: 235, h: 23, style: '' },
           {
             kind: 'EDITTEXT',
             text: '',
             id: editOf(a),
-            x: a.extra.col ? 729 : 303,
-            y: a.extra.y - 5,
+            x: grid.editX[a.extra.col],
+            y: rowY(a) - 5,
             w: 108,
             h: 15,
             style: 'ES_CENTER | ES_AUTOHSCROLL'
@@ -427,7 +488,7 @@ export class Menus {
     };
     const mine = new Set(rows.map(editOf));
     if (own) {
-      dlg.setText('IDC_STATIC_MEDIUM', 'Other Commands');
+      dlg.setText('IDC_STATIC_MEDIUM', 'Game Controls');
       for (const e of dlg.el.querySelectorAll('.dlg-txt[data-id="IDC_STATIC"], .dlg-edit')) if (!mine.has(e.dataset.id)) e.hidden = true;
     }
     for (const c of dlg.def.controls) {
@@ -446,7 +507,7 @@ export class Menus {
       inp.style.caretColor = 'transparent';
       inp.style.cursor = 'pointer';
       const listen = async () => {
-        const r = await this.listenKeys(actionName(a.id), work[a.id]);
+        const r = await this.listenKeys(actionName(a.id), work[a.id], isMouseAction(a.id));
         if (!r) return;
         if (!r.combo) {
           work[a.id] = [];
@@ -496,16 +557,15 @@ export class Menus {
   }
 
   extra(dlg, like, label, x, y, w, fn) {
-    const src = dlg.ctl(like);
-    const b = src.cloneNode(true);
-    b.style.left = x + 'px';
-    b.style.top = y + 'px';
-    b.style.width = w + 'px';
-    b.firstChild.textContent = label;
-    b.classList.remove('off');
-    b.onclick = fn;
-    dlg.el.appendChild(b);
-    return b;
+    const id = `${like}_EXTRA_${String(label).replace(/\W+/g, '_').toUpperCase()}`;
+    const button = dlg.clone(like, id, x, y);
+    if (!button) return null;
+    button.style.width = w + 'px';
+    button.classList.remove('off');
+    button.hidden = false;
+    dlg.setText(id, label);
+    button.onclick = fn;
+    return button;
   }
 
   async saveRows(family = null) {
@@ -550,14 +610,16 @@ export class Menus {
         this.pop();
         return;
       }
+      let snap;
       try {
-        await putSave(await snapshotNow(g, name.value.trim()), id);
+        await putSave((snap = await snapshotNow(g, name.value.trim())), id);
       } catch (error) {
         console.error(error);
         g.message(error.message || String(error), 'bad');
         return;
       }
-      g.message(`${T('TEXT_SAVE_GAME_TITLE', 'Save Game')}: ${name.value.trim()}`, 'good');
+      if (snap.scriptsLost) g.message(SCRIPTS_LOST_WARNING, 'bad');
+      else g.message(`${T('TEXT_SAVE_GAME_TITLE', 'Save Game')}: ${name.value.trim()}`, 'good');
       this.pop();
     };
     dlg.on('IDC_SAVE_CANCEL_BUTTON', () => this.pop());
@@ -878,6 +940,9 @@ export class Menus {
     dlg.setText('IDC_FULLSCREEN_MOUSE_CAPTURE', 'Capture the mouse');
     const captureBox = dlg.ctl('IDC_FULLSCREEN_MOUSE_CAPTURE');
     if (captureBox) captureBox.title = FULLSCREEN_MOUSE_TIP;
+    dlg.setText('IDC_VSYNC_ENABLED', 'Limit frame rate to 60 fps');
+    const capBox = dlg.ctl('IDC_VSYNC_ENABLED');
+    if (capBox) capBox.title = FRAME_CAP_TIP;
     const apply = () => {
       storeGfx();
       if (window.applyGraphics) window.applyGraphics(window.game && window.game.renderer);
@@ -955,6 +1020,10 @@ export class Menus {
           apply();
         });
       dlg.check('IDC_FULLSCREEN_MOUSE_CAPTURE', fullscreenCapture(), setFullscreenCapture);
+      dlg.check('IDC_VSYNC_ENABLED', frameCap() > 0, on => {
+        gfx.fpsCap = on ? 60 : 0;
+        apply();
+      });
       dlg.check('IDC_WINDOWED_MODE', !fullscreen(), on => {
         try {
           if (on) exitFullscreen();
@@ -964,7 +1033,7 @@ export class Menus {
     };
     show();
     if (levels.length < 2) dlg.enable('IDC_DETAIL_LEVEL_SLIDER', false);
-    for (const id of ['IDC_HARDWARE_MOUSE', 'IDC_VSYNC_ENABLED', 'IDC_WIDESCREEN', 'IDC_AUTO_DETECT']) dlg.enable(id, false);
+    for (const id of ['IDC_HARDWARE_MOUSE', 'IDC_WIDESCREEN', 'IDC_AUTO_DETECT']) dlg.enable(id, false);
     dlg.show('IDC_DEVICE_DESC_STATIC', false);
     dlg.on('IDC_ADVANCED', () => this.videoAdvanced());
     dlg.on('IDC_OK', () => this.pop());
@@ -1136,7 +1205,7 @@ export class Menus {
       } catch {}
     };
     const strategic = !!g.galactic,
-      was = { speed: g.speed, tactical: tacticalSpeed(), auto: $('optAutofire').checked, simplified, autoResolve, delayed, both: bothButtonsRotate(), edge: edgePan() };
+      was = { speed: g.speed, auto: $('optAutofire').checked, simplified, autoResolve, delayed, both: bothButtonsRotate(), edge: edgePan(), scroll: scrollSpeed() };
     const setDelayed = on => {
       delayed = on;
       g.delayTooltips = on;
@@ -1151,8 +1220,6 @@ export class Menus {
         localStorage.setItem('swr-simplified-faction-colors', on ? '1' : '0');
       } catch {}
     };
-    const toV = s => (s - 0.5) / 1.5,
-      toS = v => Math.round((0.5 + 1.5 * v) * 20) / 20;
     const show = () => {
       if (strategic)
         dlg.slider(
@@ -1166,28 +1233,24 @@ export class Menus {
           STRATEGIC_FRAMES.length,
           !g.speedLocked?.()
         );
-      else
-        dlg.slider('IDC_GAME_SPEED_SLIDER', toV(tacticalSpeed()), v => {
-          saveTacticalSpeed(toS(v));
-          g.setSpeed?.(toS(v));
-        });
       dlg.check('IDC_ABILITIES_DEFAULT_TO_AUTOFIRE', $('optAutofire').checked, on => setInput('optAutofire', on));
       dlg.check('IDC_SIMPLIFIED_FACTION_COLORS', simplified, setSimplified);
       dlg.check('IDC_DELAY_TOOLTIPS', delayed, setDelayed);
       dlg.check('IDC_BOTH_MOUSE_BUTTONS_ROTATE', bothButtonsRotate(), setBothButtonsRotate);
       dlg.check('IDC_EDGE_PAN', edgePan(), setEdgePan);
+      dlg.slider('IDC_SCROLL_SPEED_SLIDER', scrollSpeed(), setScrollSpeed);
       if (g.galactic) dlg.check('IDC_AUTORESOLVE', autoResolve, setAutoResolve);
     };
     show();
     for (const id of [
-      ...(strategic ? ['IDC_GAME_SPEED_SLIDER'] : ['IDC_STRATEGIC_GAME_SPEED_SLIDER']),
-      'IDC_SCROLL_SPEED_SLIDER',
+      // battles have no speed slider (ours): they start at normal speed and fast forward doubles it
+      'IDC_GAME_SPEED_SLIDER',
+      ...(strategic ? [] : ['IDC_STRATEGIC_GAME_SPEED_SLIDER']),
       'IDC_ALTERNATE_MOUSE_CONTROLS',
       'IDC_ABSOLUTE_SCROLLING',
       ...(g.galactic ? [] : ['IDC_AUTORESOLVE']),
       'IDC_RIGHT_BUTTON_SCROLL',
-      'IDC_GALACTIC_GAME_SPEED_TEXT',
-      'IDC_SCROLL_SPEED'
+      'IDC_GALACTIC_GAME_SPEED_TEXT'
     ])
       dlg.enable(id, false);
     const levels = ['easy', 'medium', 'hard'],
@@ -1204,14 +1267,16 @@ export class Menus {
       this.pop();
     });
     dlg.on('IDC_CANCEL_BUTTON', () => {
-      g.setSpeed?.(was.speed);
-      if (strategic) saveStrategicIndex(strategicIndexOf(was.speed));
-      else saveTacticalSpeed(was.tactical);
+      if (strategic) {
+        g.setSpeed?.(was.speed);
+        saveStrategicIndex(strategicIndexOf(was.speed));
+      }
       setInput('optAutofire', was.auto);
       setSimplified(was.simplified);
       setDelayed(was.delayed);
       setBothButtonsRotate(was.both);
       setEdgePan(was.edge);
+      setScrollSpeed(was.scroll);
       if (g.galactic) setAutoResolve(was.autoResolve);
       this.pop();
     });
@@ -1219,9 +1284,6 @@ export class Menus {
       if (strategic) {
         g.setSpeed(strategicMultiplier(STRATEGIC_DEFAULT));
         saveStrategicIndex(STRATEGIC_DEFAULT);
-      } else {
-        g.setSpeed?.(1);
-        saveTacticalSpeed(1);
       }
       setInput('optAutofire', true);
       difficulty = 'medium';
@@ -1230,6 +1292,7 @@ export class Menus {
       setDelayed(false);
       setBothButtonsRotate(false);
       setEdgePan(true);
+      setScrollSpeed(0.5);
       if (g.galactic) setAutoResolve(false);
       show();
     });

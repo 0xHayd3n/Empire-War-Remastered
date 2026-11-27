@@ -1,14 +1,16 @@
 import { inApp, topFrame } from './platform.js';
-import { fullscreenCapture, onFullscreenCapture } from './pointertrap.js';
+import { fullscreen, fullscreenCapture, onFullscreenCapture } from './pointertrap.js';
+import { edgePan, onEdgePan } from './game/keybinds.js';
 
 let held = null,
   listening = false;
 const frameLocks = new Set();
 
-function send(on) {
-  if (held === on) return;
-  held = on;
-  fetch('api/cursor-grab?on=' + (on ? 1 : 0)).catch(() => {});
+function send(mode, on) {
+  const query = 'mode=' + mode + '&on=' + (on ? 1 : 0);
+  if (held === query) return;
+  held = query;
+  fetch('api/cursor-grab?' + query).catch(() => {});
 }
 
 const pointerLocked = () => {
@@ -16,8 +18,14 @@ const pointerLocked = () => {
   return !!document.pointerLockElement || frameLocks.size > 0;
 };
 
+// The app keeps the mouse in by what the page wants (mode), whenever the game window is in
+// front: the page's own focus events are not enough, as focus coming back after Alt+Tab goes
+// to whichever frame had it. Screen-edge panning needs the mouse kept on the game's monitor
+// in fullscreen, or it slides past the edge onto the next monitor and never pans that way.
+// `on` is the page's own reckoning, for app builds from before mode.
 function update() {
-  send(fullscreenCapture() && document.hasFocus() && document.visibilityState === 'visible' && !pointerLocked());
+  const mode = pointerLocked() ? 'off' : fullscreenCapture() ? 'always' : edgePan() ? 'fullscreen' : 'off';
+  send(mode, mode !== 'off' && (mode === 'always' || fullscreen()) && document.hasFocus() && document.visibilityState === 'visible');
 }
 
 function lockChanged() {
@@ -61,6 +69,7 @@ export function initCursorLock() {
     document.addEventListener('fullscreenchange', update);
     document.addEventListener('pointerlockchange', lockChanged);
     onFullscreenCapture(update);
+    onEdgePan(update);
   }
   update();
 }

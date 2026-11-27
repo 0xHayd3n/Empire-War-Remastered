@@ -5,6 +5,7 @@ import { isRaidForce } from './raid.js';
 import { strategicStealth } from './galacticfog.js';
 import { drawMesh, uiMeshDepthAt } from './hud.js';
 import { NativePanel, loadNativePanelAssets, typeIcon } from './nativepanel.js';
+import { planetMaxGroundSlots } from './planetstats.js';
 export { overviewIcon } from './nativepanel.js';
 import { intelligence, unitVisible, VIS } from './galacticfog.js';
 import { canViewBaseLayout } from './baselayoutdata.js';
@@ -14,12 +15,13 @@ import { orders } from './galacticnet.js';
 import { canSell, sellPrice } from './galacticsell.js';
 import { allied } from './humanroute.js';
 import { Pointers } from './pointers.js';
+import { surfaceReachable } from './galacticpolitics.js';
 
 const nameOf = type => type && (db.t(type.str('Text_ID')) || type.name);
 
 export function overviewContents(g, p) {
   const v = p && intelligence(g, p),
-    open = !!p && p.type.bool('Planet_Surface_Accessible', true),
+    open = !!p && surfaceReachable(p),
     viewer = g.visibility?.viewer;
   const ground = open && v?.groundCount ? p.garrison.filter(u => allied(u.owner, p.owner)).map(u => (unitVisible(g, u, viewer, p, { ground: true }) ? u : null)) : [];
   const structures = open && v?.groundLevel ? p.groundStructures.map(u => (unitVisible(g, u, viewer, p, { ground: true, structure: true }) ? u : null)) : [];
@@ -61,7 +63,7 @@ export function overviewContents(g, p) {
     structures,
     fleets,
     own,
-    capacity: open ? Math.max(0, p.type.num('Special_Structures_Land', 3)) : 0,
+    capacity: open ? Math.max(0, planetMaxGroundSlots(p)) : 0,
     station: p?.station && v?.spaceLevel ? p.station : null
   };
 }

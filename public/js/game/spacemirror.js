@@ -7,9 +7,12 @@ import { TURN } from './netgame.js';
 import { pageOverlay } from '../vfs.js';
 import { activeLanguage } from '../language.js';
 
+const MAX_IN_FLIGHT = 4,
+  STALL_TICKS = 3;
 const TICK = 1 / 30,
   LAG = 1.5 * TICK,
   LAG_MAX = 6 * TICK;
+const SMOOTH_LOCK = typeof location === 'undefined' || !new URLSearchParams(location.search).has('nolocksmooth');
 
 export class SpaceMirror {
   static headless(game) {
@@ -32,7 +35,8 @@ export class SpaceMirror {
     this.jobWorkers = [];
     this.held = new Set();
     this.pending = [];
-    this.inFlight = false;
+    this.flights = [];
+    this.answeredAt = 0;
     this.warned = new Set();
   }
 
@@ -75,6 +79,7 @@ export class SpaceMirror {
         this.onReady();
       } else if (m.k === 'step') {
         this.queue.push(m);
+        this.arrivedAt = performance.now();
         if (game.lock) this.lockStepped(m);
       } else if (m.k === 'held') this.heldFor = m.why;
       else if (m.k === 'saved') {
@@ -249,6 +254,7 @@ export class SpaceMirror {
     if (hp.part) hp.part.visible = false;
     if (hp.decal) hp.decal.visible = true;
     hp.smoke = !unit.proxies.some(px => px.hp === hp);
+    if (hp.smoke) unit.smokingPoints++;
   }
 
   frame(real = 0) {
@@ -262,6 +268,10 @@ export class SpaceMirror {
         this.worker.postMessage({ k: 'pace', speed: g.speed, paused: pace[0] === 'p' });
       }
       this.playback(real, pace[0] === 'p' ? 0 : g.speed);
+      return;
+    }
+    if (SMOOTH_LOCK) {
+      this.lockPlayback(real);
       return;
     }
     if (this.queue.length) {
@@ -278,18 +288,57 @@ export class SpaceMirror {
   }
 
   playback(real, rate) {
+    this.steady(real, rate, true);
+  }
+
+  lockPlayback(real) {
+    this.steady(real, Infinity, false);
+  }
+
+  // Steps reach the page unevenly: in bunches in lockstep (several steps in flight on the battle thread), and slower
+  // than the chosen speed when the battle thread cannot keep up (fast forward in a big battle). Applying them as they
+  // come drew units in stops and jumps. They are shown on a steady clock that follows the measured arrival rate,
+  // never faster than the game speed, about one and a half steps behind the newest. Only the drawing waits: the
+  // battle thread, the commands and the hashes are untouched.
+  steady(real, cap, single) {
     const g = this.game,
-      Q = this.queue;
+      Q = this.queue,
+      now = performance.now();
     if (!Q.length && this.shown === undefined) return;
-    const newest = Q.length ? Q[Q.length - 1].time : this.shown;
+    // real is capped for the simulation; drawing follows the wall clock so slow frames do not fall behind
+    const gap = this.playedAt === undefined ? 0 : now - this.playedAt,
+      dt = this.playedAt === undefined ? real : Math.min(1, gap / 1000);
+    this.playedAt = now;
+    const newest = Q.length ? Q[Q.length - 1].time : this.shown,
+      held = cap <= 0;
+    // the silence a stopped battle thread is judged by counts only while the battle should be running: a pause, a
+    // step arriving or a break in page frames (menus, another window) starts it again
+    if (held || gap > 1000 || (this.arrivedAt || 0) > (this.quietFrom || 0)) this.quietFrom = now;
+    const r = (this.arrival ||= { at: now, time: newest, rate: cap < Infinity ? cap : g.speed || 1, cap });
+    if (held || cap > r.cap) {
+      // paused, or sped up: start the new pace from the chosen speed and let the arrivals correct it
+      r.at = now;
+      r.time = newest;
+      if (!held) r.rate = cap;
+    } else if (now - r.at >= 300) {
+      r.rate += ((newest - r.time) / ((now - r.at) / 1000) - r.rate) * 0.4;
+      r.at = now;
+      r.time = newest;
+    }
+    r.cap = cap;
+    const pace = held ? 0 : Math.max(0, Math.min(cap, r.rate));
     if (this.clock === undefined) this.clock = Q[0].time - TICK;
-    const lag = newest - this.clock;
-    if (lag > LAG_MAX) this.clock = newest - LAG;
-    else this.clock += real * rate * (1 + Math.max(-0.15, Math.min(0.15, (lag - LAG) / (8 * TICK))));
-    if (Q.length && Q[0].time - TICK <= this.clock) {
+    const lag = newest - this.clock,
+      // nothing new for several step intervals: the battle ended or stalled, so show what is here
+      idle = !held && Q.length && now - (this.arrivedAt || now) > Math.max(500, (4000 * TICK) / Math.max(pace, 0.01));
+    if (idle) this.clock = newest;
+    else if (lag > LAG_MAX) this.clock = newest - LAG;
+    else this.clock += dt * pace * (1 + Math.max(-0.5, Math.min(0.5, (lag - LAG) / (4 * TICK))));
+    if (this.clock > newest) this.clock = newest;
+    if (Q.length && Q[0].time - TICK <= this.clock + 1e-6) {
       const t = performance.now();
       let n = 0;
-      while (Q.length && Q[0].time - TICK <= this.clock) {
+      while (Q.length && Q[0].time - TICK <= this.clock + 1e-6) {
         const m = Q.shift();
         g.settle();
         this.apply(m);
@@ -297,10 +346,19 @@ export class SpaceMirror {
         this.shown = m.time;
         n++;
       }
-      this.worker.postMessage({ k: 'seen', n });
+      if (single) this.worker.postMessage({ k: 'seen', n });
       this.lastAt = performance.now();
       this.stats.applyMs += this.lastAt - t;
     }
+    // Everything here is shown, the battle runs and nothing holds it, yet no step for ten seconds: the battle thread
+    // has stopped. Say so instead of leaving a frozen battle.
+    if (single && !held && !Q.length && !this.heldFor && !g.over && now - this.quietFrom > 10000) {
+      if (!this.silent) {
+        this.silent = true;
+        console.error('space worker: no battle step for ' + Math.round((now - this.quietFrom) / 1000) + ' s at game time ' + this.shown);
+        g.message?.('The battle stopped responding. Please save a battle report and send it to us.', 'bad');
+      }
+    } else this.silent = false;
     g.present(this.shown === undefined ? 0 : Math.max(0, Math.min(1, (this.clock - this.shown + TICK) / TICK)));
   }
 
@@ -312,8 +370,11 @@ export class SpaceMirror {
     g.owed = Math.min((g.owed || 0) + (g.paused ? 0 : real * g.speed), (4 + behind * TURN) * TICK);
     if (behind > 1) g.owed = Math.max(g.owed, Math.min(behind, 3) * TICK);
     this.pump();
-    lock.frame(g.owed / TICK, 1, this.inFlight ? this.heldFor || 'the battle thread' : null, 0);
-    if (lock.started && !g.paused && g.owed >= 2 * TICK) {
+    // With steps on the battle thread, the battle is stalled when that thread has not answered for a while;
+    // a steady lag of a few steps while it keeps pace is not a stall. Without, the unsent backlog counts.
+    const waiting = this.flights.length ? (performance.now() - this.answeredAt) / 1000 / TICK : g.owed / TICK;
+    lock.frame(waiting, STALL_TICKS, this.flights.length ? this.heldFor || 'the battle thread' : null, 0);
+    if (lock.started && !g.paused && waiting >= STALL_TICKS + 1) {
       if ((g.stalled = (g.stalled || 0) + real) > 2 && !g.stallSaid) {
         g.stallSaid = true;
         const who = lock.waitingFor();
@@ -325,26 +386,33 @@ export class SpaceMirror {
     }
   }
 
+  // Sends the battle thread up to MAX_IN_FLIGHT steps ahead of its answers, so it keeps stepping while this
+  // page is busy drawing a frame. Each step still carries exactly its own commands, in order.
   pump() {
     const g = this.game,
       lock = g.lock;
-    if (this.inFlight || g.owed < TICK || g.paused) return;
-    if (!lock.step() || g.paused) return;
-    this.inFlight = true;
-    g.owed -= TICK;
-    this.worker.postMessage({ k: 'lockstep', cmds: this.pending.splice(0), hash: this.wantHash });
-    this.wantHash = false;
+    while (this.flights.length < MAX_IN_FLIGHT && g.owed >= TICK && !g.paused) {
+      const turn = Math.floor(lock.tick / TURN);
+      if (!lock.step() || g.paused) return;
+      const hash = this.wantHash;
+      this.wantHash = false;
+      g.owed -= TICK;
+      if (!this.flights.length) this.answeredAt = performance.now();
+      this.flights.push({ hashTurn: hash ? turn : -1, logAt: hash ? lock.log.length - 1 : -1, ended: lock.advance() });
+      this.worker.postMessage({ k: 'lockstep', cmds: this.pending.splice(0), hash });
+    }
   }
 
   lockStepped(m) {
-    const lock = this.game.lock;
-    if (m.hash !== undefined) {
-      const n = Math.floor(lock.tick / TURN);
-      lock.hashes.set(n, m.hash);
-      if (lock.log.length && lock.log[lock.log.length - 1] === undefined) lock.log[lock.log.length - 1] = m.hash;
+    const lock = this.game.lock,
+      flight = this.flights.shift();
+    if (!flight) return;
+    this.answeredAt = performance.now();
+    if (m.hash !== undefined && flight.hashTurn >= 0) {
+      lock.hashes.set(flight.hashTurn, m.hash);
+      if (flight.logAt >= 0 && lock.log[flight.logAt] === undefined) lock.log[flight.logAt] = m.hash;
     }
-    this.inFlight = false;
-    lock.stepped();
+    if (flight.ended >= 0) lock.ackTurn(flight.ended);
     this.pump();
   }
 
@@ -419,6 +487,15 @@ export class SpaceMirror {
         sw.readyAt = readyAt;
         sw.left = left;
       });
+      // Radar blips the battle's scripts placed.
+      if (st[7] || w.storyBlips?.size) {
+        w.storyBlips = new Map();
+        for (const [name, id, x, y, until] of st[7] || []) {
+          const obj = id >= 0 ? this.byW.get(id) : null;
+          if (id >= 0 && !obj) continue;
+          w.storyBlips.set(name, obj ? { obj } : { x, y, ...(until !== null ? { until } : {}) });
+        }
+      }
       for (const [id, start, span] of st[6] || []) {
         const p = w.players.find(x => x.id === id);
         if (!p) continue;
@@ -433,6 +510,7 @@ export class SpaceMirror {
       st = this.stats;
     st.records++;
     if (m.stepMs !== undefined) st.stepMs = m.stepMs;
+    if (m.stepPhases !== undefined) st.stepPhases = m.stepPhases;
     if (m.jobs) st.jobs = m.jobs;
     w.time = m.time;
     for (const s of m.spawns) {
@@ -451,7 +529,22 @@ export class SpaceMirror {
       audio = w.audio;
     for (const [to, name, args] of m.events) {
       const a = args.map(x => this.back(x)),
-        target = to === 'fx' ? fx : to === 'audio' ? audio : to === 'game' ? this.game : to === 'world' ? w : a.shift(),
+        target =
+          to === 'fx'
+            ? fx
+            : to === 'audio'
+              ? audio
+              : to === 'game'
+                ? this.game
+                : to === 'world'
+                  ? w
+                  : to === 'speech'
+                    ? this.game.audio?.speech
+                    : to === 'movies'
+                      ? this.game.movies
+                      : to === 'ui'
+                        ? this.game.ui
+                        : a.shift(),
         f = target && target[name];
       if (typeof f !== 'function') continue;
       try {
@@ -524,9 +617,17 @@ export class SpaceMirror {
       if (e.isSquad) e.dead = true;
       else w.removeUnit(e);
     }
+    // The battle thread sends a hardpoint only when it changed (see SpaceRecorder), a unit's hardpoints and abilities
+    // one after the other: the unit is looked up once for each run.
     const H = m.points;
+    let lastId = -1,
+      lastUnit = null;
     for (let o = 0; o < H.length; o += POINT) {
-      const u = this.byW.get(H[o]),
+      if (H[o] !== lastId) {
+        lastId = H[o];
+        lastUnit = this.byW.get(lastId);
+      }
+      const u = lastUnit,
         hp = u && !u.dead && u.hardpoints && u.hardpoints[H[o + 1]];
       if (!hp) continue;
       if (!H[o + 2] && hp.alive) this.hardpointLost(u, hp);
@@ -541,6 +642,11 @@ export class SpaceMirror {
     for (const [wid, child, a, b] of m.pads || []) {
       const e = this.byW.get(wid);
       if (!e || e.dead) continue;
+      if (child === -5) {
+        e.viewSees = a === 1;
+        e.viewOwner = b >= 0 ? w.players.find(p => p.id === b) || null : null;
+        continue;
+      }
       if (child === -4) {
         e.construction ||= { result: db.type(e.type.str('Tactical_Buildable_Constructed')) };
         e.construction.left = a;
@@ -554,8 +660,13 @@ export class SpaceMirror {
       if (e.obj) e.obj.visible = !c || !e.type.bool('Hides_When_Built_On', true);
     }
     const A = m.abilities;
+    lastId = -1;
     for (let o = 0; o < A.length; o += ABILITY) {
-      const u = this.byW.get(A[o]),
+      if (A[o] !== lastId) {
+        lastId = A[o];
+        lastUnit = this.byW.get(lastId);
+      }
+      const u = lastUnit,
         st = u && u.abilities && u.abilities[A[o + 1]];
       if (!st) continue;
       st.active = !!(A[o + 2] & 1);

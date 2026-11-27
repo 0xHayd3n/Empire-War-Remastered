@@ -1,5 +1,5 @@
 import { db } from '../gamedata.js';
-import { recordRef } from './galacticnet.js';
+import { recordRef, fleetRef } from './galacticnet.js';
 import { cycleNumber } from './galacticeconomy.js';
 import { loadTextureCanvas } from '../dds.js';
 import { loadMapLayoutHeader } from '../ted.js';
@@ -7,6 +7,7 @@ import { iconCanvasRect, iconUrl } from '../icons.js';
 import { NativePanel, loadNativePanelAssets, tintShell, animateScan } from './nativepanel.js';
 import { drawMesh } from './hud.js';
 import { displayIncome, intelligence, stepVisibility, VIS } from './galacticfog.js';
+import { planetMaxGroundSlots } from './planetstats.js';
 import {
   assignBaseLayout,
   canViewBaseLayout,
@@ -200,7 +201,7 @@ export class BaseLayout extends NativePanel {
       if (this.labels[name]) this.setText(this.labels[name], value);
     };
     putText('unit_cap_number', p.garrison.length + '/' + this.game.overview.ground.length);
-    putText('building_cap_number', p.groundStructures.length + '/' + (p.structureSlots ?? p.type.num('Special_Structures_Land', 3)));
+    putText('building_cap_number', p.groundStructures.length + '/' + planetMaxGroundSlots(p));
     putText('Planet_name_text', title(p.type));
     putText('Planetary_Income_number', String(Math.round(displayIncome(g, p))));
     putText('Day_Counter_text', db.t('TEXT_CYCLES') + ': ' + cycleNumber(g));
@@ -401,7 +402,7 @@ export class BaseLayout extends NativePanel {
         this.game.order({
           c: 'layoutLand',
           p: p.index,
-          f: g.fleets.indexOf(from.entry.fleet),
+          f: fleetRef(g, from.entry.fleet),
           unit: ref(from.entry.unit),
           id: target.slot.marker.id,
           marker: target.slot.marker.type.name

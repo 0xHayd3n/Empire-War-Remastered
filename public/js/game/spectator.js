@@ -608,6 +608,43 @@ export class SpectatorView {
     return this.teams.findIndex(t => t.key === key);
   }
 
+  // What the report has gathered so far, for a battle that is put back in agreement by relaunching it from the
+  // host's save: the counts, the samples over time and the feed. Units in the feed are dropped (the relaunched
+  // battle has new ones); the feed keeps where things happened.
+  carry() {
+    const plain = item => {
+      const { row, entity, ...rest } = item;
+      return rest;
+    };
+    return {
+      teams: this.teams.map(t => t.key),
+      tally: this.src.tally ? this.src.tally.map(t => ({ ...t })) : null,
+      log: this.log.map(plain),
+      stats: this.stats.map(st => ({ ...st })),
+      earnLog: this.earnLog.slice(),
+      history: this.history.slice(),
+      deaths: this.deaths.slice(),
+      histStep: this.histStep
+    };
+  }
+
+  adopt(c) {
+    if (!c || !Array.isArray(c.teams) || c.teams.length !== this.teams.length || c.teams.some((k, i) => k !== this.teams[i].key)) return false;
+    if (c.tally && this.src.tally && c.tally.length === this.src.tally.length) this.src.tally = c.tally.map(t => ({ ...t }));
+    const now = this.src.time(),
+      before = list => (list || []).filter(x => !(x.t > now));
+    this.history = before(c.history);
+    this.histStep = c.histStep || this.histStep;
+    this.earnLog = before(c.earnLog);
+    this.deaths = before(c.deaths);
+    this.stats = this.stats.map((st, i) => ({ ...st, ...(c.stats?.[i] || {}), credits: -1, power: -1, rate: null, pop: null, ups: null }));
+    if (Array.isArray(c.log)) {
+      this.log = c.log.filter(x => !(x.time > now)).map(x => ({ ...x, row: null }));
+      if (!this.quiet && this.list) this.renderLog();
+    }
+    return true;
+  }
+
   winnerTitle(key) {
     const i = this.indexOf(key);
     if (i < 0) return 'Battle over';
@@ -1247,7 +1284,7 @@ export class SpectatorView {
       const head = el('div', 'sp-rep-tip-row', tip);
       head.style.setProperty('--tc', team.color);
       el('i', '', head);
-      el('span', '', head, `${this.teamLabel(best.i)} · ${this.factionLabel(team)} lost ${best.n}`);
+      el('span', '', head).textContent = `${this.teamLabel(best.i)} · ${this.factionLabel(team)} lost ${best.n}`;
       const byType = new Map();
       for (const d of best.list) {
         const key = d.type.name + '|' + (d.by || '');
@@ -1343,7 +1380,7 @@ export class SpectatorView {
         const r = el('div', 'sp-rep-tip-row', tip);
         r.style.setProperty('--tc', this.teams[i].color);
         el('i', '', r);
-        el('span', '', r, `${this.teamLabel(i)} · ${this.factionLabel(this.teams[i])}`);
+        el('span', '', r).textContent = `${this.teamLabel(i)} · ${this.factionLabel(this.teams[i])}`;
         el('b', '', r, g.fmt(v, h[k], i));
       }
       tip.style.display = 'block';

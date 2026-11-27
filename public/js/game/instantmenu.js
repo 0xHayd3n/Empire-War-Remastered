@@ -1,6 +1,8 @@
 import { db, factionColor } from '../gamedata.js';
 import { alternateShade } from './commandgroups.js';
 import { iconUrl } from '../icons.js';
+import { contentNow } from '../content.js';
+import { listingContent, listLocalPref } from './lobbycontent.js';
 import { loadMap, mapTitle, mapHeader, loadMapPreview } from '../ted.js';
 import { PALETTE } from './slotrows.js';
 import { DYNAMIC_SIZES, isDynamic, dynamicSize, resizeDynamic, seedBar, dynamicTurn } from './dynamicmap.js';
@@ -24,6 +26,7 @@ import { groundForces } from './planetbattle.js';
 import { soloLibrary } from './solooperationlibrary.js';
 import { instantForces, packArmy, unpackArmy } from './instantforces.js';
 import { guestRefs } from './tacticalroster.js';
+import { listingNote } from './lobby.js';
 import { paintCrest } from './spectator.js';
 import { activeLivery } from './liveries.js';
 import { readyPaint, launchPaint } from './liverytransport.js';
@@ -226,7 +229,8 @@ export async function openInstantBattle({ maps, landMaps = [], factions, audio, 
       players: humans().length,
       slots: players.filter(p => p.kind === 'human' || p.kind === 'open').length,
       version: mp.version,
-      mod: mp.data
+      mod: mp.data,
+      content: listingContent(contentNow(), { listLocal: listLocalPref() })
     });
   };
   const publish = () => {
@@ -1196,6 +1200,7 @@ export async function openInstantBattle({ maps, landMaps = [], factions, audio, 
       setup.seed = crypto.getRandomValues(new Uint32Array(1))[0];
       setup.spaceWorker = !new URLSearchParams(location.search).has('nospaceworker');
       net.setListing(null);
+      net.lock(true);
       net.broadcast({ k: 'start', setup });
       mp.started?.({ st: { ...st }, players: JSON.parse(JSON.stringify(players)) });
     }
@@ -1216,7 +1221,7 @@ export async function openInstantBattle({ maps, landMaps = [], factions, audio, 
             return;
           }
           if (mp.password && m.password !== mp.password) {
-            net.send(from, { k: 'password', wrong: m.password !== undefined });
+            net.askPassword(from, m.password !== undefined);
             return;
           }
           if (s) return;
@@ -1229,6 +1234,7 @@ export async function openInstantBattle({ maps, landMaps = [], factions, audio, 
           }
           const back = slot.was === who && slot.army.length;
           Object.assign(slot, { kind: 'human', peer: from, name: who, ready: false });
+          net.admit(from);
           if (!back) slot.army = randomArmy(rosterOf(slot), slot.budget);
           const text = `${slot.name} joined the game.`;
           say('', text);
@@ -1261,6 +1267,7 @@ export async function openInstantBattle({ maps, landMaps = [], factions, audio, 
           }
         }
       }),
+      net.on('listing', (ok, why) => say('', listingNote(ok, why))),
       net.on('leave', peer => {
         const s = players.find(p => p.kind === 'human' && p.peer === peer);
         if (!s) return;
@@ -1283,7 +1290,7 @@ export async function openInstantBattle({ maps, landMaps = [], factions, audio, 
           draw();
         } else if (m.k === 'chat') say(m.name, m.text);
         else if (m.k === 'refuse') close(false, m.why);
-        else if (m.k === 'start' && m.setup) {
+        else if (m.k === 'start' && m.setup && players.find(mine)?.ready) {
           close(true);
           audio?.unlock?.();
           start(m.setup);
@@ -1305,6 +1312,7 @@ export async function openInstantBattle({ maps, landMaps = [], factions, audio, 
   draw();
   if (board) board.focus();
   if (net && host) {
+    net.lock(false);
     publish();
     for (const line of mp.invites || []) say('', line.text, line.copy);
   }

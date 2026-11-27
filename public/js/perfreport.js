@@ -1,4 +1,5 @@
 import { recentFrames, lastMinute, perfTimeline, backgroundSwitches } from './perfsampler.js';
+import { processSnapshot, processStatsLines } from './procstats.js';
 
 const PROFILE_MS = 3000;
 const PROFILE_TOP = 30;
@@ -70,6 +71,7 @@ function threadSnapshot(game) {
   if (!stats) return null;
   return {
     battleThreadStepMs: stats.stepMs ? +stats.stepMs.toFixed(2) : null,
+    battleThreadPhasesMs: stats.stepPhases ? Object.fromEntries(Object.entries(stats.stepPhases).map(([phase, ms]) => [phase, +ms.toFixed(2)])) : null,
     applyMsPerStep: stats.records ? +(stats.applyMs / stats.records).toFixed(2) : null,
     jobs: stats.jobs || null
   };
@@ -168,7 +170,12 @@ async function graphicsSettings() {
 }
 
 export async function collectPerformance(game) {
-  const [stages, settings, renderer] = await Promise.all([stageAverages(), graphicsSettings(), rendererSnapshot(game)]);
+  const [stages, settings, renderer, processes] = await Promise.all([
+    stageAverages(),
+    graphicsSettings(),
+    rendererSnapshot(game),
+    processSnapshot().catch(() => null)
+  ]);
   return {
     frames: recentFrames(),
     lastMinute: lastMinute(),
@@ -176,6 +183,9 @@ export async function collectPerformance(game) {
     threads: threadSnapshot(game),
     stages,
     settings,
+    // what the game's processes use now, and over the last benchmark run when there was one
+    processes,
+    benchmarkProcesses: globalThis.benchmarkResult?.processes || null,
     backgroundSwitches: backgroundSwitches(),
     timeline: perfTimeline()
   };
@@ -226,7 +236,11 @@ export function performanceLines(performance, warnings, profileResult) {
       `  Renderer: ${renderer.kind}${renderer.canvas ? `, ${renderer.canvas.width}x${renderer.canvas.height} pixels` : ''}${renderer.pixelRatio ? ` (${renderer.pixelRatio.toFixed(2)}x)` : ''}${renderer.drawCalls != null ? `, ${renderer.drawCalls} draw calls` : ''}${renderer.triangles != null ? `, ${Math.round(renderer.triangles / 1000)}k triangles` : ''}${renderer.renderThreadMs != null ? `, render thread ${renderer.renderThreadMs} ms per frame` : ''}`
     );
   const threads = performance?.threads;
-  if (threads?.battleThreadStepMs != null) lines.push(`  Battle thread: ${threads.battleThreadStepMs} ms per step`);
+  if (threads?.battleThreadStepMs != null) {
+    const phases = threads.battleThreadPhasesMs;
+    const split = phases ? ` (${Object.entries(phases).map(([phase, ms]) => `${phase} ${ms}`).join(', ')})` : '';
+    lines.push(`  Battle thread: ${threads.battleThreadStepMs} ms per step${split}`);
+  }
   const stages = performance?.stages;
   if (stages?.stages && Object.keys(stages.stages).length)
     lines.push(`  Main thread per frame (ms): ${Object.entries(stages.stages).map(([name, ms]) => `${name} ${ms}`).join(', ')}`);
@@ -236,6 +250,8 @@ export function performanceLines(performance, warnings, profileResult) {
     lines.push(
       `  Graphics: shaders ${settings.shader}, shadows ${settings.shadows ? settings.shadow : 'off'}, resolution scale ${settings.scale}, supersampling ${settings.supersampling}x, anti-aliasing ${settings.aa ? 'on' : 'off'}, particles ${settings.particle}`
     );
+  lines.push(...processStatsLines(performance?.processes, '  ', 'Processes now'));
+  lines.push(...processStatsLines(performance?.benchmarkProcesses, '  ', 'Processes during the last benchmark'));
   lines.push(`  CPU profile: ${profileResult?.profile ? 'included (profile.txt)' : profileResult?.why || 'not taken'}`);
   lines.push(`  Possible causes: ${warnings.length ? warnings.join('; ') : 'none spotted'}`);
   return lines;

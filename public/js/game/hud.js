@@ -1,4 +1,5 @@
 import { reserveCards, reserveSignature, wireReserveCard } from './reservecards.js';
+import { FAST_FORWARD } from './galacticspeed.js';
 import { db, loadFileList } from '../gamedata.js';
 import { fetchText, fetchBinary } from '../vfs.js';
 import { BinkPlayer } from '../bink.js';
@@ -8,8 +9,9 @@ import { loadALO, parseALO } from '../alo.js';
 import { loadTextureCanvas } from '../dds.js';
 import { iconUrl, iconCanvasRect, warmIcons, iconAdditiveUrl } from '../icons.js';
 import { fontFamily } from '../fonts.js';
-import { buildCost, isUpgradeType, companySpaceUnits } from './sim.js';
+import { buildCost, isUpgradeType, companySpaceUnits, spacePop } from './sim.js';
 import { parseAbilities } from './abilities.js';
+import { layoutSelectionPanels, slotClickSelection } from './commandbargroups.js';
 import { abilityLocked } from './blackmarket.js';
 import { battlePlanetName } from './battleplanet.js';
 import { playerSpecial } from './superweapon.js';
@@ -29,6 +31,11 @@ const el = (cls, parent) => {
   return d;
 };
 const css = url => (url ? `url("${url}")` : 'none');
+// a selection only losing units (deaths) keeps its place; any unit added makes it a new selection
+const addsUnits = (previous, units) => !previous || units.some(unit => !previous.has(unit));
+// Blank_Texture_Name on the unit/build slots lists a ground pad then a space pad, the same pairing the
+// galactic build bar uses per tab.
+export const selectPadIndex = game => (game?.land === true ? 0 : 1);
 let tipBar = null;
 if (typeof addEventListener === 'function')
   addEventListener('mousemove', e => {
@@ -494,6 +501,7 @@ export class CommandBar {
       delete mm.dataset.component;
     }
     this.offKeys?.();
+    for (const off of this.windowWheelOffs || []) off();
     this.padMenu?.root.remove();
     removeEventListener('resize', this.onResize);
     for (const ev of ['pointermove', 'pointerdown']) removeEventListener(ev, this.onPoint, true);
@@ -605,17 +613,31 @@ export class CommandBar {
       thumb.style.left = (offset / Math.max(1, total)) * 100 + '%';
       thumb.style.width = (visible / Math.max(1, total)) * 100 + '%';
     };
-    bar.wheel = node =>
-      node.addEventListener(
-        'wheel',
-        e => {
-          if (bar.total <= bar.visible) return;
-          e.preventDefault();
-          e.stopPropagation();
-          to(bar.offset + Math.sign(e.deltaY || e.deltaX));
-        },
-        { passive: false }
-      );
+    // the wheel scrolls anywhere over the slots, the borders, the ability buttons and the scroll bar itself,
+    // in the gaps too, before the camera can take it as a zoom
+    bar.wheelArea = nodesOf => {
+      const onWheel = e => {
+        if (bar.total <= bar.visible || track.closest('[hidden]') || !track.isConnected) return;
+        let left = Infinity,
+          right = -Infinity,
+          top = Infinity,
+          bottom = -Infinity;
+        for (const node of [track, ...nodesOf()]) {
+          const box = node.getBoundingClientRect();
+          if (!box.width || !box.height) continue;
+          left = Math.min(left, box.left);
+          right = Math.max(right, box.right);
+          top = Math.min(top, box.top);
+          bottom = Math.max(bottom, box.bottom);
+        }
+        if (e.clientX < left || e.clientX > right || e.clientY < top || e.clientY > bottom) return;
+        e.preventDefault();
+        e.stopPropagation();
+        to(bar.offset + Math.sign(e.deltaY || e.deltaX));
+      };
+      addEventListener('wheel', onWheel, { capture: true, passive: false });
+      (this.windowWheelOffs ||= []).push(() => removeEventListener('wheel', onWheel, { capture: true }));
+    };
     return bar;
   }
 
@@ -965,7 +987,7 @@ export class CommandBar {
       title: db.t('TEXT_TOOLTIP_STORY_BUTTON')
     });
     this.bPause = this.button('b_play_pause_t', { onClick: () => game.togglePause() });
-    this.bFast = this.button('b_fast_forward_t', { onClick: () => game.setSpeed(game.speed > 1 ? 1 : 2) });
+    this.bFast = this.button('b_fast_forward_t', { onClick: () => game.setSpeed(game.speed > 1 ? 1 : FAST_FORWARD) });
     this.bCamera = this.button('b_camera_t', { onClick: () => game.cine.toggle() });
     const sw = (game.world.specialWeapons || []).find(x => x.player === p);
     const swi = sw ? sw.index : 0;
@@ -1086,28 +1108,17 @@ export class CommandBar {
       b.style.backgroundImage = css(this.tex('special_border_00', 'Icon_Alternate_Texture_Name', 0));
       this.borders.push(b);
     }
-    for (let i = 0; i < 24; i++) {
-      const id = String(i).padStart(2, '0');
-      const s = this.place(el('hslot', root), 's_select_' + id);
-      s.innerHTML = '<i class="ic"></i><i class="dark"></i><span class="cost"></span><span class="num"></span>';
-      const hp = this.thin(el('hbar hp', root), 's_health_' + id),
-        sh = this.thin(el('hbar sh', root), 's_shield_' + id);
-      hp.innerHTML = sh.innerHTML = '<i></i>';
-      hp.style.backgroundImage = sh.style.backgroundImage = css(iconUrl('i_bar_control_wide.tga'));
-      sh.firstChild.style.backgroundImage = css(iconUrl('i_bar_shield_small10.tga'));
-      s.onclick = ev => this.slotClick(i, ev);
-      s.onmouseenter = () => this.slotHover(i);
-      s.onmouseleave = () => this.hideInfo();
-      this.slots.push({ el: s, hp, sh, item: null });
-    }
+    for (let i = 0; i < 24; i++) this.slots.push(this.selectSlot(i));
     this.buildBar = this.scrollBar(
       this.slots.map((_, i) => 's_select_' + String(i).padStart(2, '0')),
-      o => {
-        this.buildScroll = o;
+      offset => {
+        if (this.barMode === 'units') this.unitScroll = offset;
+        else this.buildScroll = offset;
         this.ui.hudTimer = 0;
       }
     );
-    if (this.buildBar) for (const s of this.slots) this.buildBar.wheel(s.el);
+    if (this.buildBar)
+      this.buildBar.wheelArea(() => [...this.slots.map(slot => slot.el), ...this.borders, ...this.abilityLayer.children]);
     this.abilityLayer = el('hlayer', root);
     this.info = document.getElementById('encyc');
     this.info.className = 'hidden';
@@ -1137,21 +1148,36 @@ export class CommandBar {
       q.style.backgroundImage = css(this.tex('tqueue00', 'Blank_Texture_Name'));
       q.innerHTML = '<i class="ic"></i><i class="prog"></i><span></span>';
       q.querySelector('.prog').style.backgroundImage = css(this.tex('tqueue00', 'Build_Texture_Name'));
-      q.onclick = () => {
-        const it = q._item;
-        if (it) {
-          this.game.command({
-            c: 'cancel',
-            b: it.u.id,
-            q: it.name,
-            i: it.u.buildQueues.get(it.name).indexOf(it.it),
-            type: it.it.type.name
-          });
-          ui.hudTimer = 0;
-        }
+      q.onclick = () => this.cancelQueued(q._item);
+      q.oncontextmenu = e => {
+        e.preventDefault();
+        this.cancelQueued(q._item);
       };
+      q.onmouseenter = () => this.queueHover(i, true);
+      q.onmouseleave = () => this.queueHover(i, false);
       this.queueSlots.push(q);
     }
+  }
+
+  selectSlot(i) {
+    const root = this.root,
+      id = String(i).padStart(2, '0');
+    const s = this.place(el('hslot', root), 's_select_' + id);
+    s.innerHTML = '<i class="ic"></i><i class="dark"></i><span class="cost"></span><span class="num"></span>';
+    // Pad frame (Blank_Texture_Name) under the unit icon.
+    const pad = document.createElement('i');
+    pad.className = 'pad';
+    pad.style.backgroundImage = css(this.tex('s_select_' + id, 'Blank_Texture_Name', selectPadIndex(this.game)));
+    s.prepend(pad);
+    const hp = this.thin(el('hbar hp', root), 's_health_' + id),
+      sh = this.thin(el('hbar sh', root), 's_shield_' + id);
+    hp.innerHTML = sh.innerHTML = '<i></i>';
+    hp.style.backgroundImage = sh.style.backgroundImage = css(iconUrl('i_bar_control_wide.tga'));
+    sh.firstChild.style.backgroundImage = css(iconUrl('i_bar_shield_small10.tga'));
+    s.onclick = ev => this.slotClick(i, ev);
+    s.onmouseenter = () => this.slotHover(i);
+    s.onmouseleave = () => this.hideInfo();
+    return { el: s, hp, sh, item: null };
   }
 
   layout() {
@@ -1163,7 +1189,8 @@ export class CommandBar {
     const menu = sel.length === 1 && sel[0].player === p && !!ui.padOf?.(sel[0]);
     const units = menu
       ? []
-      : sel.filter(s => s.isSquad || s.isMobile || s.sellable || (!s.isPad && !(sel.length === 1 && w.buildOptions(s, p).length)));
+      : // a lone builder shows what it builds, even one that can move (a mod station anchored by an ability)
+        sel.filter(s => s.isSquad || s.sellable || ((s.isMobile || !s.isPad) && !(sel.length === 1 && this.listedBuildOptions(s).length)));
     const items = new Array(24).fill(null),
       columns = [];
     let skip = this.coveredColumns(false);
@@ -1174,54 +1201,26 @@ export class CommandBar {
       if (host && sel.includes(host.squad)) held.set(q, host);
     }
     if (units.length) {
-      const groups = new Map();
-      for (const s of units) {
-        const k = s.type.name + '|' + s.player.id + (held.has(s) ? '|held' : '');
-        if (!groups.has(k)) groups.set(k, []);
-        groups.get(k).push(s);
+      if (addsUnits(this.unitScrollSelection, units)) {
+        this.unitScroll = 0;
+        this.unitScrollSelection = new Set(units);
       }
-      const recs = [...groups.values()].map(list => ({ list, one: false }));
-      let need = units.length;
-      while (need > items.length - skip * 2) {
-        const big = recs.filter(r => !r.one && r.list.length > 1).sort((a, b) => b.list.length - a.list.length)[0];
-        if (!big) break;
-        big.one = true;
-        need -= big.list.length - 1;
-      }
-      let col = skip;
-      for (const { list, one } of recs) {
-        const first = col,
-          entries = one ? [{ unit: list[0], group: list, held: held.get(list[0]) }] : list.map(s => ({ unit: s, held: held.get(s) }));
-        for (let i = 0; i < entries.length && col < 12; i += 2, col++) {
-          entries.slice(i, i + 2).forEach((it, r) => {
-            items[col * 2 + r] = it;
-          });
-        }
-        for (let c = first; c < col; c++)
-          columns.push({
-            col: c,
-            first,
-            span: col - first,
-            units: list,
-            held: held.has(list[0]),
-            part: col - first === 1 ? 0 : c === first ? 1 : c === col - 1 ? 3 : 2
-          });
-      }
+      const { items, columns, totalColumns, scrollColumns } = layoutSelectionPanels(units, held, skip, this.unitScroll);
+      this.unitScroll = scrollColumns;
+      this.barMode = 'units';
+      this.buildBar?.set(totalColumns, 12 - skip, scrollColumns);
       return { mode: 'units', items, columns };
     }
+    this.barMode = 'build';
     const b = ui.builder();
+    // on land a pad's options float beside it, as the original shows them, and the bar stays empty
+    if (b && this.game?.land === true && this.padMenu && b === this.menuPad()) {
+      this.buildBar?.set(0, 12 - skip, 0);
+      return { mode: 'build', items, columns };
+    }
     if (b) {
       skip = this.coveredColumns(true);
-      const opts = w.buildOptions(b, p).filter(t => {
-        if (/^Requires /.test(w.cantBuild(b, t, p) || '')) return false;
-        if (!isUpgradeType(t)) return true;
-        const seen = new Set();
-        for (let n = t; n && !seen.has(n); n = db.type(n.str('Next_Upgrade_Level_Type'))) {
-          seen.add(n);
-          if (p.upgrades.has(n.name.toUpperCase())) return false;
-        }
-        return true;
-      });
+      const opts = this.listedBuildOptions(b);
       const cols = Math.ceil(opts.length / 2);
       if (this.buildKey !== b) {
         this.buildKey = b;
@@ -1236,8 +1235,32 @@ export class CommandBar {
     return { mode: 'build', items, columns };
   }
 
+  // what a builder lists on the bar: not what still needs something first, nor an upgrade already owned
+  listedBuildOptions(builder) {
+    const w = this.world,
+      p = this.player;
+    return w.buildOptions(builder, p).filter(t => {
+      if (/^Requires /.test(w.cantBuild(builder, t, p) || '')) return false;
+      if (!isUpgradeType(t)) return true;
+      const seen = new Set();
+      for (let n = t; n && !seen.has(n); n = db.type(n.str('Next_Upgrade_Level_Type'))) {
+        seen.add(n);
+        if (p.upgrades.has(n.name.toUpperCase())) return false;
+      }
+      return true;
+    });
+  }
+
   coveredColumns(build) {
     return (this.covers || []).some(c => (!build || c.build) && c.node.isConnected && !c.node.closest('[hidden]') && c.node.style.display !== 'none') ? 1 : 0;
+  }
+
+  // left or right click on a queued build or research cancels it (the build is refunded by cancelBuild)
+  cancelQueued(x) {
+    const q = x && x.u.buildQueues.get(x.name);
+    if (!q) return;
+    this.game.command({ c: 'cancel', b: x.u.id, q: x.name, i: q.indexOf(x.it), type: x.it.type.name });
+    this.ui.hudTimer = 0;
   }
 
   slotClick(i, ev) {
@@ -1255,8 +1278,7 @@ export class CommandBar {
           ui.selection.filter(x => !picked.includes(x)),
           false
         );
-      else if (it.group) ui.select(it.group, false);
-      else ui.select([it.unit], false);
+      else ui.select(slotClickSelection(it), false);
     } else if (it.build) {
       const r = this.game.command({ c: 'build', b: it.builder.id, type: it.build.name, n: ev.shiftKey ? 5 : 1 });
       if (!(r && r.why)) this.game.audio.play('GUI_Button_Press_2_SFX');
@@ -1553,14 +1575,20 @@ export class CommandBar {
     }
   }
 
+  // the build pad whose options float beside it: a lone selected pad of the player's side, empty, in space or on land
+  menuPad() {
+    const ui = this.ui,
+      sel = ui.selection.length === 1 ? ui.selection[0] : null;
+    return sel && sel.isPad && !sel.dead && !sel.padChild && (sel.padOwner ?? sel.player) === this.player ? sel : null;
+  }
+
   updatePadMenu() {
     const M = this.padMenu;
     if (!M) return;
     const ui = this.ui,
       w = this.world,
       p = this.player,
-      sel = ui.selection.length === 1 ? ui.selection[0] : null,
-      pad = sel && sel.isPad && !sel.dead && !sel.padChild && sel.padOwner === p ? sel : null,
+      pad = this.menuPad(),
       opts = pad ? w.buildOptions(pad, p).filter(t => !/^Requires /.test(w.cantBuild(pad, t, p) || '')).slice(0, 6) : [];
     const at = opts.length ? ui.screenOf(pad) : null;
     if (!at || at.behind) {
@@ -1593,9 +1621,11 @@ export class CommandBar {
     if (amount === this.creditAmount) return;
     this.creditAmount = amount;
     const credits = creditFormat.format(amount);
-    if (!this.measure) this.measure = document.createElement('canvas').getContext('2d');
-    const style = getComputedStyle(this.tCredits);
-    this.measure.font = `${style.fontSize} ${style.fontFamily}`;
+    if (!this.measure) {
+      const style = getComputedStyle(this.tCredits);
+      this.measure = document.createElement('canvas').getContext('2d');
+      this.measure.font = `${style.fontSize} ${style.fontFamily}`;
+    }
     const left = this.creditRight - this.measure.measureText(credits).width - 18;
     this.tCredits.textContent = credits;
     this.tCreditIcon.style.left = left + 'px';
@@ -1688,34 +1718,35 @@ export class CommandBar {
       const mine = L.columns.filter(
         c => !c.held && c.units[0].player === p && c.col === c.first && this.rect('special_button_' + String(c.col * 2).padStart(2, '0'))
       );
-      const abilityKey = mine.map(c => c.col + ':' + c.units[0].abilities.map(a => a.def.kind).join('/')).join(',');
-      const habX = (base, span, k, n) => base.x + (span - 1) * 27.5 + (k - (n - 1) / 2) * 27.5;
+      const abilityKey = mine.map(c => c.col + '+' + c.span + ':' + c.defs.map(def => def.kind).join('/')).join(',');
+      // a panel's first ability button sits centred over it, each further one half a column to the right
+      const abilityRect = (first, span, k) => {
+        const own = this.rect('special_button_' + String(first * 2 + span - 1 + k).padStart(2, '0'));
+        if (own) return own;
+        const base = this.rect('special_button_' + String(first * 2).padStart(2, '0'));
+        return base && { ...base, x: base.x + (span - 1 + k) * 27.5 };
+      };
+      const unitsWith = (units, kind) => units.filter(unit => unit.abilities.some(ability => ability.def.kind === kind));
       if (abilityKey === this.abilityKey && this.abilityButtons) {
         let i = 0;
         for (const c of mine) {
-          const base = this.rect('special_button_' + String(c.col * 2).padStart(2, '0')),
-            n = c.units[0].abilities.length;
-          for (let k = 0; k < n; k++) {
+          c.defs.forEach((def, k) => {
             const rec = this.abilityButtons[i++];
-            rec.units = c.units;
-            rec.b.style.left = habX(base, c.span, k, n) + 'px';
-          }
+            rec.units = unitsWith(c.units, def.kind);
+            rec.b.style.left = abilityRect(c.first, c.span, k).x + 'px';
+          });
         }
       } else {
         this.abilityKey = abilityKey;
         this.abilityLayer.replaceChildren();
         this.abilityButtons = [];
-        for (const { col, first, span, units, held } of L.columns) {
-          if (held || units[0].player !== p || col !== first) continue;
-          const defs = units[0].abilities.map(a => a.def);
-          const base = this.rect('special_button_' + String(col * 2).padStart(2, '0'));
-          if (!base) continue;
+        for (const { col, first, span, units, defs } of mine) {
           defs.forEach((def, k) => {
             const b = el('hab', this.abilityLayer);
-            b.dataset.component = 'SPECIAL_BUTTON_' + String(col * 2 + k).padStart(2, '0');
+            b.dataset.component = 'SPECIAL_BUTTON_' + String(col * 2 + span - 1 + k).padStart(2, '0');
             b._ability = def.kind;
-            const x = habX(base, span, k, defs.length);
-            b.style.cssText = `left:${x}px;bottom:${base.y}px;width:${base.w}px;height:${base.h}px`;
+            const place = abilityRect(first, span, k);
+            b.style.cssText = `left:${place.x}px;bottom:${place.y}px;width:${place.w}px;height:${place.h}px`;
             b.style.setProperty('--blank', css(this.tex('special_button_00', 'Blank_Texture_Name')));
             b.style.setProperty('--icon', css(def.text ? iconUrl('i_sa_blank_button.tga') : abilityIcon(def.kind, def.icon)));
             b.style.setProperty('--over', css(this.tex('special_button_00', 'Mouse_Over_Texture_Name')));
@@ -1745,7 +1776,7 @@ export class CommandBar {
             const rec = {
               b,
               def,
-              units,
+              units: unitsWith(units, def.kind),
               rest:
                 (def.target === 'unit' ? ' — then click an enemy' : def.target === 'point' ? ' — then click a location' : '') +
                 (def.autofire ? ' · right-click: auto-fire' : '')
@@ -1845,7 +1876,10 @@ export class CommandBar {
       const x = i < 5 ? ships[i] : research[i - 5];
       q._item = x || null;
       q.style.display = x ? '' : 'none';
-      if (!x) return;
+      if (!x) {
+        if (this.queueHovered === i && this.tipTarget?.id?.startsWith('queue' + i + '|')) this.hideInfo();
+        return;
+      }
       const url = iconUrl(iconNameFor(x.it.type));
       if (q._url !== url) {
         q._url = url;
@@ -1854,7 +1888,8 @@ export class CommandBar {
       const first = x.u.buildQueues.get(x.name)[0] === x.it;
       q.querySelector('.prog').style.height = 100 * (x.it.left / x.it.total) + '%';
       q.lastChild.textContent = first ? Math.round(100 * (1 - x.it.left / x.it.total)) + '%' : '';
-      q.title = (db.t(x.it.type.str('Text_ID')) || x.it.type.name) + ' — click to cancel';
+      q.setAttribute('aria-label', (db.t(x.it.type.str('Text_ID')) || x.it.type.name) + ' — click to cancel');
+      if (this.queueHovered === i && this.tipTarget?.id !== 'queue' + i + '|' + x.it.type.name) this.queueHover(i, true);
     });
   }
 
@@ -1905,11 +1940,13 @@ export class CommandBar {
           d.firstChild.style.backgroundImage = css(iconUrl(iconNameFor(r.type)));
           d.onmouseenter = () => this.tipOn('side' + i, r.type);
           d.onmouseleave = () => this.hideInfo();
-          if (r.it)
-            d.onclick = () => {
-              this.game.command({ c: 'cancel', b: r.u.id, q: r.name, i: r.u.buildQueues.get(r.name).indexOf(r.it), type: r.it.type.name });
-              this.ui.hudTimer = 0;
+          if (r.it) {
+            d.onclick = () => this.cancelQueued(r);
+            d.oncontextmenu = e => {
+              e.preventDefault();
+              this.cancelQueued(r);
             };
+          }
           return d;
         });
       const columns = [];
@@ -1936,20 +1973,34 @@ export class CommandBar {
     const mine = [],
       theirs = [],
       allies = [];
-    const add = (e, type) => {
-      if (e.dead || e.hyper || e.player.id < 0 || !isHero(type)) return;
+    const add = (e, type, owner = type) => {
+      if (e.dead || e.hyper || e.player.id < 0 || !(isHero(type) || owner.bool('Is_Named_Hero'))) return;
       if (e.player === p) mine.push({ e, type });
       else if (e.player.team === p.team) allies.push({ e, type });
       else theirs.push({ e, type });
     };
     for (const u of w.units) if (!u.squad) add(u, u.heroType || u.type);
-    for (const q of w.squads) if (q.fighters[0]) add(q, q.fighters[0].type);
+    // A named hero squadron (Rogue Squadron) is flagged on the squadron type, not on its fighters' CategoryMask.
+    for (const q of w.squads) if (q.fighters[0]) add(q, q.fighters[0].type, q.type);
     this.heroRow('evil', theirs.slice(0, 11));
     this.heroRow('good', mine.concat(allies).slice(0, 11));
   }
 
   heroClick(h, ev) {
     this.ui.select([h.e], ev.shiftKey);
+  }
+
+  heroHover(h, on) {
+    if (on) this.tipOn('hero' + h.e.id, h.type);
+    else this.hideInfo();
+  }
+
+  // A build queue item shows the encyclopedia popup of what it builds, as its unit button does.
+  queueHover(i, on) {
+    const x = on ? this.queueSlots[i]?._item : null;
+    this.queueHovered = on ? i : -1;
+    if (x) this.tipOn('queue' + i, x.it.type);
+    else this.hideInfo();
   }
 
   heroFocus(h) {
@@ -2013,10 +2064,17 @@ export class CommandBar {
         ring.style.backgroundImage = css(this.tex(id, 'Blank_Texture_Name'));
         over.style.backgroundImage = css(this.tex(id, 'Mouse_Over_Texture_Name'));
         hp.style.backgroundImage = css(this.tex('hero_hb_' + side + '00', 'Bar_Texture_Name'));
-        d.title = db.t(h.type.str('Text_ID')) || h.type.name.replace(/_/g, ' ');
+        // The encyclopedia popup the unit buttons show, not a native title, for every hero icon, own or not.
+        d.setAttribute('aria-label', db.t(h.type.str('Text_ID')) || h.type.name.replace(/_/g, ' '));
+        d.onmouseenter = () => this.heroHover(d._h, true);
+        d.onmouseleave = () => this.heroHover(d._h, false);
+        d.onmousedown = ev => ev.stopPropagation();
         if (good && h.e.player === this.player) {
           const c = this.comp(id);
-          d.onmouseenter = () => this.game.audio.play(c.val('Mouse_Over_SFX'));
+          d.onmouseenter = () => {
+            this.game.audio.play(c.val('Mouse_Over_SFX'));
+            this.heroHover(d._h, true);
+          };
           d.onclick = ev => {
             ev.stopPropagation();
             this.game.audio.play(c.val('Click_SFX'));
@@ -2052,7 +2110,12 @@ export class CommandBar {
     const cards = reserveCards(p);
     const grid = (this.reinGrid ||= reinforceGrid(this.rshell));
     const rows = Math.max(1, Math.min(grid.rows, Math.ceil(cards.length / grid.cols)));
-    const sig = (this.reinforceOpen ? 'o' : 'c') + rows + reserveSignature(cards);
+    // A slot greys out when one more of that unit would not fit under the cap.
+    const w = this.world,
+      room = w.popRoom ? w.popRoom(p) : p.popCap - p.pop,
+      unitPop = t => (w.popOf ? w.popOf(t) : spacePop(t)),
+      full = t => unitPop(t) > 0 && room < unitPop(t);
+    const sig = (this.reinforceOpen ? 'o' : 'c') + rows + reserveSignature(cards) + cards.map(card => full(card.type) ? 'x' : '-').join('');
     if (sig === this.reinSig) {
       if (this.reinPop) this.reinPop.textContent = `${p.pop}/${p.popCap}`;
       return;
@@ -2108,6 +2171,17 @@ export class CommandBar {
       s.innerHTML = `<span>${n > 1 ? n : ''}</span>`;
       const tip = 'rein' + i;
       s.onmouseenter = () => this.tipOn(tip, t, null, card.detail);
+      if (full(t)) {
+        // The slot's Disabled_Texture_Name is drawn over the icon, as the original does.
+        const slot = `r_${String(r).padStart(2, '0')}${String(c).padStart(2, '0')}`;
+        const dis = this.textureName(slot, 'Disabled_Texture_Name') || this.textureName('r_0000', 'Disabled_Texture_Name');
+        if (dis) s.style.setProperty('--dis', css(this.skinIcon(dis) || iconUrl(dis)));
+        s.classList.add('dis');
+        s.onmouseleave = () => this.hideInfo();
+        s.onmousedown = ev => ev.button === 0 && ev.preventDefault();
+        i++;
+        continue;
+      }
       wireReserveCard(s, card, this.ui, this, db.t(t.str('Text_ID')) || t.name, () => this.hideInfo());
       i++;
     }

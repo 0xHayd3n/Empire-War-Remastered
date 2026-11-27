@@ -194,8 +194,14 @@ async function appInfo() {
       return null;
     }
   };
-  const [app, setup, localMods, power] = await Promise.all([readJson('api/app'), readJson('api/setup'), readJson('api/localmods'), readJson('api/power')]);
-  return { app, setup, localMods, power };
+  const [app, setup, localMods, power, windowLog] = await Promise.all([
+    readJson('api/app'),
+    readJson('api/setup'),
+    readJson('api/localmods'),
+    readJson('api/power'),
+    readJson('api/window-log')
+  ]);
+  return { app, setup, localMods, power, windowLog: windowLog?.lines };
 }
 
 async function contentInfo() {
@@ -519,7 +525,11 @@ export async function createBugReport({ game = window.game, hideDuringCapture = 
 }
 
 async function saveInApp(name, blob) {
-  const response = await fetch('api/save-report?name=' + encodeURIComponent(name), { method: 'POST', body: blob });
+  const response = await fetch('api/save-report?name=' + encodeURIComponent(name), {
+    method: 'POST',
+    headers: { 'X-SWR': '1' },
+    body: blob
+  });
   if (!response.ok) throw new Error(await response.text());
   const { path } = await response.json();
   return path ? { saved: true, where: path } : { saved: false };

@@ -28,7 +28,7 @@ import { fetchText, fetchBinary } from '../vfs.js';
 import { parseXML } from '../xml.js';
 import { gfx, livePlanetAir, pixelRatio, shadowSize, shadowReach, gammaOn } from '../gfx.js';
 import { ModelDetail } from './model-detail.js';
-import { Instances } from './instances.js';
+import { Instances, mulInto } from './instances.js';
 import { fitShadowToView } from './shadowfit.js';
 import { ShotModels } from './shotmodels.js';
 import { LaserBatch } from './laser.js';
@@ -482,6 +482,10 @@ const _sun = new THREE.Vector3(),
   _sunDir = new THREE.Vector3();
 const NO_TINT = new THREE.Vector4(1, 1, 1, 0);
 const ABILITY_FX_GRACE_MS = 500;
+const shadowHalfExtent = cameraDistance => Math.max(500, Math.min(4500, cameraDistance * 0.85)) * shadowReach();
+// The shadow camera looks down on a square of twice the half extent around the camera target; its
+// corners reach about 1.42 half extents away, and a ship a little outside can still throw its shadow in.
+const SHADOW_CASTER_REACH = 1.5;
 const flashTint = (flash, now) => {
   if (now >= flash.until) {
     flash.tint.w = 0;
@@ -575,6 +579,12 @@ export class SelectionRings {
         : this.base;
     const b = this.batch(name, own, !!this.ground && size > RING_BIG);
     if (b) b.add(x, y, z, size, heading);
+  }
+  // A named blob material (a heal radius overlay) drawn as a disc of the given diameter, untinted.
+  addBlob(name, x, y, z, size) {
+    if (!name || !blobMaterials || !blobMaterials.has(name) || !(size > 0)) return;
+    const b = this.batch(name, false, !!this.ground && size > RING_BIG);
+    if (b) b.add(x, y, z, size, 0);
   }
   end() {
     for (const b of this.batches.values()) b.end();
@@ -912,6 +922,16 @@ export class Renderer {
     light.updateProjectionMatrix();
   }
 
+  // A ship off screen still has to be posed and drawn into the shadow map when its shadow can land
+  // inside the shadow camera's square; ships farther away cast nothing that can be seen.
+  // Squadron fighters cast no shadow: they are small, many and move every step.
+  castsShadowInView(unit) {
+    if (!unit.casters || !this.shadowsOn || unit.squad) return false;
+    const rig = this.rig,
+      reach = shadowHalfExtent(rig.dist) * SHADOW_CASTER_REACH + (unit.visualRadius || 0);
+    return (unit.x - rig.x) ** 2 + (unit.y - rig.y) ** 2 <= reach * reach;
+  }
+
   updateShadows(world, r = this.renderer) {
     if (!this.shadowsOn) {
       lighting.shadowOn.value = 0;
@@ -952,7 +972,7 @@ export class Renderer {
     lighting.shadowOn.value = 1;
     const rig = this.rig,
       cam = sh.camera,
-      half = Math.max(500, Math.min(4500, rig.dist * 0.85)) * shadowReach(),
+      half = shadowHalfExtent(rig.dist),
       far = half * 4;
     const dir = lighting.sunDir.value;
     cam.left = cam.bottom = -half;
@@ -971,7 +991,7 @@ export class Renderer {
     for (const b of batches.values()) b.n = 0;
     if (world)
       for (const u of world.units) {
-        if (u.dead || !u.casters || !u.obj.visible) continue;
+        if (u.dead || !u.casters || !u.obj.visible || !this.castsShadowInView(u)) continue;
         for (const m of this.destroyerLook?.casters.get(u) || u.casters) {
           let b = batches.get(m.geometry);
           if (!b) batches.set(m.geometry, (b = { n: 0, im: null }));
@@ -989,7 +1009,11 @@ export class Renderer {
             sh.scene.add(im);
             b.im = im;
           }
-          m.matrixWorld.toArray(b.im.instanceMatrix.array, b.n++ * 16);
+          // A static unit's parts are placed from its matrix for this frame: the parts' own world matrices are only
+          // brought up to date by the camera pass, which runs after this one, so shadows trailed a frame behind.
+          const e = m.userData.instEntry;
+          if (e && u.instStatic && u.obj.parent === this.scene) mulInto(b.im.instanceMatrix.array, b.n++ * 16, u.obj.matrix.elements, e.local.elements);
+          else m.matrixWorld.toArray(b.im.instanceMatrix.array, b.n++ * 16);
         }
       }
     for (const [g, b] of batches) {
@@ -1030,6 +1054,9 @@ export class Renderer {
           if (!f.dead) r.add(f.x, f.y, f.z + f.ringZ, f.ringSize, f.heading, own, f.type);
         }
       else r.add(s.x, s.y, s.z + s.ringZ, s.ringSize, s.heading, own, s.type);
+      // A selected healer shows its Heal_Range_Blob_Material over the area it mends.
+      const h = !s.isSquad && own ? s.heal : null;
+      if (h && h.blob && h.range > 0) r.addBlob(h.blob, s.x, s.y, s.z + (s.ringZ || 0), h.range * 2);
     }
     r.end();
   }
@@ -1205,7 +1232,9 @@ export class Renderer {
           .catch(() => {});
       });
     }
-    f.mesh.visible = !this.cameraOverride;
+    // The grid is a HUD visual: cinematic camera and H (hide HUD) hide it while fog keeps updating.
+    const cl = document.body.classList;
+    f.mesh.visible = !this.cameraOverride && !cl.contains('cinematic') && !cl.contains('hud-hidden');
     const placing = !!this.fogPlacing;
     f.material.uniforms.placing.value = placing ? 1 : 0;
     if (placing !== f.placing) (f.placing = placing), (f.timer = 0);
@@ -1968,6 +1997,19 @@ export class Renderer {
         if (_frustum.intersectsSphere(_sphere)) hulls.push(u.x, u.y, u.z || 0, u.visualRadius);
       }
       if (gfx.hullBlastLight === true) this.blasts = null;
+      if (hulls.length) {
+        // Hulls are bucketed by x/y in cells wide enough that a bolt only needs its own and the neighbouring cells.
+        let big = 0;
+        for (let i = 3; i < hulls.length; i += 4) if (hulls[i] > big) big = hulls[i];
+        const G = (hullGrid.size = big + Math.max(SPACE_BOLT.missile, SPACE_BOLT.radius) * zk);
+        for (const l of hullGrid.cells.values()) l.length = 0;
+        for (let i = 0; i < hulls.length; i += 4) {
+          const k = Math.floor(hulls[i] / G) * 65536 + Math.floor(hulls[i + 1] / G);
+          let l = hullGrid.cells.get(k);
+          if (!l) hullGrid.cells.set(k, (l = []));
+          l.push(i);
+        }
+      }
       if (this.blasts) {
         const now = performance.now();
         this.blasts = this.blasts.filter(b => now < b.until);
@@ -1988,20 +2030,35 @@ export class Renderer {
           const reach = (p.missile ? SPACE_BOLT.missile : SPACE_BOLT.radius) * zk;
           let gap = Infinity,
             hi = -1;
-          for (let i = 0; i < hulls.length; i += 4) {
-            const dx = p.x - hulls[i],
-              dy = p.y - hulls[i + 1],
-              dz = p.z - hulls[i + 2],
-              out = hulls[i + 3] + reach,
-              d2 = dx * dx + dy * dy + dz * dz;
-            if (d2 >= out * out) continue;
-            const g = Math.sqrt(d2) - hulls[i + 3];
-            if (g < gap) {
-              gap = g;
-              hi = i;
+          const G = hullGrid.size,
+            cx = Math.floor(p.x / G),
+            cy = Math.floor(p.y / G);
+          for (let ix = cx - 1; ix <= cx + 1; ix++)
+            for (let iy = cy - 1; iy <= cy + 1; iy++) {
+              const l = hullGrid.cells.get(ix * 65536 + iy);
+              if (l)
+                for (const i of l) {
+                  const dx = p.x - hulls[i],
+                    dy = p.y - hulls[i + 1],
+                    dz = p.z - hulls[i + 2],
+                    out = hulls[i + 3] + reach,
+                    d2 = dx * dx + dy * dy + dz * dz;
+                  if (d2 >= out * out) continue;
+                  const g = Math.sqrt(d2) - hulls[i + 3];
+                  if (g < gap || (g === gap && i < hi)) {
+                    gap = g;
+                    hi = i;
+                  }
+                }
             }
+          if (hi >= 0) {
+            const c = (boltPool[cand.length] ||= { p: null, hi: 0, reach: 0, prio: 0 });
+            c.p = p;
+            c.hi = hi;
+            c.reach = reach;
+            c.prio = (Math.max(0, gap) + cpos.distanceTo(_boltAt) * SPACE_BOLT.camK) ** 2;
+            cand.push(c);
           }
-          if (hi >= 0) cand.push({ p, hi, reach, prio: (Math.max(0, gap) + cpos.distanceTo(_boltAt) * SPACE_BOLT.camK) ** 2 });
         }
         if (!(P._cr ??= P.num('Projectile_Custom_Render', 0)) && !(P._sm ??= P.str('Space_Model_Name'))) continue;
         const inv = 1 / p.speed;
@@ -2018,10 +2075,12 @@ export class Renderer {
       }
       if (lit && cand.length) {
         cand.sort((a, b) => a.prio - b.prio);
-        const seen = new Set();
+        const seen = boltSeen,
+          used = boltUsed;
+        seen.clear();
+        used.clear();
         for (const c of cand) seen.add(c.hi);
-        const cap = Math.max(SPACE_BOLT.perHull, Math.ceil(lit.slots / seen.size)),
-          used = new Map();
+        const cap = Math.max(SPACE_BOLT.perHull, Math.ceil(lit.slots / seen.size));
         let n = 0;
         for (const c of cand) {
           const k = used.get(c.hi) || 0;
@@ -2048,8 +2107,14 @@ export class Renderer {
       _frustum.setFromProjectionMatrix(_pm.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
       for (const u of world.units) {
         if (u.dead) continue;
-        const seen = (!viewer || (u.seenBy & viewer) !== 0) && !u.scriptHidden;
-        if (u.obj.visible !== seen && !(u.isPad && u.padChild)) u.obj.visible = seen;
+        let seen = (!viewer || (u.seenBy & viewer) !== 0) && !u.scriptHidden;
+        // A pad built on hides under its building, but only where the viewer sees that building; elsewhere the
+        // asteroid stays in view as the viewer last saw it.
+        if (seen && u.isPad && u.padChild) {
+          const c = u.padChild;
+          seen = !(u._hidesBuilt ??= u.type.bool('Hides_When_Built_On', true)) || (!!viewer && c.player.team !== world.viewer.team && !(c.seenBy & viewer));
+        }
+        if (u.obj.visible !== seen) u.obj.visible = seen;
         if (!seen) continue;
         if (u.inNebula || u.haze) this.updateHaze(u, dt);
         if (u.modeProxies)
@@ -2059,13 +2124,14 @@ export class Renderer {
               u.pendingProxies.push(px);
             }
         if (u.pendingProxies.length) u.pendingProxies = u.pendingProxies.filter(px => !this.attachProxy(u, px));
-        _sphere.center.set(u.x, u.y, u.z || 0);
-        _sphere.radius = Math.max((u.visualRadius || 50) * 2.5, u.fxReach);
-        const inView = !!u.casters || _frustum.intersectsSphere(_sphere);
-        if (u.buildAnim && u.construction) {
-          if (inView) u.buildAnim.seek(1 - u.construction.left / u.construction.total);
-        } else if (u.anim) {
-          if (!inView) u.animOwed = (u.animOwed || 0) + dt;
+        // Only an animated unit asks whether it is in view; most units in a big battle are fighters that never do.
+        if ((u.buildAnim && u.construction) || u.anim) {
+          _sphere.center.set(u.x, u.y, u.z || 0);
+          _sphere.radius = Math.max((u.visualRadius || 50) * 2.5, u.fxReach);
+          const inView = _frustum.intersectsSphere(_sphere) || this.castsShadowInView(u);
+          if (u.buildAnim && u.construction) {
+            if (inView) u.buildAnim.seek(1 - u.construction.left / u.construction.total);
+          } else if (!inView) u.animOwed = (u.animOwed || 0) + dt;
           else {
             if (!u.anim.step(dt + (u.animOwed || 0))) u.anim = null;
             u.animOwed = 0;
@@ -2073,8 +2139,6 @@ export class Renderer {
         }
         if (u.turrets.length) this.aimTurrets(u, dt);
         if (u.model && u.model.billboards.length) updateBillboards(u.model, cam);
-        const c = Math.cos(u.heading),
-          s = Math.sin(u.heading);
         if (u.shieldMesh) {
           const on = !!u.abilities?.some(s => s.active && s.def.kind === 'DEFEND');
           if (u.shieldMesh.visible !== on) u.shieldMesh.visible = on;
@@ -2084,7 +2148,9 @@ export class Renderer {
           const on = !u.hyper && (u.retreatFlight || u.speed > u.maxSpeed * 0.08) && u.engineAlive();
           for (const m of u.engineMeshes) if (m.visible !== on) m.visible = on;
         }
-        if (u.isMobile && !u.hyper) {
+        if (u.isMobile && !u.hyper && u.engineGlows.length) {
+          const c = Math.cos(u.heading),
+            s = Math.sin(u.heading);
           const thrust = u.retreatFlight ? 1 : 0.55 + 0.45 * Math.min(1, u.speed / (u.maxSpeed || 1));
           const ro = u.roll || 0,
             cro = Math.cos(ro),
@@ -2098,6 +2164,7 @@ export class Renderer {
             sp.add(u.x + c * l.x - s * ly, u.y + s * l.x + c * ly, u.z + lz, size, 0.45, 0.65, 1, 0.9);
           }
         }
+        if (!u.smokingPoints) continue;
         for (const hp of u.hardpoints) {
           if (hp.alive || !hp.smoke) continue;
           if (Math.random() < dt * 5) {
@@ -2265,7 +2332,7 @@ export class Renderer {
       this.instances.camera = cam;
       this.instances.detail = detail;
       this.instances.displayHeight = displayHeight;
-      this.instances.collect(world.units, cam, surfaces);
+      this.instances.collect(world.units, cam, surfaces, unit => this.castsShadowInView(unit));
       this.instances.hidden = this.instances.put.length;
       this.scene.matrixWorldAutoUpdate = false;
     }
@@ -2425,7 +2492,11 @@ const _v = new THREE.Vector3(),
   _w = { x: 0, y: 0, z: 0 },
   _s = { x: 0, y: 0, behind: false };
 const SPACE_BOLT = { radius: 220, missile: 150, beam: 260, power: 1.4, blastMin: 200, blastScale: 4, blastTime: 0.45, blastPower: 2.4, hull: 60, zoomAt: 1500, zoomMax: 2.5, camK: 0.02, perHull: 2, beamLag: 120 },
-  _boltAt = new THREE.Vector3();
+  _boltAt = new THREE.Vector3(),
+  hullGrid = { size: 1, cells: new Map() },
+  boltPool = [],
+  boltSeen = new Set(),
+  boltUsed = new Map();
 const _frustum = new THREE.Frustum(),
   _pm = new THREE.Matrix4(),
   _sphere = new THREE.Sphere(),

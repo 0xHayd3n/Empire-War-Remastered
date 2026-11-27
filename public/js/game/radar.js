@@ -316,7 +316,7 @@ export class Radar {
     this.events.push({ def, x, y, age: 0, obj: def.persistent ? obj : null });
   }
 
-  click(x, y, attack) {
+  click(x, y, attack, twice = false) {
     const C = db.constants,
       name = (key, def) => (C ? C.str(key).trim() : '') || def,
       click = name('GUI_Movement_Click_Radar_Event_Name', 'Default_Click'),
@@ -324,7 +324,7 @@ export class Radar {
       last = this.lastClick;
     this.lastClick = { t: now, x, y };
     if (attack) this.event(name('GUI_Attack_Movement_Click_Radar_Event_Name', 'Default_Attack_Click'), x, y);
-    else if (last && now - last.t < 350 && Math.hypot(x - last.x, y - last.y) < 250) {
+    else if (twice || (last && now - last.t < 350 && Math.hypot(x - last.x, y - last.y) < 250)) {
       this.removeLatest(click);
       this.event(name('GUI_Movement_Double_Click_Radar_Event_Name', 'Default_Double_Click'), x, y);
       this.lastClick = null;
@@ -437,40 +437,21 @@ export class Radar {
     return on;
   }
 
-  draw(cv, ui, dt) {
-    const w = ui.world,
-      player = ui.player,
-      r = ui.r,
-      S = this.settings;
-    const box = cv.getBoundingClientRect(),
-      dpr = window.devicePixelRatio || 1;
-    const cw = Math.round(box.width * dpr),
-      ch = Math.round(box.height * dpr);
-    if (cw > 0 && ch > 0 && (cv.width !== cw || cv.height !== ch)) {
-      cv.width = cw;
-      cv.height = ch;
+  iconLayer(W, H) {
+    let layer = this.iconCanvas;
+    if (!layer) {
+      layer = this.iconCanvas = typeof OffscreenCanvas === 'function' ? new OffscreenCanvas(W, H) : document.createElement('canvas');
+      this.iconKey = {};
     }
-    const g = cv.getContext('2d'),
-      W = cv.width,
-      H = cv.height;
-    const sx = W / (w.max.x - w.min.x),
-      sy = H / (w.max.y - w.min.y);
-    const X = x => (x - w.min.x) * sx,
-      Y = y => (w.max.y - y) * sy;
-    g.setTransform(1, 0, 0, 1, 0, 0);
-    g.globalAlpha = 1;
-    g.globalCompositeOperation = 'source-over';
-    g.clearRect(0, 0, W, H);
-    if (!S) return;
-    g.fillStyle = css(S.base);
-    g.fillRect(0, 0, W, H);
-    const fog = r.fog;
-    if (w.fog && fog && fog.mesh.visible) g.drawImage(this.fogCanvas(fog, S.fow), 0, 0, W, H);
-    if (w.radarFields?.length) g.drawImage(this.fieldLayer(w, W, H, X, Y, sx, sy, S), 0, 0, W, H);
-    if (prefs.radarGrid && this.backdrop) g.drawImage(this.grid(W, H), 0, 0);
-    const bit = player.bit,
-      radar = this.seeAll || this.radarOn(w, player),
-      sel = this.selColor && this.tone(this.selColor);
+    if (layer.width !== W || layer.height !== H) {
+      layer.width = W;
+      layer.height = H;
+      this.iconKey = {};
+    }
+    return layer;
+  }
+
+  drawIcons(g, w, player, X, Y, W, H, dpr, radar, sel, bit) {
     let fill = null;
     for (let pass = 0; pass < 2; pass++)
       for (const u of w.units) {
@@ -479,10 +460,24 @@ export class Radar {
         if (!t.show) continue;
         const own = u.player.team === player.team,
           isEnemy = !own && u.player.id >= 0;
-        if (isEnemy && (!t.enemy || u.cloaked || (!radar && !u.capture))) continue;
+        // without a radar source an enemy still shows while the side can see it (as the original in campaign battles,
+        // where neither side has one): only enemies out of sight need the radar
+        if (isEnemy && (!t.enemy || u.cloaked || (!radar && !u.capture && w.fog && !(u.seenBy & bit)))) continue;
         if (!own && w.fog && !this.seeAll && !(u.seenBy & bit) && !t.fogged) continue;
-        if (u.isPad && u.padChild) continue;
-        const owner = u.isPad || u.capture ? u.padOwner || (u.player.id >= 0 ? u.player : null) : u.player.id >= 0 ? u.player : null;
+        // A built-on pad gives way to what stands on it, unless the viewer cannot see that: then the pad stays, in the
+        // colour the viewer last saw.
+        if (u.isPad && u.padChild) {
+          const c = u.padChild;
+          if (c.player.team === player.team || !w.fog || this.seeAll || c.seenBy & bit) continue;
+        }
+        const owner =
+          u.isPad || u.capture
+            ? w.shownOwner
+              ? w.shownOwner(u)
+              : u.padOwner || (u.player.id >= 0 ? u.player : null)
+            : u.player.id >= 0
+              ? u.player
+              : null;
         const selected = sel && (u.selected || (u.squad && u.squad.selected));
         if ((pass === 0) !== !t.icon) continue;
         const c = selected ? sel : owner ? this.colorOf(owner) : this.tone(NEUTRAL);
@@ -538,7 +533,7 @@ export class Radar {
         if (!n) continue;
         const own = q.player.team === player.team,
           isEnemy = !own && q.player.id >= 0;
-        if (isEnemy && (!t.enemy || hidden || !radar)) continue;
+        if (isEnemy && (!t.enemy || hidden || (!radar && w.fog && !seen))) continue;
         if (!own && w.fog && !this.seeAll && !seen && !t.fogged) continue;
         const c = sel && q.selected ? sel : q.player.id >= 0 ? this.colorOf(q.player) : this.tone(NEUTRAL);
         g.globalAlpha = 1;
@@ -566,6 +561,58 @@ export class Radar {
           g.setTransform(1, 0, 0, 1, 0, 0);
         } else g.drawImage(img, x - hw, y - hh, hw * 2, hh * 2);
       }
+    g.globalAlpha = 1;
+  }
+
+  draw(cv, ui, dt) {
+    const w = ui.world,
+      player = ui.player,
+      r = ui.r,
+      S = this.settings;
+    const box = cv.getBoundingClientRect(),
+      dpr = window.devicePixelRatio || 1;
+    // Size the backing store from the content box (the rect includes the border), so drawing never grows the canvas.
+    const cw = Math.round(((box.width * cv.clientWidth) / cv.offsetWidth) * dpr),
+      ch = Math.round(((box.height * cv.clientHeight) / cv.offsetHeight) * dpr);
+    if (cw > 0 && ch > 0 && (cv.width !== cw || cv.height !== ch)) {
+      cv.width = cw;
+      cv.height = ch;
+    }
+    const g = cv.getContext('2d'),
+      W = cv.width,
+      H = cv.height;
+    const sx = W / (w.max.x - w.min.x),
+      sy = H / (w.max.y - w.min.y);
+    const X = x => (x - w.min.x) * sx,
+      Y = y => (w.max.y - y) * sy;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    g.clearRect(0, 0, W, H);
+    if (!S) return;
+    g.fillStyle = css(S.base);
+    g.fillRect(0, 0, W, H);
+    const fog = r.fog;
+    if (w.fog && fog && fog.mesh.visible) g.drawImage(this.fogCanvas(fog, S.fow), 0, 0, W, H);
+    if (w.radarFields?.length) g.drawImage(this.fieldLayer(w, W, H, X, Y, sx, sy, S), 0, 0, W, H);
+    if (prefs.radarGrid && this.backdrop) g.drawImage(this.grid(W, H), 0, 0);
+    const bit = player.bit,
+      radar = this.seeAll || this.radarOn(w, player),
+      sel = this.selColor && this.tone(this.selColor);
+    // Unit and squadron icons only move when a battle step lands, so they are drawn into a layer once per
+    // step (or when the view, the radar or the selection changes) and copied onto every frame in between.
+    const layer = this.iconLayer(W, H),
+      key = this.iconKey;
+    const selection = sel ? ui.selection : null;
+    if (key.shapes !== prefs.radarShapes || key.scale !== prefs.radarScale || key.time !== w.time || key.w !== W || key.h !== H || key.player !== player || key.radar !== radar || key.selection !== selection || key.selected !== (selection ? selection.length : 0) || key.fog !== (w.fog && !this.seeAll)) {
+      Object.assign(key, { shapes: prefs.radarShapes, scale: prefs.radarScale, time: w.time, w: W, h: H, player, radar, selection, selected: selection ? selection.length : 0, fog: w.fog && !this.seeAll });
+      const lg = layer.getContext('2d');
+      lg.setTransform(1, 0, 0, 1, 0, 0);
+      lg.globalAlpha = 1;
+      lg.clearRect(0, 0, W, H);
+      this.drawIcons(lg, w, player, X, Y, W, H, dpr, radar, sel, bit);
+    }
+    g.drawImage(layer, 0, 0);
     g.globalAlpha = 1;
     if (w.beacons)
       this.drawBeacons(

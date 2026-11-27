@@ -11,7 +11,8 @@ import { intelligence, VIS } from './galacticfog.js';
 import { fleetsVisibleAt } from './orbitpanes.js';
 
 const key = x => String(x || '').toUpperCase();
-const SHELLS = ['PENDING_BATTLE_SHELL', 'STORY_PENDING_BATTLE_SHELL'];
+export const PENDING_SHELLS = ['PENDING_BATTLE_SHELL', 'STORY_PENDING_BATTLE_SHELL'];
+const SHELLS = PENDING_SHELLS;
 const color = s => {
   const v = String(s || '')
     .split(/[\s,]+/)
@@ -79,6 +80,11 @@ export class PendingBattle {
       !!this.game.pendingLinkedTactical
     );
   }
+  // the shared "auto-resolve all ground battles" option: land battles settle without the prompt unless a script or
+  // the campaign rules out auto-resolve there
+  groundAuto(request) {
+    return request.mode === 'land' && !!this.game.galaxy?.groundAutoResolve && !this.single(request);
+  }
   tutorial() {
     return !!this.game.galaxy?.players?.find(p => key(p.faction) === key(this.game.me))?.tutorial;
   }
@@ -92,7 +98,7 @@ export class PendingBattle {
       return true;
     }
     if (!db.constants.bool('Strategic_Queue_Tactical_Battles', true)) return this.fight(request);
-    if (game.autoResolveOption || game.galaxy.campaignAutoResolve === 0) return this.resolve(request);
+    if (game.autoResolveOption || game.galaxy.campaignAutoResolve === 0 || this.groundAuto(request)) return this.resolve(request);
     if (!this.restricted(request.p) && game.battles.overrun(request)) return this.resolve(request, false, true);
     return this.show(request);
   }
@@ -101,17 +107,19 @@ export class PendingBattle {
     const game = this.game,
       C = db.constants,
       humans = [request.attacker, request.defender].filter(f => game.isHuman(f));
-    if (!game.playable(humans) || (game.setup.options?.autoResolve ?? 2) === 0) return this.resolve(request);
+    if (!game.playable(humans) || (game.setup.options?.autoResolve ?? 2) === 0 || this.groundAuto(request)) return this.resolve(request);
     request.id = this.netCount = (this.netCount || 0) + 1;
     const sides = [request.attacker, request.defender].map(key);
     request.voters = (game.setup.players || [])
       .map((p, i) => (p.human && !p.left && sides.includes(key(p.faction)) ? i : -1))
       .filter(i => i >= 0);
     request.humans = humans;
+    // the campaign or a story script can rule out auto-resolve here: the vote only offers the tactical battle
+    request.locked = !this.allowed(request);
     request.answers = new Map();
     request.steps = 0;
     request.timeout = Math.max(1, C.num('AutoResolveVoteDefaultTimeOut', 10)) * 30;
-    request.fallback = C.bool('AutoResolveVoteDefaultToTactical') ? 'fight' : 'resolve';
+    request.fallback = request.locked || C.bool('AutoResolveVoteDefaultToTactical') ? 'fight' : 'resolve';
     this.request = request;
     if (request.voters.includes(game.localPid)) this.openVote(request).catch(error => console.error(error));
     return true;
@@ -140,7 +148,7 @@ export class PendingBattle {
 
   cast(choice) {
     const r = this.request;
-    if (!r?.voters || r.sent) return;
+    if (!r?.voters || r.sent || (r.locked && choice !== 'fight')) return;
     r.sent = choice;
     this.game.order({ c: 'battle', id: r.id, choice });
     const ui = this.game.scriptUI;
@@ -152,6 +160,7 @@ export class PendingBattle {
     const r = this.request,
       who = this.game.actingPid;
     if (!r?.voters || r.id !== id || !r.voters.includes(who) || r.answers.has(who) || !['fight', 'resolve'].includes(choice)) return;
+    if (r.locked && choice !== 'fight') return;
     r.answers.set(who, choice);
     if (this.vote) this.paintVote();
     this.tally();
@@ -160,7 +169,7 @@ export class PendingBattle {
   tally() {
     const r = this.request;
     if (!r?.voters || !r.voters.every(v => r.answers.has(v))) return;
-    const fight = [...r.answers.values()].includes('fight');
+    const fight = r.locked || !this.allowed(r) || [...r.answers.values()].includes('fight');
     this.closeVote();
     this.request = null;
     if (fight) this.fight(r);
@@ -203,8 +212,9 @@ export class PendingBattle {
     dlg.setText('IDC_CAPTION', db.t('TEXT_ASK_AUTO_RESOLVE'));
     dlg.setText('IDC_DIALOG_BOX_BUTTON_LEFT', db.t('TEXT_ASK_BUTTON_TACTICAL'));
     dlg.setText('IDC_DIALOG_BOX_BUTTON_RIGHT', db.t('TEXT_ASK_BUTTON_AUTO_RESOLVE'));
+    if (request.locked) dlg.enable('IDC_DIALOG_BOX_BUTTON_RIGHT', false);
     const cast = choice => {
-      if (request.sent || this.request !== request) return;
+      if (request.sent || this.request !== request || (request.locked && choice !== 'fight')) return;
       request.sent = choice;
       game.order({ c: 'battle', id: request.id, choice });
       dlg.enable('IDC_DIALOG_BOX_BUTTON_LEFT', false);
@@ -547,7 +557,7 @@ export class PendingBattle {
     const token = (text, ...values) => values.reduce((s, v, i) => s.replace('##' + i, v), text);
     for (const type of [...theirs, ...mine])
       if (type.bool('Is_Named_Hero') || [...type.categories()].some(c => c.includes('HERO')))
-        log?.message(token(db.t('TEXT_AR_HERO_LOSS'), nameOf(type), planetName), { color: red });
+        log?.message(token(db.t('TEXT_AR_HERO_LOSS'), nameOf(type), planetName), { color: red, planet: p });
     const a = mine.length,
       b = theirs.length,
       kind = space ? 'SPACE' : 'LAND';
@@ -563,7 +573,7 @@ export class PendingBattle {
           ? 'LOSS_REGULAR'
           : 'LOSS_MINOR';
     const line = token(db.t(`TEXT_AR_${kind}_${verdict}`), faction, planetName, String(a));
-    log?.message(line, { color: red });
+    log?.message(line, { color: red, planet: p });
     if (silent || !fighting) return;
     if (game.net) return this.netResult(line);
     const dlg = await openSummary();

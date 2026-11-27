@@ -13,6 +13,7 @@ const wrap = a => {
   return a > Math.PI ? a - TAU : a < -Math.PI ? a + TAU : a;
 };
 
+const _fieldExtent = { ax: 0, sd: 0 };
 const reachToward = (e, dx, dy, ux, uy) => {
   const c = ux * dx + uy * dy,
     c2 = c * c;
@@ -373,7 +374,9 @@ export class PathCore {
     return B > 0 ? q.st || (q.st = { ax: q.ax, sd: q.sd + B, r: Math.max(q.ax, q.sd + B) }) : q;
   }
 
-  sweep(u, q, ax, ay, bx, by, t0, t1) {
+  // Which of STILL, FIELD and MOVING the step from a to b runs into. With stillOnly the moving ships are not
+  // checked: callers that only ask about stations, structures and fields skip a test against every track.
+  sweep(u, q, ax, ay, bx, by, t0, t1, stillOnly = false) {
     let bits = 0;
     let qdx = bx - ax,
       qdy = by - ay;
@@ -415,7 +418,7 @@ export class PathCore {
           bits |= e.field ? FIELD : STILL;
         if (bits & STILL) break;
       }
-      return bits | this.sweepIndexed(q, qdx, qdy, ax, ay, bx, by, t0, t1, minx, miny, maxx, maxy);
+      return stillOnly ? bits : bits | this.sweepIndexed(q, qdx, qdy, ax, ay, bx, by, t0, t1, minx, miny, maxx, maxy);
     }
     const seen = (this.seenRun = (this.seenRun || 0) + 1);
     for (let ix = Math.floor(minx / SCELL), x1 = Math.floor(maxx / SCELL); ix <= x1 && !(bits & STILL); ix++)
@@ -433,15 +436,31 @@ export class PathCore {
         }
         if (bits & STILL) break;
       }
-    const avoided = this.avoidedFor === u ? this.avoidedFields : null;
+    const avoided = this.avoidedFor === u ? this.avoidedFields : null,
+      fe = _fieldExtent,
+      qReach = Math.max(q.ax, q.sd),
+      vx = bx - ax,
+      vy = by - ay,
+      vv = vx * vx + vy * vy;
     for (const f of avoided || this.world.fields) {
       if (!avoided && !this.world.hazardous(f, u)) continue;
-      const fe = { ax: f.r, sd: f.r };
+      // touch cannot reach a field whose centre stays farther from the step than its radius plus the ship's
+      // widest reach, so those are skipped without changing the answer.
+      const px = f.x - ax,
+        py = f.y - ay;
+      let along = vv > 1e-9 ? (px * vx + py * vy) / vv : 0;
+      along = along < 0 ? 0 : along > 1 ? 1 : along;
+      const cx = px - vx * along,
+        cy = py - vy * along,
+        clear = f.r + qReach + 1e-6;
+      if (cx * cx + cy * cy > clear * clear) continue;
+      fe.ax = fe.sd = f.r;
       if (touch(q, qdx, qdy, ax, ay, bx, by, fe, 1, 0, f.x, f.y, f.x, f.y)) {
         bits |= FIELD;
         break;
       }
     }
+    if (stillOnly) return bits;
     const now = this.world.time,
       p0 = this._p0 || (this._p0 = {}),
       p1 = this._p1 || (this._p1 = {});
@@ -537,11 +556,28 @@ export class PathCore {
     const reach = this.ext(u).r,
       touches = (x, y, field) => (x - field.x) ** 2 + (y - field.y) ** 2 < (field.r + reach) ** 2,
       kindOf = field => (field.asteroid ? 1 : 0) | (field.ion ? 2 : 0) | (field.nebula ? 4 : 0),
-      hazards = this.world.fields.filter(field => this.world.hazardous(field, u));
+      hazards = this.hazardsFor(u);
     let touchedKinds = 0;
     for (const field of hazards) if (touches(u.x, u.y, field) || touches(gx, gy, field)) touchedKinds |= kindOf(field);
     this.avoidedFor = u;
     return (this.avoidedFields = touchedKinds ? hazards.filter(field => !(kindOf(field) & touchedKinds)) : hazards);
+  }
+
+  // The fields that are hazards to the unit, in field order. Without a fly-through order they depend only on
+  // whether it takes asteroid damage and has shields, so those lists are kept until a field is added.
+  hazardsFor(u) {
+    const w = this.world,
+      lead = u.isSquad ? u.fighters[0] : u,
+      o = (u.squad || u).order;
+    if (!lead || (o && o.through)) return w.fields.filter(field => w.hazardous(field, u));
+    const key = (lead.asteroidDamage ? 1 : 0) | (lead.maxShield > 0 ? 2 : 0),
+      kept = (this.hazardLists ||= { fields: null, count: -1, lists: [] });
+    if (kept.fields !== w.fields || kept.count !== w.fields.length) {
+      kept.fields = w.fields;
+      kept.count = w.fields.length;
+      kept.lists = [];
+    }
+    return (kept.lists[key] ||= w.fields.filter(field => (field.asteroid && key & 1) || (field.ion && key & 2)));
   }
 
   slot(u, x, y) {
@@ -549,7 +585,7 @@ export class PathCore {
     const w = this.world,
       avoid = this.fieldsAvoidedOn(u, x, y);
     const free = (px, py) =>
-      !(this.sweep(u, q, px, py, px, py, 0, 0) & STILL) && !avoid.some(f => (f.x - px) ** 2 + (f.y - py) ** 2 < (f.r + q.r) ** 2);
+      !(this.sweep(u, q, px, py, px, py, 0, 0, true) & STILL) && !avoid.some(f => (f.x - px) ** 2 + (f.y - py) ** 2 < (f.r + q.r) ** 2);
     if (free(x, y)) return null;
     const
       back = Math.atan2(u.y - y, u.x - x);
@@ -607,15 +643,19 @@ export class PathCore {
       holds = (x, y, ox, oy, reach) => (x - ox) ** 2 + (y - oy) ** 2 < reach * reach;
     for (const e of this.still) {
       if (e.o === u || !this.sees(u, e.o)) continue;
-      const reach = (e.ext?.r || 0) + q.r;
-      if (holds(u.x, u.y, e.x, e.y, reach) || holds(gx, gy, e.x, e.y, reach)) continue;
-      obstacles.push({ x: e.x, y: e.y, hard: (e.ext?.r || 0) + shipStill.r, padded: 0 });
+      // Left out by the radius it is marked with, so a ship (or goal) inside that radius never finds its own
+      // cell walled in.
+      const hard = (e.ext?.r || 0) + shipStill.r;
+      if (holds(u.x, u.y, e.x, e.y, hard) || holds(gx, gy, e.x, e.y, hard)) continue;
+      obstacles.push({ x: e.x, y: e.y, hard, padded: 0 });
     }
     const fieldKind = field => (field.asteroid ? 1 : 0) | (field.ion ? 2 : 0),
-      hazards = this.world.fields.filter(field => this.world.hazardous(field, u));
+      hazards = this.hazardsFor(u);
     let droppedKinds = 0;
+    // A field kind is left out when the ship or the goal touches one of it (field radius plus the ship reach),
+    // as fieldsAvoidedOn leaves it out of the engine tries.
     for (const field of hazards)
-      if (holds(u.x, u.y, field.x, field.y, field.r) || holds(gx, gy, field.x, field.y, field.r)) droppedKinds |= fieldKind(field);
+      if (holds(u.x, u.y, field.x, field.y, field.r + q.r) || holds(gx, gy, field.x, field.y, field.r + q.r)) droppedKinds |= fieldKind(field);
     for (const field of hazards)
       if (!(fieldKind(field) & droppedKinds)) obstacles.push({ x: field.x, y: field.y, hard: field.r + q.r, padded: 0 });
     return obstacles;
@@ -824,7 +864,11 @@ export class PathCore {
           this.expBudget = budget - states;
           leg = this.findOnce(u, to.x, to.y, 0, legFace);
           states += this.statesUsed || 0;
-          if (leg && !leg.length) {
+          // A leg the engine search cannot fly (a slow turner nosed up to a field, a ship crossing the arc) that
+          // is clear of every field and still object in a straight line is flown straight, as the other clear
+          // legs are, rather than throwing the whole detour away and leaving the ship standing.
+          if (leg && !leg.length && this.detourClear(obstacles, x, y, to.x, to.y, false)) leg = null;
+          else if (leg && !leg.length) {
             complete = false;
             break;
           }
@@ -1151,7 +1195,7 @@ export class PathCore {
         const h = u.heading + (side * k * 10 * Math.PI) / 180,
           bx = u.x + Math.cos(h) * run,
           by = u.y + Math.sin(h) * run;
-        if (!(this.sweep(u, q, u.x, u.y, bx, by, 0, run / v) & (STILL | FIELD))) {
+        if (!(this.sweep(u, q, u.x, u.y, bx, by, 0, run / v, true) & (STILL | FIELD))) {
           turns.push(h);
           break;
         }
@@ -1396,7 +1440,7 @@ export class PathCore {
         const h = u.heading + (side * k * 10 * Math.PI) / 180,
           bx = ux + Math.cos(h) * run,
           by = uy + Math.sin(h) * run;
-        if (!(this.sweep(u, q, ux, uy, bx, by, 0, run / v) & (STILL | FIELD))) {
+        if (!(this.sweep(u, q, ux, uy, bx, by, 0, run / v, true) & (STILL | FIELD))) {
           turns.push(h);
           break;
         }

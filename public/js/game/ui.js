@@ -1,3 +1,4 @@
+import { FAST_FORWARD } from './galacticspeed.js';
 import * as THREE from 'three';
 import { reserveCards, reserveSignature, wireReserveCard } from './reservecards.js';
 import { db, selectionBoxColors } from '../gamedata.js';
@@ -6,10 +7,10 @@ import { BeaconView } from './beacons.js';
 import { iconUrl, iconCanvasRect, iconAtlas, iconOpaque } from '../icons.js';
 import { nativeAbilityIcon } from './nativeabilityicons.js';
 import { loadTextureCanvas } from '../dds.js';
-import { buildCost, buildTime, isUpgradeType, isSquadronType, isCompanyType, companySpaceUnits, spacePop, hiddenInJump, directState } from './sim.js';
+import { buildCost, buildTime, isUpgradeType, isSquadronType, isCompanyType, companySpaceUnits, spacePop, reinforcePop, hiddenInJump, directState } from './sim.js';
 import { ids } from './commands.js';
 import { CommandBar } from './hud.js';
-import { pressed, held, groupKey, withKey, bothButtonsRotate, keysOf, keyName } from './keybinds.js';
+import { pressed, held, groupKey, withKey, bothButtonsRotate, keysOf, keyName, edgePan, mouseBind, scrollScale } from './keybinds.js';
 import { viewOptions as prefs, tacticalWheel, showUnitVitals } from './viewpreferences.js';
 import { edgeCursor, panAxis } from './edge-scroll.js';
 
@@ -22,11 +23,15 @@ const ORDER_KEYS = [
 ];
 import { Pointers, tacticalPointer } from './pointers.js';
 import { Radar } from './radar.js';
+import { DoubleClick } from './doubleclick.js';
 import { showHand, formation, slotAt, stretched, laidOut, WHEEL_TURN } from './placehand.js';
 import { ArcView } from './directview.js';
 import { ChaseView } from './chaseview.js';
 import { TrackCam, TRACK_LOOK } from './trackcam.js';
 import { playerSpecial, specialTargets } from './superweapon.js';
+import { spaceBarWidth } from './healthbars.js';
+// game and mod text goes into markup escaped, so a unit name can't carry HTML
+const html = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 const $ = id => document.getElementById(id);
 const fmtTime = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -70,6 +75,17 @@ function iconNameFor(type) {
 }
 
 const defaultAbilityIcon = kind => nativeAbilityIcon(kind) || 'i_sa_' + kind.toLowerCase() + '.tga';
+// The health bar under a unit's overlay. A unit without an icon takes a bar as wide as it shows on screen; a squadron
+// or a fighter hero under its icon takes the icon's grab-bar width. A hero ship keeps the bar its size gives it, as
+// wide as any ship that size, and never less than the grab bar: the icon above it does not make a capital ship's
+// bar small.
+export function overlayBarWidth(s, hasIcon, screenRadius, iconSize, grabHealth) {
+  const bySize = Math.max(26, Math.min(120, screenRadius * 1.5));
+  if (!hasIcon) return bySize;
+  const icon = grabHealth || iconSize;
+  return s.isSquad || s.isFighter ? icon : Math.max(icon, bySize);
+}
+
 export function abilityIconName(kind, override = '') {
   for (const n of [override, defaultAbilityIcon(kind), 'i_sa_blank_button.tga'])
     if (n && iconCanvasRect(n)) return n;
@@ -166,6 +182,9 @@ function typeName(type) {
 }
 
 const ICON_LIFT = 0.048;
+// How far from a dogfight cell's centre a squadron's fighters may be for its icon to take its place there: twice the
+// distance the battle holds dogfighting fighters within (DOG_NEAR in sim.js, a squared distance).
+const DOGFIGHT_PLACE_REACH = 2 * Math.sqrt(80000);
 
 const autoRetarget = st => !!st && st.auto && st.active && !st.def.toggle && st.def.duration > 0 && st.def.target !== 'none';
 
@@ -188,6 +207,8 @@ export class UI {
     this.buildSig = '';
     this.selSig = '';
     this.pings = [];
+    this.rightTwice = new DoubleClick();
+    this.mapTwice = new DoubleClick();
     this.lastAlert = -100;
     this.placing = null;
     this.reinSig = null;
@@ -327,6 +348,11 @@ export class UI {
       this.turnDrag = { x: m.x };
       return;
     }
+    // The camera turn / tilt drag (Ctrl + middle by default) only takes over once the mouse moves, so a click on its
+    // button still does what that button does.
+    const orbit = this.placing ? 0 : mouseBind(e, 'CAMERA_ORBIT');
+    this.ctrlTurn = orbit ? { x: m.x, y: m.y, bit: orbit, button: e.button } : null;
+    if (orbit && e.button === 1) e.preventDefault();
     if (this.placing) {
       if (e.button === 0 && !this.placing.dragging && (this.placing.list.length > 1 || globalThis.reinforceTurn !== false)) {
         const g = this.r.pickGround(m.x, m.y);
@@ -341,7 +367,7 @@ export class UI {
         return;
       }
       if (this.armed) {
-        if (this.runArmed(m.x, m.y) && !e.shiftKey && this.armed !== 'waypoint') this.arm(null);
+        if (this.runArmed(m.x, m.y, e.detail >= 2) && !e.shiftKey && this.armed !== 'waypoint') this.arm(null);
         return;
       }
       const fix = this.repairTarget(m.x, m.y);
@@ -353,14 +379,14 @@ export class UI {
       this.drag = { x0: m.x, y0: m.y, x1: m.x, y1: m.y, box: false, shift: e.shiftKey };
     } else if (e.button === 2) {
       if (ARMED_ORDERS.has(this.armed)) {
-        if (this.runArmed(m.x, m.y) && !e.shiftKey && this.armed !== 'attackmove') this.arm(null);
+        if (this.runArmed(m.x, m.y, e.detail >= 2) && !e.shiftKey && this.armed !== 'attackmove') this.arm(null);
         return;
       }
       if (this.armed) {
         this.arm(null);
         return;
       }
-      this.pendingCommand = { x: m.x, y: m.y, ctrl: e.ctrlKey, shift: e.shiftKey || e.altKey, fast: prefs.hazardShortcut && e.detail >= 2 };
+      this.pendingCommand = { x: m.x, y: m.y, ctrl: e.ctrlKey, shift: e.shiftKey || e.altKey, fast: prefs.hazardShortcut && this.rightTwice.hit(m.x, m.y) };
       this.ctrlTurn = e.ctrlKey && !e.shiftKey && !e.altKey ? { x: m.x, y: m.y } : null;
       const movers = this.mine().filter(s => !s.dead && (s.isSquad || s.isMobile)),
         g = this.r.pickGround(m.x, m.y),
@@ -373,7 +399,7 @@ export class UI {
       }
     } else if (e.button === 1) {
       e.preventDefault();
-      this.panDrag = { x: m.x, y: m.y };
+      if (!orbit) this.panDrag = { x: m.x, y: m.y };
     }
   }
 
@@ -400,12 +426,13 @@ export class UI {
     if (
       this.ctrlTurn &&
       !this.turnDrag &&
-      e.buttons & 2 &&
+      e.buttons & this.ctrlTurn.bit &&
       Math.abs(e.clientX - this.ctrlTurn.x) + Math.abs(e.clientY - this.ctrlTurn.y) > 5
     ) {
       this.pendingCommand = null;
       this.endMoveDrag();
-      this.turnDrag = { x: e.clientX, y: e.clientY, tilt: true };
+      this.drag = this.panDrag = null;
+      this.turnDrag = { x: e.clientX, y: e.clientY, tilt: true, button: this.ctrlTurn.button };
     }
     if (this.turnDrag) {
       this.r.rig.yaw -= (e.clientX - this.turnDrag.x) * TURN_DRAG * prefs.turn;
@@ -432,8 +459,8 @@ export class UI {
       return;
     }
     if (e.button === 1) this.panDrag = null;
-    if (e.button === 2) this.ctrlTurn = null;
-    if ((e.button === 0 || e.button === 2) && this.turnDrag) {
+    if (e.button === this.ctrlTurn?.button) this.ctrlTurn = null;
+    if (this.turnDrag?.tilt ? e.button === this.turnDrag.button : (e.button === 0 || e.button === 2) && this.turnDrag) {
       this.turnDrag = null;
       return;
     }
@@ -502,7 +529,7 @@ export class UI {
     if (
       e.code === 'Escape' &&
       (game.controlsLocked || game.tacticalCinematics?.on || game.tacticalMovies?.active) &&
-      game.scripts?.storyEscape()
+      (game.scripts ? game.scripts.storyEscape() : !!game.storyEscape?.())
     ) {
       e.preventDefault();
       return;
@@ -581,12 +608,13 @@ export class UI {
       game.togglePause();
       return;
     }
+    // Two battle speeds (ours): normal and fast forward, as the fast forward button.
     if (pressed(e, 'SPEED_UP')) {
-      game.setSpeed(Math.min(4, game.speed * 2));
+      game.setSpeed(FAST_FORWARD);
       return;
     }
     if (pressed(e, 'SPEED_DOWN')) {
-      game.setSpeed(Math.max(0.5, game.speed / 2));
+      game.setSpeed(1);
       return;
     }
     if (pressed(e, 'STOP')) {
@@ -959,6 +987,7 @@ export class UI {
     this.cancelPlacing();
     this.placing = { list: [], vessels: [], ghosts: [], slots: [], dragging, ok: false, x: 0, y: 0, heading: 0, turned: false, why: '' };
     this.addPlacing(type, vesselId);
+    if (this.placing && !this.placing.list.length) this.cancelPlacing();
   }
 
   addPlacing(type, vesselId = null) {
@@ -967,7 +996,9 @@ export class UI {
       if (!pl || pl.list.length) return this.startPlacing(type, false, vesselId);
     }
     const have = reserveCards(this.player).find(c => c.type === type && c.id === vesselId)?.count || 0;
-    if (pl.list.filter((t, i) => t === type && pl.vessels[i] === vesselId).length >= have) {
+    let picked = reinforcePop(type);
+    for (const t of pl.list) picked += reinforcePop(t);
+    if (pl.list.filter((t, i) => t === type && pl.vessels[i] === vesselId).length >= have || picked > this.world.popRoom(this.player)) {
       if (!pl.list.length) this.cancelPlacing();
       this.game.audio.play('GUI_Bad_Sound');
       return;
@@ -1109,7 +1140,7 @@ export class UI {
       d.className = 'b';
       const url = iconFor(t);
       if (url) d.style.backgroundImage = `url(${url})`;
-      else d.innerHTML = `<span class="label">${typeName(t)}</span>`;
+      else d.innerHTML = `<span class="label">${html(typeName(t))}</span>`;
       const c = document.createElement('span');
       c.className = 'n';
       c.textContent = n > 1 ? n : '';
@@ -1139,8 +1170,9 @@ export class UI {
     const def = users[0].abilityState(kind).def;
     const anyActive = users.some(s => s.abilityState(kind).active);
     const ready = s => {
-      const st = s.abilityState(kind);
-      return !st.active && !(st.cooldown > 0);
+      const st = s.abilityState(kind),
+        lead = s.isSquad ? s.fighters[0] || s : s;
+      return !st.active && !(st.cooldown > 0) && !((lead.abilityLock || 0) > this.world.time);
     };
     const turnOn = users.some(ready);
     if (!anyActive && !turnOn) return;
@@ -1166,6 +1198,17 @@ export class UI {
     return out;
   }
 
+  // How many logic frames of battle time went by since the overlay was last drawn (a fraction at a high frame rate,
+  // none while the battle is paused). The battle time is the one being shown: the mirror's display clock when the
+  // battle runs on its own thread.
+  logicFramesSince() {
+    const mirror = this.game.mirror,
+      shown = mirror && mirror.clock !== undefined ? mirror.clock : this.world.time,
+      before = this.overlayBattleTime;
+    this.overlayBattleTime = shown;
+    return before === undefined ? 0 : Math.max(0, Math.min(6, (shown - before) * 30));
+  }
+
   layoutDogfights() {
     const w = this.world,
       want = (this.dfWant ||= new Map());
@@ -1189,8 +1232,13 @@ export class UI {
         k = 0;
       for (const s of l) {
         if (s.dead || s.player !== me || !s.fighters.length) continue;
-        const z = this.boxCentre(s, (this._bc ||= {})).z,
-          q = this.r.pickGround(x, y + ICON_LIFT * this.r.height, {}, z);
+        // A squadron keeps its place in the cell's rows, but its icon only sits there while its fighters are at the
+        // dogfight (ours). One that is still flying in, or was called back to the ship it guards, keeps its icon over
+        // its fighters; before, the icon stayed at the dogfight far from the squadron until the fight was dropped.
+        const middle = this.boxCentre(s, (this._bc ||= {})),
+          z = middle.z,
+          atDogfight = (middle.x - m.x) ** 2 + (middle.y - m.y) ** 2 <= DOGFIGHT_PLACE_REACH ** 2,
+          q = atDogfight ? this.r.pickGround(x, y + ICON_LIFT * this.r.height, {}, z) : null;
         if (q) {
           q.z = z;
           want.set(s, q);
@@ -1259,7 +1307,9 @@ export class UI {
       p.v = 0;
       return p;
     }
-    if (!(s.mode === 'combat' && s.target && s.target.isSquad)) p.docked = false;
+    // An icon is docked at its place in one dogfight cell: when the squadron takes another cell it glides there
+    // with its fighters instead of jumping to the new place.
+    if (!(s.mode === 'combat' && s.target && s.target.isSquad) || p.dockedCell !== s.dogKey) p.docked = false;
     const slot = this.dfWant && this.dfWant.get(s);
     if (slot) {
       p.tx = slot.x;
@@ -1286,18 +1336,26 @@ export class UI {
       dy = p.ty - p.y,
       dz = p.tz - p.z,
       d = Math.hypot(dx, dy, dz);
-    if ((slot || parked) && a > 0 && (p.v * p.v) / (2 * a) >= d) p.v -= a;
-    else p.v += a;
+    // The glide is the engine's, in logic frames: it runs for as much battle time as passed since the last drawn
+    // frame. Run once per drawn frame it went several times too fast at a high frame rate, and the icon flew to a far
+    // dogfight place long before its fighters, and back again when they turned to another target.
+    const frames = this.logicFramesShown || 0;
+    if ((slot || parked) && a > 0 && (p.v * p.v) / (2 * a) >= d) p.v -= a * frames;
+    else p.v += a * frames;
     p.v = Math.max(0, Math.min(p.v, top));
-    if (d < p.v || d < 1e-3) {
+    const glide = p.v * frames;
+    if (d < glide || d < 1e-3) {
       p.x = p.tx;
       p.y = p.ty;
       p.z = p.tz;
-      if (slot) p.docked = true;
+      if (slot) {
+        p.docked = true;
+        p.dockedCell = s.dogKey;
+      }
     } else {
-      p.x += (dx / d) * p.v;
-      p.y += (dy / d) * p.v;
-      p.z += (dz / d) * p.v;
+      p.x += (dx / d) * glide;
+      p.y += (dy / d) * glide;
+      p.z += (dz / d) * glide;
     }
     return p;
   }
@@ -1358,7 +1416,7 @@ export class UI {
     this.hudTimer = 0;
   }
 
-  runArmed(x, y) {
+  runArmed(x, y, fast = false) {
     if (this.armed.startsWith('ability:')) return this.runAbility(this.armed.slice(8), x, y);
     if (this.armed === 'beacon') {
       const g = this.r.pickGround(x, y);
@@ -1412,7 +1470,7 @@ export class UI {
     g.y = Math.max(w.min.y, Math.min(w.max.y, g.y));
     const am = this.armed === 'attackmove',
       way = this.armed === 'waypoint';
-    this.game.command({ c: 'move', u: ids(mine), x: g.x, y: g.y, attack: am, waypoint: way });
+    this.game.command({ c: 'move', u: ids(mine), x: g.x, y: g.y, attack: am, waypoint: way, fast: fast && !way });
     this.pings.push({ x: g.x, y: g.y, t: 0, color: am ? '#ffb347' : way ? '#7fd4ff' : '#6be675', r: 40 });
     this.sayMove(mine, g.x, g.y, am);
     return true;
@@ -1449,6 +1507,46 @@ export class UI {
     else if (def.target === 'unit') this.say(this.voiceOf(users), 'SFXEvent_Attack_With_Non_Hero_Ability', 'SFXEvent_Attack');
     this.hudTimer = 0;
     return true;
+  }
+
+  // The object under the mouse, once a frame. While the mouse rests, the hovered object stays hovered for as long
+  // as the cursor is still on it: a squadron icon or a small ship crossing over it (own fighters swarming the
+  // enemy they attack) no longer takes the hover for a frame and hands it back, which flipped the pointer between
+  // the attack and the select or move pointer many times a second.
+  updateHover(m) {
+    const prev = this.hover,
+      can = m.inside && !this.drag?.box && !this.placing,
+      resting = can && !!prev && m.x === this.hoverX && m.y === this.hoverY;
+    this.hoverX = m.x;
+    this.hoverY = m.y;
+    if (resting && this.stillUnder(prev, m.x, m.y)) return (this.hover = prev);
+    const onSystem = prev && can && this.systemUnder(prev, m.x, m.y);
+    this.hover = onSystem ? prev : can ? this.pick(m.x, m.y) : null;
+    if (
+      !this.hover &&
+      prev &&
+      !prev.dead &&
+      !prev.isSquad &&
+      prev.hpDriven &&
+      m.inside &&
+      this.sees(prev) &&
+      this.amongHardpoints(prev, m.x, m.y)
+    )
+      this.hover = prev;
+    return this.hover;
+  }
+
+  // Whether the cursor is still on this object by the tests pick() uses: its icon, its screen circle, or for a
+  // ship with hardpoints a hardpoint or the spread of its hardpoints.
+  stillUnder(s, x, y) {
+    if (!s || s.dead || !this.sees(s) || hiddenInJump(s)) return false;
+    if (s._iconFrame === this.overlayFrame) {
+      const h = s._iconSize / 2 + 2;
+      if (Math.abs(x - s._iconX) <= h && Math.abs(y - s._iconY) <= h) return true;
+    }
+    const p = this.screenOf(s, (this._still ||= {}));
+    if (!p.behind && Math.hypot(p.x - x, p.y - y) <= this.screenRadius(s)) return true;
+    return !s.isSquad && !!s.hpDriven && (!!this.hardpointAt(s, x, y, 26) || this.amongHardpoints(s, x, y));
   }
 
   systemUnder(unit, x, y) {
@@ -1498,6 +1596,7 @@ export class UI {
       if (!h.alive || !h.targetable || !h.destroyable) continue;
       h.worldPos(w);
       this.r.project(w.x, w.y, w.z, p);
+      if (p.behind) continue;
       const d = Math.hypot(p.x - x, p.y - y);
       if (d < bd) {
         bd = d;
@@ -1546,14 +1645,14 @@ export class UI {
     const w = this.world;
     g.x = Math.max(w.min.x, Math.min(w.max.x, g.x));
     g.y = Math.max(w.min.y, Math.min(w.max.y, g.y));
-    this.game.command({ c: 'move', u: ids(mine), x: g.x, y: g.y, attack: !!attackMove, waypoint: !!waypoint, fast: !!fast && !attackMove });
+    this.game.command({ c: 'move', u: ids(mine), x: g.x, y: g.y, attack: !!attackMove, waypoint: !!waypoint, fast: !!fast });
     this.pings.push({ x: g.x, y: g.y, t: 0, color: attackMove ? '#ffb347' : waypoint ? '#7fd4ff' : '#6be675', r: 40 });
     this.radarClick(g.x, g.y, attackMove);
     this.sayMove(mine, g.x, g.y, attackMove);
   }
 
-  radarClick(x, y, attack) {
-    this.radar.click(x, y, attack);
+  radarClick(x, y, attack, twice = false) {
+    this.radar.click(x, y, attack, twice);
   }
 
   minimapClick(e) {
@@ -1576,7 +1675,7 @@ export class UI {
       if (mine.length) {
         const attack = armed ? armed === 'attackmove' : e.ctrlKey;
         if (armed === 'guard') this.game.command({ c: 'guard', u: ids(mine), t: 0, x, y });
-        else this.game.command({ c: 'move', u: ids(mine), x, y, attack: !!attack, waypoint: armed === 'waypoint' });
+        else this.game.command({ c: 'move', u: ids(mine), x, y, attack: !!attack, waypoint: armed === 'waypoint', fast: e.detail >= 2 && armed !== 'waypoint' });
         this.pings.push({ x, y, t: 0, color: attack ? '#ffb347' : '#6be675', r: 40 });
         this.radarClick(x, y, attack);
         if (armed === 'guard') this.say(this.voiceOf(mine), 'SFXEvent_Guard', 'SFXEvent_Move');
@@ -1671,7 +1770,7 @@ export class UI {
       });
       this.beaconView.update(w.beacons.live(w.time).filter(b => b.owner.team === this.player.team));
     }
-    const pan = rig.dist * 0.9 * dt * prefs.pan;
+    const pan = rig.dist * 0.9 * dt * scrollScale() * prefs.pan;
     const g = this.game, m = this.mouse;
     const edge = !this.drag && !this.panDrag && !this.turnDrag && !this.direct && !this.track?.on && !this.r.chase?.on && !g.menus?.open && !g.chatDlg &&
       !g.controlsLocked && !g.cine?.on && !g.tacticalCinematics?.on && !g.tacticalMovies?.active && !g.setup.attract && !g.over && this.edgeCursor();
@@ -1701,20 +1800,7 @@ export class UI {
     rig.clamp();
 
     this.selection = this.selection.filter(s => !s.dead);
-    const prev = this.hover;
-    const onSystem = prev && m.inside && !this.drag?.box && !this.placing && this.systemUnder(prev, m.x, m.y);
-    this.hover = onSystem ? prev : m.inside && !this.drag?.box && !this.placing ? this.pick(m.x, m.y) : null;
-    if (
-      !this.hover &&
-      prev &&
-      !prev.dead &&
-      !prev.isSquad &&
-      prev.hpDriven &&
-      m.inside &&
-      this.sees(prev) &&
-      this.amongHardpoints(prev, m.x, m.y)
-    )
-      this.hover = prev;
+    this.updateHover(m);
     const pointers = (this.pointers ||= new Pointers(this.r.dom));
     if (this.armed?.startsWith('ability:')) {
       const kind = this.armed.slice(8);
@@ -1821,24 +1907,22 @@ export class UI {
       grab = gb && gb.blank ? Math.max(16, Math.round(gb.blank.w * gb.scale * unit)) : 0;
     const grabHealth = gb && gb.health ? Math.max(10, Math.round(gb.health.w * gb.healthScale * unit)) : 0;
     this.overlayFrame = (this.overlayFrame || 0) + 1;
+    this.logicFramesShown = this.logicFramesSince();
     for (const s of this.world.selectablesInto((this.shown ||= []))) {
-      const enemy = s.player.team !== me.team && s.player.id >= 0;
-      if (enemy && !this.sees(s)) continue;
+      // A capture point shows the owner the viewer last saw, not one it changed to out of sight.
+      const owner = s.capture && this.world.shownOwner ? this.world.shownOwner(s) : s.player.id >= 0 ? s.player : null,
+        enemy = !!owner && owner.team !== me.team;
+      if (s.player.team !== me.team && s.player.id >= 0 && !this.sees(s)) continue;
       if (hiddenInJump(s)) continue;
       this.screenOf(s, p);
       if (p.behind || p.x < -100 || p.x > this.r.width + 100 || p.y < -100 || p.y > this.r.height + 100) continue;
-      const r = Math.min(this.screenRadius(s), 260);
       const size = grab ? grab : s.isSquad || s.isFighter ? Math.round(iconSize * 0.9) : iconSize;
       const hasIcon = (unitIcon(s) || !!this.world.flagshipRiders?.has(s)) && this.drawUnitIcon(g, s, p.x, p.y, enemy, size);
-      const col =
-        s.player.id < 0
-          ? '#b9c4cf'
-          : enemy
-            ? '#ff5a4d'
-            : s.player === me
-              ? '#6be675'
-              : (s.player._hex ||= '#' + s.player.color.getHexString());
-      if (!this.r.rings && (s.selected || s === this.hover)) {
+      // the size on screen only matters without an icon, or for the corners drawn around a selected or hovered unit
+      const cornered = !this.r.rings && (s.selected || s === this.hover);
+      const r = !hasIcon || cornered ? Math.min(this.screenRadius(s), 260) : 0;
+      const col = !owner ? '#b9c4cf' : enemy ? '#ff5a4d' : owner === me ? '#6be675' : (owner._hex ||= '#' + owner.color.getHexString());
+      if (cornered) {
         g.strokeStyle = col;
         g.lineWidth = s.selected ? 1.6 : 1;
         g.globalAlpha = s.selected ? 0.95 : 0.6;
@@ -1858,7 +1942,7 @@ export class UI {
         g.globalAlpha = 1;
       }
       if (!s.isPad) {
-        const w = hasIcon ? grabHealth || size : Math.max(26, Math.min(120, r * 1.5)),
+        const w = overlayBarWidth(s, hasIcon, r, size, grabHealth),
           x = p.x - w / 2,
           y = hasIcon ? p.y + size / 2 + 9 : p.y - r - 9;
         const f = s.healthFrac, shield = !s.isSquad && s.maxShield > 0;
@@ -1891,7 +1975,8 @@ export class UI {
             const k = size / 28,
               fw = Math.round(rect.w * k),
               fh = Math.round(rect.h * k);
-            g.drawImage(iconAtlas(), rect.x, rect.y, rect.w, rect.h, Math.round(p.x + size / 2 + 1), Math.round(y + 3 - fh), fw, fh);
+            const fx = Math.round(p.x + Math.max(size, w) / 2 + 1);
+            g.drawImage(iconAtlas(), rect.x, rect.y, rect.w, rect.h, fx, Math.round(y + 3 - fh), fw, fh);
           }
         }
         if (s.construction) {
@@ -1900,25 +1985,30 @@ export class UI {
           g.fillStyle = '#ffd76a';
           g.fillRect(x, y + 6, w * (1 - s.construction.left / s.construction.total), 2);
         }
-        if (s === this.hover && this.game.setup.net && s.player.id >= 0 && s.player !== me) {
+        if (s === this.hover && this.game.setup.net && owner && owner !== me) {
           const ty = hasIcon ? p.y - size / 2 - 5 : y - 10;
           g.font = 'bold 12px "Segoe UI", sans-serif';
           g.textAlign = 'center';
-          const tw = g.measureText(s.player.name).width;
+          const tw = g.measureText(owner.name).width;
           g.fillStyle = 'rgba(0,0,0,0.7)';
           g.fillRect(p.x - tw / 2 - 4, ty - 12, tw + 8, 16);
-          g.fillStyle = s.player._hex ||= '#' + s.player.color.getHexString();
-          g.fillText(s.player.name, p.x, ty);
+          g.fillStyle = owner._hex ||= '#' + owner.color.getHexString();
+          g.fillText(owner.name, p.x, ty);
         }
       }
     }
     if ((this.predictionPaths ??= db.constants.bool('ShouldDisplayPredictionPaths', false))) this.drawPredictionPaths(g);
     this.drawWaypointLines(g);
-    for (const u of this.world.units) {
-      if (u.dead || !u.capture || u.padChild) continue;
+    const W = this.world,
+      vbit = W.viewer && W.fog && !W.reveal ? W.viewer.bit : 0;
+    for (const u of W.units) {
+      if (u.dead || !u.capture) continue;
+      // A pad hides under what is built on it; while the viewer cannot see that, the pad still shows what it last saw.
+      const child = u.padChild;
+      if (child && (!vbit || child.player.team === W.viewer.team || child.seenBy & vbit)) continue;
       this.r.project(u.x, u.y, u.z, p);
       if (p.behind) continue;
-      const owner = u.isPad ? u.padOwner : u.player.id >= 0 ? u.player : null;
+      const owner = W.shownOwner ? W.shownOwner(u) : u.isPad ? u.padOwner : u.player.id >= 0 ? u.player : null;
       const c = u.capture;
       g.lineWidth = 2;
       if (owner) {
@@ -1927,7 +2017,7 @@ export class UI {
         g.arc(p.x, p.y, 15, 0, 6.283);
         g.stroke();
       }
-      if (globalThis.showCaptureBars && c.by && c.by !== owner && c.progress > 0 && c.progress < c.time) {
+      if (globalThis.showCaptureBars && c.by && c.by !== owner && c.progress > 0 && c.progress < c.time && (!W.viewWatches || W.viewWatches(u))) {
         g.strokeStyle = '#' + c.by.color.getHexString();
         g.beginPath();
         g.arc(p.x, p.y, 19, -1.57, -1.57 + (6.283 * c.progress) / c.time);
@@ -1945,6 +2035,11 @@ export class UI {
       g.beginPath();
       g.ellipse(p.x, p.y, 8 + pg.t * 40, (8 + pg.t * 40) * 0.6, 0, 0, 6.283);
       g.stroke();
+      if (pg.twice) {
+        g.beginPath();
+        g.ellipse(p.x, p.y, 4 + pg.t * 70, (4 + pg.t * 70) * 0.6, 0, 0, 6.283);
+        g.stroke();
+      }
       this.pings[n++] = pg;
     }
     this.pings.length = n;
@@ -1962,12 +2057,13 @@ export class UI {
     const tracked = new Set();
     for (const s of this.selection)
       if (!s.isSquad && s.player === me && s.targetHp && s.targetHp.alive && !s.targetHp.unit.dead) tracked.add(s.targetHp);
-    const drawHp = (h, focus, hostile, isTracked) => {
+    const drawHp = (h, focus, isTracked) => {
       const w = {};
       h.worldPos(w);
       this.r.project(w.x, w.y, w.z, p);
       if (p.behind) return;
-      const color = hostile ? '#ff5a4d' : '#6be675';
+      const f = h.health / h.maxHealth;
+      const color = f > 0.5 ? '#6be675' : f > 0.25 ? '#f2c744' : '#ff5a4d';
       const img = reticle(h.kind, isTracked || focus, color);
       const s = focus ? 38 : isTracked ? 34 : 26;
       if (img) {
@@ -1979,8 +2075,7 @@ export class UI {
         g.lineWidth = 1.5;
         g.strokeRect(p.x - s / 3, p.y - s / 3, s / 1.5, s / 1.5);
       }
-      const f = h.health / h.maxHealth,
-        bw = s * 0.8;
+      const bw = s * 0.8;
       g.fillStyle = 'rgba(0,0,0,0.65)';
       g.fillRect(p.x - bw / 2 - 1, p.y + s / 2, bw + 2, 4);
       g.fillStyle = f > 0.5 ? '#5fe067' : f > 0.25 ? '#f2c744' : '#ff5a4d';
@@ -1996,13 +2091,12 @@ export class UI {
       }
     };
     if (hv && !hv.isSquad && hv.hpDriven && this.sees(hv)) {
-      const hostile = hv.player.team !== me.team && hv.player.id >= 0;
       const focus = this.hardpointAt(hv, this.mouse.x, this.mouse.y);
-      for (const h of hv.hardpoints) if (h.alive && h.targetable && h.destroyable && h !== focus) drawHp(h, false, hostile, tracked.has(h));
-      if (focus) drawHp(focus, true, hostile, tracked.has(focus));
+      for (const h of hv.hardpoints) if (h.alive && h.targetable && h.destroyable && h !== focus) drawHp(h, false, tracked.has(h));
+      if (focus) drawHp(focus, true, tracked.has(focus));
       for (const h of hv.hardpoints) tracked.delete(h);
     }
-    for (const h of tracked) drawHp(h, false, true, true);
+    for (const h of tracked) drawHp(h, false, true);
     if (this.armed?.startsWith('ability:') && this.mouse.inside) {
       g.font = '12px "Segoe UI", sans-serif';
       g.textAlign = 'left';
@@ -2076,7 +2170,8 @@ export class UI {
     s._iconFrame = this.overlayFrame;
     const selected = s.selected && !enemy;
     const alpha = (s.isSquad ? s.fighters[0]?.cloaked : s.cloaked) ? 0.4 : s === this.hover || selected ? 1 : 0.9;
-    const color = s.player.id < 0 ? '#9aa7b4' : (s.player._hex ||= '#' + s.player.color.getHexString());
+    const shown = s.capture && this.world.shownOwner ? this.world.shownOwner(s) : s.player.id >= 0 ? s.player : null,
+      color = !shown ? '#9aa7b4' : (shown._hex ||= '#' + shown.color.getHexString());
     const mode = selected ? 2 : s === this.hover ? 1 : 0,
       pad = 12;
     const seen = (this.iconSeen ||= new WeakMap()).get(s);
@@ -2356,7 +2451,8 @@ export class UI {
     }
     if (one) {
       const who = pl => (pl === me ? pl.factionName : `${pl.name} · ${pl.factionName}`);
-      const owner = one.player.id < 0 ? (one.isPad && one.padOwner ? who(one.padOwner) : 'Neutral') : who(one.player);
+      const shown = one.capture && this.world.shownOwner ? this.world.shownOwner(one) : null,
+        owner = one.capture && this.world.shownOwner ? (shown ? who(shown) : 'Neutral') : one.player.id < 0 ? (one.isPad && one.padOwner ? who(one.padOwner) : 'Neutral') : who(one.player);
       const hasShield = !one.isSquad && one.maxShield > 0;
       this.selTitle.textContent = one.name;
       let sub = owner;
@@ -2433,7 +2529,7 @@ export class UI {
         d.className = 'b';
         const url = iconFor(t);
         if (url) d.style.backgroundImage = `url(${url})`;
-        else d.innerHTML = `<span class="label">${typeName(t)}</span>`;
+        else d.innerHTML = `<span class="label">${html(typeName(t))}</span>`;
         const cost = document.createElement('span');
         cost.className = 'cost';
         cost.textContent = buildCost(t);
@@ -2482,7 +2578,7 @@ export class UI {
       head.className = 'head';
       const research = items.filter(x => isUpgradeType(x.it.type)).length,
         recruit = items.length - research;
-      head.innerHTML = '<span></span><span>click to cancel</span>';
+      head.innerHTML = '<span></span><span>click or right-click to cancel</span>';
       head.firstChild.textContent = [recruit ? `Recruitment ${recruit}` : '', research ? `Research ${research}` : '']
         .filter(Boolean)
         .join(' · ');
@@ -2493,7 +2589,7 @@ export class UI {
         d.className = 'b' + (isUpgradeType(x.it.type) ? ' research' : '');
         const url = iconFor(x.it.type);
         if (url) d.style.backgroundImage = `url(${url})`;
-        else d.innerHTML = `<span class="label">${typeName(x.it.type)}</span>`;
+        else d.innerHTML = `<span class="label">${html(typeName(x.it.type))}</span>`;
         const prog = document.createElement('span');
         prog.className = 'prog';
         const t = document.createElement('span');
@@ -2503,6 +2599,10 @@ export class UI {
         d.onclick = () => {
           this.game.command({ c: 'cancel', b: x.u.id, q: x.name, i: x.u.buildQueues.get(x.name).indexOf(x.it), type: x.it.type.name });
           this.hudTimer = 0;
+        };
+        d.oncontextmenu = e => {
+          e.preventDefault();
+          d.onclick();
         };
         d._x = x;
         grid.appendChild(d);

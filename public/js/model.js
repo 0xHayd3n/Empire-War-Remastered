@@ -2,7 +2,7 @@ import { diag } from './diag.js';
 import * as THREE from '../vendor/three/build/three.module.js';
 import { refitMaterialName } from './texture-showcase/store.js';
 import { loadALO } from './alo.js';
-import { loadTexture, whiteTexture, blackTexture } from './dds.js';
+import { loadTexture, whiteTexture, blackTexture, capCopy } from './dds.js';
 import { gfx } from './gfx.js';
 import { strength } from './battlelook.js';
 import { groundFillShader, nearGroundShader } from './landlight.js';
@@ -762,7 +762,15 @@ function planetEffectInfo() {
   ));
 }
 
+// The largest planet texture, in texels, that planet materials made from now on keep (0 = the whole file). The galaxy
+// map loads its planets with a cap and lifts it per planet on zoom (capTexture).
+let planetCap = 0;
+export function setPlanetTextureCap(cap) {
+  planetCap = cap | 0;
+}
+
 function makePlanetMaterial(p) {
+  const cap = planetCap;
   const c3 = (v, d) => (Array.isArray(v) ? new THREE.Color(v[0], v[1], v[2]) : new THREE.Color(d, d, d));
   const detail = gfx.shader | 0,
     requests = [];
@@ -783,6 +791,7 @@ function makePlanetMaterial(p) {
       texture.copy(source);
       texture.isCompressedTexture = source.isCompressedTexture === true;
       texture.isDataTexture = source.isDataTexture === true;
+      if (name) capCopy(texture, cap);
       const fixedStates = [
         ...effect.globalStates,
         ...(technique?.passes.filter(p => !p.annotations.AlamoCleanup).flatMap(p => p.states) || [])
@@ -1076,6 +1085,8 @@ function makeMaterial(mat, format, teamColor, selfShadow = false, livery = null,
       ? shader +
         '|' +
         (gfx.shader | 0) +
+        '|' +
+        planetCap +
         '|' +
         JSON.stringify(
           Object.keys(p)
@@ -1492,9 +1503,54 @@ function rigIndex(bones) {
   return index;
 }
 
+// The nodes of a model report when they hide or show, and its meshes when they get another material or geometry, to
+// the unit that draws them in batches (ours). A unit none of whose parts changed is then drawn from the list it made
+// last time, instead of being checked part by part every frame: with thousands of fighters on screen those checks
+// were most of the cost of collecting the batches. See Instances.collect.
+function dropDrawPlan(part) {
+  if (part.drawnBy) part.drawnBy.instPlan = null;
+}
+function reportVisibility(prototype) {
+  Object.defineProperty(prototype, 'visible', {
+    configurable: true,
+    enumerable: true,
+    get() {
+      return this.partVisible;
+    },
+    set(visible) {
+      if (visible === this.partVisible) return;
+      this.partVisible = visible;
+      dropDrawPlan(this);
+    }
+  });
+  prototype.drawnBy = null;
+  prototype.reportsChanges = true;
+}
+export class PartNode extends THREE.Object3D {}
+export class PartGroup extends THREE.Group {}
+export class PartMesh extends THREE.Mesh {
+  get material() {
+    return this.partMaterial;
+  }
+  set material(material) {
+    if (material === this.partMaterial) return;
+    this.partMaterial = material;
+    dropDrawPlan(this);
+  }
+  get geometry() {
+    return this.partGeometry;
+  }
+  set geometry(geometry) {
+    if (geometry === this.partGeometry) return;
+    this.partGeometry = geometry;
+    dropDrawPlan(this);
+  }
+}
+for (const partClass of [PartNode, PartGroup, PartMesh]) reportVisibility(partClass.prototype);
+
 export class ModelInstance {
   constructor() {
-    this.root = new THREE.Group();
+    this.root = new PartGroup();
     this.bones = [];
     this.boneByName = new Map();
     this.meshByName = new Map();
@@ -1600,7 +1656,73 @@ export class ModelInstance {
   }
 }
 
-const NO_EULER = () => {};
+// The rest pose of a bone is the same in every copy of a model and nothing writes to it, so each
+// model keeps one set and every copy points at it. Bones never use lookAt or carry animations, so
+// they share one up vector and one empty list as well. Big fleets build hundreds of bones per ship.
+const restPoses = new WeakMap();
+const BONE_UP = new THREE.Vector3(0, 1, 0);
+const NO_ANIMATIONS = Object.freeze([]);
+const BONE_LAYERS = new THREE.Layers();
+const BONE_ROTATION = new THREE.Euler();
+const BONE_VIEW_MATRIX = new THREE.Matrix4();
+const BONE_NORMAL_MATRIX = new THREE.Matrix3();
+let nextBoneId = -1;
+
+// A bone is a plain scene node that is never drawn, never raycast on its own and only turned
+// through its quaternion. The full Object3D constructor gives every node its own rotation with
+// two change closures, a view and a normal matrix, layers, an up vector and a uuid; a ship with
+// its turrets carries hundreds of bones, so bones share those parts. Only the pose (position,
+// quaternion, scale, matrix, matrixWorld), the children and the user data are their own.
+function makeBoneNode(name) {
+  const bone = Object.create(PartNode.prototype);
+  Object.defineProperty(bone, 'id', { value: nextBoneId-- });
+  bone.isObject3D = true;
+  bone.uuid = '';
+  bone.name = name;
+  bone.type = 'Object3D';
+  bone.parent = null;
+  bone.children = [];
+  bone.up = BONE_UP;
+  Object.defineProperties(bone, {
+    position: { configurable: true, enumerable: true, value: new THREE.Vector3() },
+    rotation: { configurable: true, enumerable: true, value: BONE_ROTATION },
+    quaternion: { configurable: true, enumerable: true, value: new THREE.Quaternion() },
+    scale: { configurable: true, enumerable: true, value: new THREE.Vector3(1, 1, 1) },
+    modelViewMatrix: { value: BONE_VIEW_MATRIX },
+    normalMatrix: { value: BONE_NORMAL_MATRIX }
+  });
+  bone.matrix = new THREE.Matrix4();
+  bone.matrixWorld = new THREE.Matrix4();
+  bone.matrixAutoUpdate = THREE.Object3D.DEFAULT_MATRIX_AUTO_UPDATE;
+  bone.matrixWorldAutoUpdate = THREE.Object3D.DEFAULT_MATRIX_WORLD_AUTO_UPDATE;
+  bone.matrixWorldNeedsUpdate = false;
+  bone.layers = BONE_LAYERS;
+  bone.visible = true;
+  bone.castShadow = false;
+  bone.receiveShadow = false;
+  bone.frustumCulled = true;
+  bone.renderOrder = 0;
+  bone.animations = NO_ANIMATIONS;
+  bone.userData = {};
+  return bone;
+}
+function shareRestPose(model, bones, sharedRest) {
+  if (sharedRest) {
+    bones.forEach((bone, i) => {
+      bone.userData.restInv = sharedRest[i].restInv;
+      bone.userData.restAt = sharedRest[i].restAt;
+    });
+    return;
+  }
+  restPoses.set(
+    model,
+    bones.map(bone => ({
+      rest: bone.userData.rest,
+      restInv: (bone.userData.restInv = new THREE.Matrix4().copy(bone.matrixWorld).invert()),
+      restAt: (bone.userData.restAt = new THREE.Vector3().setFromMatrixPosition(bone.matrixWorld))
+    }))
+  );
+}
 const prebuilt = new Map();
 // A pooled instance is only reusable for the exact paint it was built with.
 const paintToken = (teamColor, livery) => [teamColor ? teamColor.getHexString() : '-', liveryKey(livery)].join('/');
@@ -1658,14 +1780,13 @@ export function buildModel(
   const inst = new ModelInstance();
   inst.model = model;
   const m4 = new THREE.Matrix4();
+  const sharedRest = restPoses.get(model);
   model.bones.forEach((b, i) => {
-    const o = new THREE.Object3D();
-    o.name = b.name;
+    const o = makeBoneNode(b.name);
     const m = b.matrix;
     m4.set(m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9], m[10], m[11], 0, 0, 0, 1);
     m4.decompose(o.position, o.quaternion, o.scale);
-    o.quaternion._onChange(NO_EULER);
-    o.userData.rest = { p: o.position.clone(), q: o.quaternion.clone(), s: o.scale.clone() };
+    o.userData.rest = sharedRest ? sharedRest[i].rest : { p: o.position.clone(), q: o.quaternion.clone(), s: o.scale.clone() };
     o.visible = b.visible;
     inst.bones.push(o);
     inst.boneByName.set(b.name.toUpperCase(), o);
@@ -1673,10 +1794,7 @@ export function buildModel(
   });
   model.bones.forEach((b, i) => (b.parent >= 0 ? inst.bones[b.parent] : inst.root).add(inst.bones[i]));
   inst.root.updateMatrixWorld(true);
-  for (const b of inst.bones) {
-    b.userData.restInv = new THREE.Matrix4().copy(b.matrixWorld).invert();
-    b.userData.restAt = new THREE.Vector3().setFromMatrixPosition(b.matrixWorld);
-  }
+  shareRestPose(model, inst.bones, sharedRest);
 
   const chainOf = name => (/_LOD\d$/i.test(name) ? name.replace(/_LOD\d?/gi, '').toUpperCase() : null);
   const tris = mesh => mesh.subs.reduce((n, sub) => n + (sub.geometry.indices ? sub.geometry.indices.length : 0), 0);
@@ -1707,7 +1825,7 @@ export function buildModel(
     if (alt) {
       if (altOf ? +altOf[1] !== alt : hasAlt.has(mesh.name.replace(/_LOD\d/gi, '').toUpperCase())) continue;
     } else if (altOf && altOf[1] !== '0' && !showHidden && !alts) continue;
-    const group = new THREE.Group();
+    const group = new PartGroup();
     group.name = mesh.name;
     group.visible = !mesh.hidden || showHidden;
     if (alts && altOf && !alt) {
@@ -1723,7 +1841,7 @@ export function buildModel(
       if (SKIP.test(sub.material.shader)) continue;
       const geo = makeGeometry(model, sub.geometry);
       if (headless) {
-        const obj = new THREE.Mesh(geo, HEADLESS);
+        const obj = new PartMesh(geo, HEADLESS);
         group.add(obj);
         any = true;
         if (!mesh.hidden && !seeThrough(sub.material.shader)) {
@@ -1732,7 +1850,7 @@ export function buildModel(
         }
         continue;
       }
-      const obj = new THREE.Mesh(
+      const obj = new PartMesh(
         geo,
         makeMaterial(
           sub.material,
@@ -1815,7 +1933,7 @@ export function flattenModel(inst) {
   if (inst.billboards.length) return null;
   inst.root.updateWorldMatrix(true, true);
   const inv = new THREE.Matrix4().copy(inst.root.matrixWorld).invert();
-  const container = new THREE.Group();
+  const container = new PartGroup();
   container.matrixAutoUpdate = false;
   for (const group of new Set(inst.meshByName.values())) {
     if (!group.parent) continue;

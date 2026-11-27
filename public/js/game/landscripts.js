@@ -322,12 +322,14 @@ class LandView {
       const o = w.nearestOpen(pt.x + 40 + simRandom() * 60, pt.y - 40 + simRandom() * 80);
       if (!o || w.cantReinforce(side, t.name, o.x, o.y)) continue;
       const k = rd.indexOf(t);
-      if (k >= 0) rd.splice(k, 1);
       const E = this.pools && this.pools[side];
       if (E) {
         const j = E.indexOf(entry);
         if (j >= 0) E.splice(j, 1);
       }
+      // the unit already left the reinforcement pool another way (the side's own drop, or the player)
+      if (k < 0) return false;
+      rd.splice(k, 1);
       Promise.resolve(w.reinforce(side, t.name, o.x, o.y, Math.atan2(at.y - o.y, at.x - o.x))).then(
         r => {
           if (r && r.typeName) r.onOut = onOut;
@@ -504,6 +506,16 @@ export class LandScripts {
     game.world.scriptHost = s.host;
     const w = game.world,
       before = w.onDeath;
+    const hurt = w.onHurt;
+    s.view.reportsHits = true;
+    w.onHurt = (u, from, amount) => {
+      if (hurt) hurt(u, from, amount);
+      const q = u.squad;
+      if (!q || !q.aiPlan || !s.view.onUnitHit) return;
+      const a = from && from !== u && from.type && !from.dead && from.squad && from.squad !== q ? from.squad : null,
+        aim = a && from.target;
+      s.view.onUnitHit(q, a, !!a && ((!!aim && (aim === u || aim.squad === q)) || a.foe === q));
+    };
     w.onDeath = (u,how,crusher) => {
       if (before) before(u,how,crusher);
       const q = u.squad;
@@ -719,8 +731,15 @@ export class LandScripts {
   }
 
   spawnNow(type, player, at) {
-    const w = this.game.world,
-      o = w.isOpen(at.x, at.y) ? at : w.nearestOpen(at.x, at.y) || at;
+    const w = this.game.world;
+    if ([...type.list('Behavior'), ...type.list('LandBehavior')].some(name => /^CAPTURE_POINT$/i.test(name))) {
+      // a capture point made by a script (the field base pads EaW-X puts on every reinforcement point) is set up
+      // as the map would have placed it, so it can be captured and, if it is a pad, built on
+      const side = player && player.id >= 0 && player.id < w.factions.length ? player.id : -1;
+      w.addCapturePoint({ type, pos: [at.x, at.y, w.groundZ(at.x, at.y)], rot: [0, 0, 0], scale: 1 }, side, { madeByScript: true });
+      return null;
+    }
+    const o = w.isOpen(at.x, at.y) ? at : w.nearestOpen(at.x, at.y) || at;
     const hostile = !!player && player === w.hostilePlayer;
     w.spawning = null;
     w.spawn(type.name, o.x, o.y, 0, hostile ? w.wild : player.id).catch(e => console.warn('script spawn', type.name, e));

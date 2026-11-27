@@ -10,6 +10,13 @@ let categoryMasks = null;
 export function categoryMask(name) {
   return categoryMasks?.get(String(name).trim().toUpperCase()) ?? 0n;
 }
+
+// A task force line such as "Corvette | Frigate = 0,3" names categories when every part is in the
+// GameObjectCategoryType enum; only otherwise are the parts read as object type names. The engine
+// reads the line this way round, so a mod object called Corvette does not hide the category.
+export function isCategoryList(names) {
+  return !!categoryMasks?.size && names.length > 0 && names.every(name => categoryMask(name) !== 0n);
+}
 const typeNames = new Map(),
   factionNames = new Map();
 function sealedLookup(names, map, name) {
@@ -417,7 +424,10 @@ export async function loadGameData(onProgress = () => {}, { language, universalP
   for (const t of db.types.values()) db.typesByCrc.set(crc32(t.name.toUpperCase()), t);
 
   const hpTexts = await Promise.all(hpFiles.map(f => fetchText(XML + f).then(t => (tick('Hardpoints'), t))));
-  for (const txt of hpTexts) if (txt) readObjects(parseXML(txt), db.hardpoints, null);
+  // mods derive hardpoints with Variant_Of_Existing_Type too; without the parent link they lose health, type and weapons
+  const hpVariants = [];
+  for (const txt of hpTexts) if (txt) readObjects(parseXML(txt), db.hardpoints, hpVariants);
+  for (const h of hpVariants) h.parent = acyclic(h, db.hardpoint(h.str('Variant_Of_Existing_Type')));
 
   const sfxTexts = await Promise.all(sfxFiles.map(f => fetchText(XML + f).then(t => (tick('Sound events'), t))));
   for (const txt of sfxTexts) if (txt) readObjects(parseXML(txt), db.sfx, null);

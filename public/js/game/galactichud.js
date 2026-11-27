@@ -5,6 +5,7 @@ import { CommandBar, loadHudAssets, loadFactionModel, loadShellModel, uiMeshes }
 import { displayIncome, intelligence } from './galacticfog.js';
 import { playerIncome, fiscalCycleSeconds, cycleNumber, incomeBreakdown, planetBreakdown } from './galacticeconomy.js';
 import { orders } from './galacticnet.js';
+import { surfaceReachable } from './galacticpolitics.js';
 import {
   availableUnits,
   productionBlock,
@@ -194,6 +195,7 @@ export class GalacticBar extends CommandBar {
     ]) {
       const b = (this.tabs[kind] = this.button(name, {
         onClick: () => {
+          if (this.tabDisabled(kind)) return;
           this.tab = kind;
           this.page = 0;
           this.refresh();
@@ -256,7 +258,7 @@ export class GalacticBar extends CommandBar {
         this.refresh();
       }
     );
-    if (this.buildBar) for (const b of this.slots) this.buildBar.wheel(b);
+    if (this.buildBar) this.buildBar.wheelArea(() => this.slots);
     this.queueSlots = [];
     for (let i = 0; i < 10; i++) {
       const name = 'queue' + String(i).padStart(2, '0'),
@@ -270,18 +272,25 @@ export class GalacticBar extends CommandBar {
       q.innerHTML = '<i class="ic"></i><i class="prog"></i><span></span>';
       this.positionCount(q.children[2], name);
       q.children[1].style.backgroundImage = css(this.tex(name, 'Build_Texture_Name'));
-      q.onclick = () => {
-        const item = q._item;
-        if (item && this.game.net) {
-          this.game.order(orders.cancel(this.game.galaxy, this.game.selected, item));
-          return;
-        }
-        if (item && cancelProduction(this.game.galaxy, this.game.selected, this.game.me, item))
-          this.game.audio.play(item.type.str('SFXEvent_Build_Cancelled'));
-        this.refresh();
+      q.onclick = () => this.cancelItem(q._item);
+      q.oncontextmenu = e => {
+        e.preventDefault();
+        this.cancelItem(q._item);
       };
       this.queueSlots.push(q);
     }
+  }
+
+  // left or right click on a queued item cancels it; cancelProduction refunds what was paid
+  cancelItem(item) {
+    const game = this.game;
+    if (!item) return;
+    if (game.net) {
+      game.order(orders.cancel(game.galaxy, game.selected, item));
+      return;
+    }
+    if (cancelProduction(game.galaxy, game.selected, game.me, item)) game.audio.play(item.type.str('SFXEvent_Build_Cancelled'));
+    this.refresh();
   }
 
   refreshAllegiance(g, p) {
@@ -381,15 +390,23 @@ export class GalacticBar extends CommandBar {
     });
   }
 
+  // As in the engine, the ground tab is disabled (and the space tab chosen) for a planet whose surface cannot be reached.
+  tabDisabled(kind) {
+    const planet = this.game.galaxy?.planets[this.game.selected];
+    return kind === 'ground' && !!planet && !surfaceReachable(planet);
+  }
+
   showTabArt() {
     for (const kind of ['space', 'ground']) {
       const img = this.tabArt[kind],
         name = kind === 'ground' ? 'b_planet_tab' : 'b_space_tab',
         c = this.comp(name),
         m = this.shell.get(name.toUpperCase());
-      const state = kind === this.tab ? 'selected' : this.tabHover === kind ? 'over' : 'normal';
+      const state = this.tabDisabled(kind) ? 'disabled' : kind === this.tab ? 'selected' : this.tabHover === kind ? 'over' : 'normal';
       const prop =
-        state === 'selected'
+        state === 'disabled' && c?.val('Disabled_Texture_Name')
+          ? 'Disabled_Texture_Name'
+          : state === 'selected'
           ? 'Selected_Texture_Name'
           : state === 'over' && c?.val('Mouse_Over_Texture_Name')
             ? 'Mouse_Over_Texture_Name'
@@ -398,7 +415,8 @@ export class GalacticBar extends CommandBar {
         r = texture && iconCanvasRect(texture);
       img.hidden = !r || !m || !truth(c?.val('Swap_Texture'));
       if (img.hidden) continue;
-      const off = (c.val(prop === 'Mouse_Over_Texture_Name' ? 'Mouse_Over_Offset' : 'Icon_Offset') || '0 0').split(/[\s,]+/).map(Number),
+      const offsetTag = { Mouse_Over_Texture_Name: 'Mouse_Over_Offset', Disabled_Texture_Name: 'Disabled_Offset' }[prop] || 'Icon_Offset';
+      const off = (c.val(offsetTag) || '0 0').split(/[\s,]+/).map(Number),
         scale = c.num('Scale', 1);
       img.src = iconUrl(texture);
       Object.assign(img.style, {
@@ -477,6 +495,11 @@ export class GalacticBar extends CommandBar {
     this.heroFocus(h);
   }
 
+  heroHover(h, on) {
+    if (on) this.game.heroTip = { id: h.e.id, type: h.type };
+    else if (this.game.heroTip?.id === h.e.id) this.game.heroTip = null;
+  }
+
   heroFocus(h) {
     const game = this.game,
       v = game.view;
@@ -486,8 +509,12 @@ export class GalacticBar extends CommandBar {
     if (!at) return;
     if (!transit && i >= 0) game.select(i);
     if (v.zoom > 0 || v.dir > 0) {
-      if (!transit && i >= 0 && v.planet !== i) game.zoomIn(i);
-      return;
+      if (!transit) {
+        if (i >= 0 && v.planet !== i) game.zoomIn(i);
+        return;
+      }
+      // A hero in hyperspace has no planet to zoom into: leave the planet it left and look at its fleet.
+      game.zoomOut();
     }
     v.x = at[0];
     v.y = at[1];
@@ -534,7 +561,10 @@ export class GalacticBar extends CommandBar {
     this.setButtonImage(this.zoomButton, 'icon', this.textureName('b_zoom', 'Icon_Alternate_Texture_Name', zoomIn ? 1 : 0));
     this.pauseButton.classList.toggle('sel', game.userPaused);
     this.pauseButton.setAttribute('aria-label', db.t(this.comp('b_play_pause')?.val('Tooltip_Text')));
+    if (this.tabDisabled(this.tab)) this.tab = 'space';
     for (const [kind, b] of Object.entries(this.tabs)) {
+      b.classList.toggle('dis', this.tabDisabled(kind));
+      b.setAttribute('aria-disabled', String(this.tabDisabled(kind)));
       b.classList.toggle('sel', kind === this.tab);
       b.setAttribute('aria-pressed', String(kind === this.tab));
     }
@@ -568,7 +598,8 @@ export class GalacticBar extends CommandBar {
         'icon',
         t.str('Icon_Name') || db.type(t.list('Company_Units')[0] || t.list('Squadron_Units')[0])?.str('Icon_Name')
       );
-      b.classList.toggle('dis', !!why || disabled(t.name));
+      b._barDisabled = !!why || disabled(t.name);
+      b.classList.toggle('dis', b._barDisabled || !!game.scriptUI?.scriptDisabled(b.dataset.control));
       const bright = queueRoom && t.num('Population_Value', 0) <= Math.max(0, popCap - popUsed),
         v = bright ? 255 : 128,
         base = t.num('Build_Cost_Credits', 0),

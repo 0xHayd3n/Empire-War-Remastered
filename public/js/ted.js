@@ -266,6 +266,9 @@ function parseEnvironment(r, c) {
   return env;
 }
 
+// the passability flag the land game reads as impassable (TERRAIN.IMPASSABLE)
+const OUTSIDE_MAP = 256;
+
 export function parseTED(buffer) {
   const r = new ChunkReader(buffer);
   const map = {
@@ -320,12 +323,15 @@ export function parseTED(buffer) {
     activeEnv = -1;
   const envs = [];
   visit(0, buffer.byteLength, 0);
-  if (map.terrain && passability && passability.end - passability.start >= map.terrain.width * map.terrain.height * 4) {
-    const { width, height, size: stride } = map.terrain,
-      raw = new Uint32Array(buffer.slice(passability.start, passability.start + width * height * 4)),
-      grid = new Uint32Array(stride * stride);
-    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) grid[y * stride + x] = raw[x * height + y];
-    map.terrain.passability = grid;
+  if (map.terrain && passability) {
+    const { size: n, width, depth } = map.terrain;
+    if (passability.end - passability.start >= width * depth * 4) {
+      // stored a column at a time (x outer); cells past a non-square map's shorter side are outside it
+      const raw = new Uint32Array(buffer.slice(passability.start, passability.start + width * depth * 4)),
+        grid = new Uint32Array(n * n).fill(OUTSIDE_MAP);
+      for (let y = 0; y < depth; y++) for (let x = 0; x < width; x++) grid[y * n + x] = raw[x * depth + y];
+      map.terrain.passability = grid;
+    }
   }
   if (map.terrain && envs[activeEnv]) map.environment = envs[activeEnv];
   map.environments = envs;
@@ -399,7 +405,7 @@ function parseZones(r, c) {
 }
 
 function parseTerrain(r, c) {
-  const t = { size: 0, heights: null, layerIndex: null, shade: null, layers: [], water: null, passability: null };
+  const t = { size: 0, width: 0, depth: 0, heights: null, layerIndex: null, shade: null, layers: [], water: null, passability: null };
   let grid = null;
   const ripples = [];
   for (const k of r.chunks(c.start, c.end)) {
@@ -409,6 +415,7 @@ function parseTerrain(r, c) {
       if (head.get(0)?.size !== 4 || (head.has(1) && head.get(1).size !== 4)) return null;
       t.width = r.u32(head.get(0).start);
       t.height = head.has(1) ? r.u32(head.get(1).start) : t.width;
+      t.depth = t.height;
       // Navigation and fog use a square backing store. Only authored cells belong to the mesh.
       t.size = Math.max(t.width, t.height);
       const str = id => (head.has(id) ? r.str(head.get(id).start, head.get(id).start + head.get(id).size) : '');
@@ -462,20 +469,24 @@ function parseTerrain(r, c) {
     }
   }
   if (t.water) t.water.ripples = ripples;
-  const { size: n, width, height } = t, count = width * height;
-  if (!grid || !n || width < 2 || height < 2 || grid.end - grid.start < count * 4) return null;
-  // Do not expand a malformed, extremely thin rectangle into an unbounded square allocation.
-  if (n * n > Math.max(1024 * 1024, 4 * count)) return null;
+  const width = t.width,
+    depth = t.depth || width;
+  if (width < 2 || depth < 2 || Math.max(width, depth) ** 2 > Math.max(1024 * 1024, 4 * width * depth)) return null;
+  if (!grid || !width || grid.end - grid.start < width * depth * 4) return null;
+  // The game is built on square terrain: a map that is not square is laid into a square of its longer side, the cells
+  // past its shorter side repeating its last row or column (passability marks them impassable, see parseTED).
+  const n = (t.size = Math.max(width, depth));
   t.heights = new Float32Array(n * n);
   t.layerIndex = new Uint8Array(n * n);
   t.shade = new Uint8Array(n * n);
-  if (width !== height) t.layerIndex.fill(255);
-  for (let src = 0; src < count; src++) {
-    const p = grid.start + src * 4, i = width === n ? src : Math.floor(src / width) * n + src % width;
-    t.heights[i] = (r.dv.getInt16(p, true) * 25) / 512;
-    t.layerIndex[i] = r.dv.getUint8(p + 2);
-    t.shade[i] = r.dv.getUint8(p + 3);
-  }
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++) {
+      const p = grid.start + (Math.min(y, depth - 1) * width + Math.min(x, width - 1)) * 4,
+        i = y * n + x;
+      t.heights[i] = (r.dv.getInt16(p, true) * 25) / 512;
+      t.layerIndex[i] = r.dv.getUint8(p + 2);
+      t.shade[i] = r.dv.getUint8(p + 3);
+    }
   if (!t.shade.some(s => s !== 0 && s !== 255)) t.shade.fill(254);
   return t;
 }

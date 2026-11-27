@@ -20,7 +20,7 @@ import { POSE_MARGIN } from './landinstances.js';
 import { cachedPose, settlePose } from './posecache.js';
 import { tickCraterGait, clearCraterGait } from './crater-gait.js';
 
-import { equip, tickBase, shieldStops, ungarrison, hostOf, specialAttack, looks, canExit } from './landbase.js';
+import { equip, tickBase, shieldStops, ungarrison, hostOf, specialAttack, looks, canExit, addCapturable } from './landbase.js';
 import { landAbilities, useAbility, abilityBlocked, refreshMods, tickAbilities, blastFactor } from './landabilities.js';
 import { tickClashes } from './landclash.js';
 import { BountyBook, bountyValue } from './bounty.js';
@@ -57,7 +57,8 @@ const SLICE_MS = 1.5;
 const SHAPE = { head: 18, waist: 8, foot: 1, step: 10 };
 const FOE_CELL = 128,
   FOE_PAD = 24,
-  CLUTTER_CELL = 128;
+  CLUTTER_CELL = 128,
+  FAR_APART = 1.0001;
 const _tilt = new THREE.Quaternion(),
   _turn = new THREE.Quaternion(),
   _up = new THREE.Vector3();
@@ -93,7 +94,70 @@ async function animOf(type, kind) {
   return null;
 }
 
+// Every animation clip of a type's model, by kind, loaded before a unit of it is made: setAnim draws its random
+// variant and start time only when a clip of the kind is there, so in a multiplayer battle the clips must not be
+// left to arrive whenever each machine's loads happen to finish.
+async function readyClips(type) {
+  const s = animSet(type);
+  if (!s.ready && s.listed) await s.listed.catch(() => {});
+  await Promise.all(
+    [...s.kinds].map(async ([kind, names]) => {
+      if (Array.isArray(s.clips.get(kind))) return;
+      const list = (await Promise.all(names.map(n => Promise.resolve(loadALA(n)).catch(() => null)))).filter(Boolean);
+      if (!Array.isArray(s.clips.get(kind))) s.clips.set(kind, list);
+    })
+  );
+}
+
+// What a company member needs from files before it can be made: its model and its four base animations, and in a
+// multiplayer battle (all) also every clip of its model and the models its hardpoints attach, whose bones give
+// the hardpoints their muzzles and turrets.
+async function memberAssets(t, all) {
+  const file = t.str('Land_Model_Name'),
+    data = file ? await loadALO(file).catch(() => null) : null;
+  if (!data) return { data: null, anims: [] };
+  const jobs = [Promise.all(['IDLE', 'MOVE', 'ATTACK', 'DIE'].map(k => animOf(t, k)))];
+  if (all) {
+    jobs.push(readyClips(t).catch(() => {}));
+    for (const name of t.list('HardPoints')) {
+      const h = db.hardpoint(name),
+        f = h && h.str('Model_To_Attach');
+      if (f) jobs.push(loadALO(f).catch(() => null));
+    }
+  }
+  const [anims] = await Promise.all(jobs);
+  return { data, anims };
+}
+
 const SETS = new Map();
+
+// Sight eyes are bucketed into every cell their reveal circle overlaps, so a target only tests the eyes of its own cell.
+const EYE_CELL = 256;
+const eyeKey = (cx, cy) => (cx + 32768) * 65536 + cy + 32768;
+function gridEyes(g, eyes) {
+  g ||= { cells: new Map(), big: [] };
+  for (const l of g.cells.values()) l.length = 0;
+  g.big.length = 0;
+  for (const e of eyes) {
+    const r = Math.sqrt(e[2]) + 1;
+    if (!(r <= EYE_CELL * 4)) {
+      g.big.push(e);
+      continue;
+    }
+    const x0 = Math.floor((e[0] - r) / EYE_CELL),
+      x1 = Math.floor((e[0] + r) / EYE_CELL),
+      y0 = Math.floor((e[1] - r) / EYE_CELL),
+      y1 = Math.floor((e[1] + r) / EYE_CELL);
+    for (let cx = x0; cx <= x1; cx++)
+      for (let cy = y0; cy <= y1; cy++) {
+        const k = eyeKey(cx, cy);
+        let l = g.cells.get(k);
+        if (!l) g.cells.set(k, (l = []));
+        l.push(e);
+      }
+  }
+  return g;
+}
 let LISTING = null;
 function animSet(type) {
   const base = (animOverride(type) || type.str('Land_Model_Name')).replace(/\.alo$/i, '').toUpperCase();
@@ -105,10 +169,13 @@ function animSet(type) {
   if (!s) {
     s = { kinds: new Map(), clips: new Map(), ready: false };
     SETS.set(base, s);
-    findFiles('MODELS\\\\' + base + '_[A-Z_]+_\\d\\d\\.ALA$')
+    s.listed = findFiles('MODELS\\\\' + base + '_[A-Z_]+_\\d\\d\\.ALA$')
       .then(list => {
         if (s.ready) return;
-        s.kinds = animKinds(base, list.map(f => f.split(/[\\/]/).pop().toUpperCase()));
+        s.kinds = animKinds(
+          base,
+          list.map(f => f.split(/[\\/]/).pop().toUpperCase())
+        );
         s.ready = true;
         for (const k of s.want || []) variants(type, k);
       })
@@ -459,6 +526,7 @@ class LandUnit {
     this.fixedHeading = undefined;
     this.scanAt = undefined;
     this.antiAir = undefined;
+    this.cone = undefined;
     this.unpowered = undefined;
     this.repath = undefined;
     this.lift = undefined;
@@ -658,6 +726,18 @@ class LandUnit {
   }
 }
 export const landUnit = fields => Object.assign(new LandUnit(), fields);
+// the sharing tags of an Income_Stream_Ability; a stream that carries none of them leaves split undefined
+export const incomeSplit = inc => {
+  const yes = k => /^(yes|true)$/i.test(inc.val(k).trim());
+  if (!inc.val('Split_Income_With_Allies').trim()) return {};
+  const share = inc.val('Owner_Income_Percentage').trim();
+  return {
+    split: yes('Split_Income_With_Allies'),
+    full: yes('Full_Amount_To_Everyone'),
+    favors: yes('Split_Favors_Owner'),
+    ownerShare: share ? inc.num('Owner_Income_Percentage', 0) : undefined
+  };
+};
 export const landHealth = (type, none) => type.num('Tactical_Health', none) * db.constants.num('Object_Max_Health_Multiplier_Land', 1);
 
 export class LandSquad {
@@ -692,6 +772,8 @@ export class LandSquad {
     this.crew = undefined;
     this.craft = undefined;
     this.noAI = undefined;
+    this.scriptNoAI = undefined;
+    this.scriptSelectable = undefined;
     this.selectable = undefined;
     this.advance = undefined;
     this.spot = undefined;
@@ -738,12 +820,12 @@ export class LandSquad {
   }
   get health() {
     let h = 0;
-    for (const u of this.members) h += u.health;
+    for (const u of this.members) if (u) h += u.health;
     return h;
   }
   get maxHealth() {
     let h = 0;
-    for (const u of this.members) h += u.maxHealth;
+    for (const u of this.members) if (u) h += u.maxHealth;
     return Math.max(h, this.full || 0);
   }
   get hitRadius() {
@@ -797,6 +879,7 @@ export class LandSquad {
     let h = 0,
       m = 0;
     for (const u of this.members) {
+      if (!u) continue;
       h += u.health;
       m += u.maxHealth;
     }
@@ -804,12 +887,12 @@ export class LandSquad {
   }
   get maxShield() {
     let m = 0;
-    for (const u of this.members) m += u.maxShield;
+    for (const u of this.members) if (u) m += u.maxShield;
     return m;
   }
   get shield() {
     let m = 0;
-    for (const u of this.members) m += u.shield;
+    for (const u of this.members) if (u) m += u.shield;
     return m;
   }
   abilityState(kind) {
@@ -909,7 +992,11 @@ const reversedTypes = new WeakMap();
 const reversedModifiers = t => {
   let v = reversedTypes.get(t);
   if (v === undefined) {
-    v = !!t.sub && t.sub('Abilities').some(a => a.all('Battlefield_Modifier_Ability').some(n => /^(yes|true)$/i.test(n.val('Reverse_Application_Logic').trim())));
+    v =
+      !!t.sub &&
+      t
+        .sub('Abilities')
+        .some(a => a.all('Battlefield_Modifier_Ability').some(n => /^(yes|true)$/i.test(n.val('Reverse_Application_Logic').trim())));
     reversedTypes.set(t, v);
   }
   return v;
@@ -1328,7 +1415,7 @@ export class LandWorld {
     if (!(e.type._fogs ??= /\b(HIDE_WHEN_FOGGED|TEAM)\b/i.test(e.type.str('LandBehavior') + ' ' + e.type.str('Behavior')))) return true;
     const v = e.vis && e.vis.get(T);
     if (!v) return false;
-    if (this.time - v.at <= 0.3) return true;
+    if (e.structure || this.time - v.at <= 0.3) return true;
     const C = (this.fowCell ||= db.constants.num('DesiredLandFOWCellSize', 15));
     return (
       this.time - v.at < (this.fowRegrow ??= db.constants.num('LandFOWRegrowTime', 6)) &&
@@ -1346,17 +1433,25 @@ export class LandWorld {
       if (T === undefined || done.has(T)) continue;
       done.add(T);
       if (this.revealUntil[side] > this.time) {
-        for (const u of this.units) if (!u.dead) (u.vis ||= new Map()).set(T, { at: this.time, cell: Math.floor(u.x / C) * 65536 + Math.floor(u.y / C) });
+        for (const u of this.units)
+          if (!u.dead) (u.vis ||= new Map()).set(T, { at: this.time, cell: Math.floor(u.x / C) * 65536 + Math.floor(u.y / C) });
         continue;
       }
       const eyes = [];
       for (const u of this.units)
         if (!u.dead && this.team[u.side] === T)
-          eyes.push([u.x, u.y, ((u.sight ??= u.type.num('Land_FOW_Reveal_Range', 150)) * (u.structure ? 1 : this.sightMod(u))) ** 2, u.z + Math.max(8, u.aimZ * 1.5)]);
+          eyes.push([
+            u.x,
+            u.y,
+            ((u.sight ??= u.type.num('Land_FOW_Reveal_Range', 150)) * (u.structure ? 1 : this.sightMod(u))) ** 2,
+            u.z + Math.max(8, u.aimZ * 1.5)
+          ]);
       for (const p of this.points)
-        if (p.side >= 0 && this.team[p.side] === T) eyes.push([p.x, p.y, (p.sight ??= p.type.num('Land_FOW_Reveal_Range', 250)) ** 2, p.z + 30]);
+        if (p.side >= 0 && this.team[p.side] === T)
+          eyes.push([p.x, p.y, (p.sight ??= p.type.num('Land_FOW_Reveal_Range', 250)) ** 2, p.z + 30]);
       for (const p of this.pings) if (this.team[p.side] === T) eyes.push([p.x, p.y, p.r ** 2, 1e6]);
       for (const r of this.reveals) if (r.until > this.time && r.team.id === T) eyes.push([r.x, r.y, r.r * r.r, 1e6]);
+      const g = (this.eyeGrid = gridEyes(this.eyeGrid, eyes));
       for (const u of this.units) {
         if (u.dead || this.team[u.side] === T || u.cloaked) continue;
         let seen = false;
@@ -1369,15 +1464,26 @@ export class LandWorld {
               break;
             }
         }
-        if (!seen)
-          for (const e of eyes)
-            if ((u.x - e[0]) ** 2 + (u.y - e[1]) ** 2 <= e[2] && (u.flies || this.sightLine(e[0], e[1], e[3], u))) {
-              seen = true;
-              break;
-            }
-        if (seen) (u.vis ||= new Map()).set(T, { at: this.time, cell: Math.floor(u.x / C) * 65536 + Math.floor(u.y / C) });
+        if (!seen) seen = this.eyesSee(g, u);
+        if (seen) {
+          const cell = Math.floor(u.x / C) * 65536 + Math.floor(u.y / C),
+            v = (u.vis ||= new Map()).get(T);
+          if (v) {
+            v.at = this.time;
+            v.cell = cell;
+          } else u.vis.set(T, { at: this.time, cell });
+        }
       }
     }
+  }
+
+  eyesSee(g, u) {
+    const l = g.cells.get(eyeKey(Math.floor(u.x / EYE_CELL), Math.floor(u.y / EYE_CELL)));
+    if (l)
+      for (const e of l) if ((u.x - e[0]) ** 2 + (u.y - e[1]) ** 2 <= e[2] && (u.flies || this.sightLine(e[0], e[1], e[3], u))) return true;
+    for (const e of g.big)
+      if ((u.x - e[0]) ** 2 + (u.y - e[1]) ** 2 <= e[2] && (u.flies || this.sightLine(e[0], e[1], e[3], u))) return true;
+    return false;
   }
 
   teamSides(side) {
@@ -1530,6 +1636,11 @@ export class LandWorld {
   route(ax, ay, bx, by, need = 1, opt = null) {
     const d = this.routeDanger && !(opt && opt.danger) ? { ...opt, danger: this.routeDanger } : opt;
     return this.paths.route(ax, ay, bx, by, this.maskOf(need), (d && d.clearance) || 0, d);
+  }
+
+  // route() !== null, for a caller that only asks whether there is a way
+  reaches(ax, ay, bx, by, need = 1) {
+    return this.paths.reaches(ax, ay, bx, by, this.maskOf(need), this.routeDanger ? { danger: this.routeDanger } : null);
   }
 
   moveGoal(from, x, y, need = 1) {
@@ -2282,6 +2393,7 @@ export class LandWorld {
         }
     }
     this.eyes = all ? null : eyes.map(e => [e[0], e[1], Math.sqrt(e[2])]);
+    const g = all ? null : (this.viewEyeGrid = gridEyes(this.viewEyeGrid, eyes));
     for (const u of this.units) {
       if (this.ally(u.side, side)) {
         u.seen = true;
@@ -2298,12 +2410,7 @@ export class LandWorld {
             break;
           }
       }
-      if (!seen && !u.cloaked)
-        for (const e of eyes)
-          if ((u.x - e[0]) ** 2 + (u.y - e[1]) ** 2 <= e[2] && (u.flies || this.sightLine(e[0], e[1], e[3], u))) {
-            seen = true;
-            break;
-          }
+      if (!seen && !u.cloaked) seen = this.eyesSee(g, u);
       if (!u.cloaked) {
         const C = (this.fowCell ||= db.constants.num('DesiredLandFOWCellSize', 15)),
           cell = Math.floor(u.x / C) * 65536 + Math.floor(u.y / C);
@@ -2509,7 +2616,8 @@ export class LandWorld {
   cantReinforce(side, typeName, x, y, extraPop = 0) {
     const t = db.type(typeName);
     if (!t) return 'Unknown unit';
-    if (this.popUsed(side) + extraPop + this.popOf(t) > this.popCap(side)) return this.shooter ? 'Too many units on the field' : 'Population limit reached - hold more reinforcement points';
+    if (this.popUsed(side) + extraPop + this.popOf(t) > this.popCap(side) && !this.shooter?.passesFieldCap(t))
+      return this.shooter ? 'Too many units on the field' : 'Population limit reached - hold more reinforcement points';
     if (
       !this.points.some(p => p.reinforce && p.side >= 0 && this.ally(p.side, side) && Math.hypot(p.x - x, p.y - y) <= p.enable) &&
       !(this.shooter && this.shooter.nearHome(side, x, y))
@@ -2711,6 +2819,19 @@ export class LandWorld {
     this.sites.push(u.padSite);
   }
 
+  // A capture point and what it carries, the same whether the map places it or a script makes one
+  // (Create_Generic_Object): a build pad when its type builds (TACTICAL_BUILD_OBJECTS), else a capturable structure
+  // unless it only reinforces. Returns the point and that structure, if any.
+  async addCapturePoint(o, side = -1, { madeByScript = false } = {}) {
+    const pt = await this.addPoint(o, side >= 0 && side < this.factions.length ? side : -1);
+    if (madeByScript) (this.scriptPoints ||= []).push(pt);
+    const behaviors = [...o.type.list('Behavior'), ...o.type.list('LandBehavior')].map(name => name.toUpperCase());
+    let capturable = null;
+    if (behaviors.includes('TACTICAL_BUILD_OBJECTS')) this.addPadSite(pt, o).spawnsGarrison = madeByScript;
+    else if (!pt.reinforce) capturable = await addCapturable(this, pt, o);
+    return { pt, capturable };
+  }
+
   addPadSite(pt, o) {
     const site = {
       base: false,
@@ -2724,7 +2845,11 @@ export class LandWorld {
       scale: o.scale || 1,
       options: null,
       structure: null,
-      building: null
+      building: null,
+      // what is finished on a pad a script made during the battle (the EaW-X field base pads) spawns its garrison:
+      // the engine passes a pad's spawn flag on to what is built on it and only map pads have theirs switched off at
+      // the start of the battle (our reading; the field bases' own texts list the squads they put out)
+      spawnsGarrison: false
     };
     this.sites.push(site);
     return site;
@@ -2857,7 +2982,8 @@ export class LandWorld {
             value: inc.num('Base_Income_Value', 0),
             every: inc.num('Base_Interval_In_Secs', 5),
             timer: 0,
-            skirmish: /^skirmish_automatic$/i.test(inc.val('Activation_Style').trim())
+            skirmish: /^skirmish_automatic$/i.test(inc.val('Activation_Style').trim()),
+            ...incomeSplit(inc)
           }
         : null,
       isBase: /COMMAND.?CENTER|PALACE/i.test(type.name),
@@ -2887,9 +3013,11 @@ export class LandWorld {
       }))
     });
     this.arm(u, type, side, () => 1);
+    if (!u.weapon) this.armHardPoints(u, type, inst);
+    this.attachHardpointModels(u, type, inst, side);
     if (site.pad || site.mdu) {
       const from = uc !== type ? uc : site.mdu?.type || site.pad;
-      u.noGarrison = !(from && isSpawner(from)) || !!site.mdu?.noGarrison;
+      u.noGarrison = site.spawnsGarrison ? false : !(from && isSpawner(from)) || !!site.mdu?.noGarrison;
     }
     const proj = u.weapon && u.weapon.proj;
     if (proj) {
@@ -2910,7 +3038,7 @@ export class LandWorld {
         : null;
       if (!tb) u.turn = 3;
       u.fixedHeading = !!tb;
-      this.muzzlesOf(u, type, inst);
+      if (!u.weapon.muzzles) this.muzzlesOf(u, type, inst);
     }
     squad.members.push(u);
     this.units.push(u);
@@ -3069,7 +3197,8 @@ export class LandWorld {
         return 'Already bought';
       return null;
     }
-    if (this.popPlanned(side) + this.popOf(type) > this.popCap(side)) return this.shooter ? 'Too many units on the field' : 'Population limit reached - hold more reinforcement points';
+    if (this.popPlanned(side) + this.popOf(type) > this.popCap(side))
+      return this.shooter ? 'Too many units on the field' : 'Population limit reached - hold more reinforcement points';
     return null;
   }
 
@@ -3608,12 +3737,17 @@ export class LandWorld {
       }
       return;
     }
+    // Whether the group takes a foe depends on the group and the foe, not on which of its squads saw the foe, and
+    // a refusal changes nothing: a foe the group has refused in this pass is not put to it again.
+    let refused = null;
     for (const q of live) {
       const f = this.marchNum(q, 'Attack_Move_Response_Range');
       if (f < 0) continue;
       const u = q.members.find(m => !m.dead && m.weapon) || q.members[0],
         e = this.nearestFoe(u, this.units, q.maxRange + f);
-      if (e && this.marchTake(G, live, e.squad)) return;
+      if (!e || (refused && refused.has(e.squad))) continue;
+      if (this.marchTake(G, live, e.squad)) return;
+      (refused ||= new Set()).add(e.squad);
     }
   }
 
@@ -3703,6 +3837,22 @@ export class LandWorld {
     }
   }
 
+  // Who an income stream pays and what part of it, as its Income_Stream_Ability says: Split_Income_With_Allies
+  // shares it with the owner's team, Full_Amount_To_Everyone gives each of them the whole amount (every stock FoC
+  // stream), else it is divided - Split_Favors_Owner keeps Owner_Income_Percentage for the owner and the allies
+  // divide the rest. A stream with no split tag at all keeps the earlier rule (base buildings pay the team).
+  incomeShares(u) {
+    const inc = u.income,
+      team = this.teamSides(u.side);
+    if (inc.split === undefined) return (u.site && u.site.base ? team : [u.side]).map(s => [s, 1]);
+    const allies = team.filter(s => s !== u.side);
+    if (!inc.split || !allies.length) return [[u.side, 1]];
+    if (inc.full) return team.map(s => [s, 1]);
+    if (!inc.favors || inc.ownerShare === undefined) return team.map(s => [s, 1 / team.length]);
+    const mine = Math.max(0, Math.min(1, inc.ownerShare));
+    return team.map(s => [s, s === u.side ? mine : (1 - mine) / allies.length]);
+  }
+
   losingTeamBonus(span) {
     const k = db.constants.num('Multiplayer_Losing_Team_Bonus_Credit_Percentage', 0);
     if (!(k > 0)) return;
@@ -3717,8 +3867,8 @@ export class LandWorld {
     const rate = new Array(n).fill(0);
     for (const u of this.units) {
       if (!u.structure || u.dead || u.side < 0 || !u.income || (u.income.skirmish && this.campaign)) continue;
-      for (const s of u.site && u.site.base ? this.teamSides(u.side) : [u.side])
-        if (s < n) rate[s] += (u.income.value * this.incomeMod(u, s)) / Math.max(1e-3, u.income.every);
+      for (const [s, part] of this.incomeShares(u))
+        if (s < n) rate[s] += (u.income.value * part * this.incomeMod(u, s)) / Math.max(1e-3, u.income.every);
     }
     losingSideBonus(
       [...byTeam.values()].map(g => ({ players: g, earn: g.reduce((a, s) => a + rate[s], 0), paid: true })),
@@ -3743,8 +3893,8 @@ export class LandWorld {
       if (!u.structure || u.dead || u.side < 0) continue;
       if (u.income && !this.shooter && !(u.income.skirmish && this.campaign) && (u.income.timer += dt) >= u.income.every) {
         u.income.timer -= u.income.every;
-        for (const s of u.site && u.site.base ? this.teamSides(u.side) : [u.side]) {
-          const g = u.income.value * this.incomeMod(u, s) * this.mods[s].credit;
+        for (const [s, part] of this.incomeShares(u)) {
+          const g = u.income.value * part * this.incomeMod(u, s) * this.mods[s].credit;
           this.credits[s] += g;
           if (this.earned) this.earned[s] += g;
         }
@@ -3835,13 +3985,23 @@ export class LandWorld {
     return { inst, land, off, scale: variant.num('Scale_Factor', craft.num('Scale_Factor', 1)) };
   }
 
-  async reinforce(side, typeName, x, y, heading = 0, landed = null, opts = null) {
+  // The landing transport comes in on a spawn turn (see spawnTurn): its craft squad, unit and place in the
+  // transports list are added in the order the reinforcements were called, between the same two ticks everywhere.
+  reinforce(side, typeName, x, y, heading = 0, landed = null, opts = null) {
+    const turn = this.spawnTurn(),
+      out = this.reinforceOn(turn, side, typeName, x, y, heading, landed, opts);
+    out.then(turn.done, turn.done);
+    return out;
+  }
+
+  async reinforceOn(turn, side, typeName, x, y, heading = 0, landed = null, opts = null) {
     const cargo = opts?.cargo || null;
     if (!landed && !cargo) this.onReinforce?.(this.factions[side], typeName);
     const type = db.type(typeName),
       craft = type && db.type(type.str('Company_Transport_Unit') || '');
     const pending = type && !landed && !cargo ? new LandSquad(this, type, side, { arriving: true }) : null;
     if (pending) {
+      // a placeholder member, so the arriving company counts as alive; the squad's health and shield sums skip it
       pending.members = [0];
       this.squads.push(pending);
     }
@@ -3851,7 +4011,13 @@ export class LandWorld {
     const variant = craft && (db.type(craft.str('Landing_Transport_Variant')) || craft);
     const file = craft && landingModel(craft, variant),
       inst = file && (await loadModel(file).catch(() => null));
+    const [land, off] = inst
+      ? await Promise.all(['LAND', 'TAKEOFF'].map(k => Promise.resolve(loadALA(animName(file, k))).catch(() => null)))
+      : [null, null];
+    await turn.ready;
     if (!inst) {
+      // what comes next takes turns of its own
+      turn.done();
       if (landed) return null;
       if (cargo) {
         await cargo(null);
@@ -3861,7 +4027,6 @@ export class LandWorld {
       Promise.resolve(q).then(unpend, unpend);
       return q;
     }
-    const [land, off] = await Promise.all(['LAND', 'TAKEOFF'].map(k => Promise.resolve(loadALA(animName(file, k))).catch(() => null)));
     const holder = new THREE.Group();
     holder.add(inst.root);
     const kinds = type.has('Company_Units')
@@ -3967,7 +4132,8 @@ export class LandWorld {
 
   transportNear(t) {
     for (const o of this.transports)
-      if (o !== t && !o.craft.dead && (o.landing || o.stage === 'unload') && o.stage !== 'leave' && Math.hypot(o.x - t.x, o.y - t.y) < 100) return true;
+      if (o !== t && !o.craft.dead && (o.landing || o.stage === 'unload') && o.stage !== 'leave' && Math.hypot(o.x - t.x, o.y - t.y) < 100)
+        return true;
     return false;
   }
   holdInTransport(t, q) {
@@ -4119,14 +4285,20 @@ export class LandWorld {
     const gap = foot ? 14 : 55,
       cols = foot ? 3 : per,
       apart = foot ? gap * (solo ? 1.1 : 4.5) : 60;
-    await Promise.all(
-      kinds.map(async (t, n) => {
+    // The members are made one after another in the order Company_Units lists them, never in the order their models
+    // and animations happen to finish loading: the unit list, the unit ids, the random numbers each member draws and
+    // where it finds room all follow that order, and in a multiplayer battle it must be the same on every machine.
+    // The loads run together first; the spawn turn keeps spawns asked for together in the order they were asked for,
+    // and the lockstep does not run the next tick while one is still loading (spawnsPending).
+    const turn = this.spawnTurn();
+    try {
+      const assets = await Promise.all(kinds.map(t => memberAssets(t, this.fixed)));
+      await turn.ready;
+      const place = (t, n) => {
         const { gi, i, inGroup } = slots[n],
           squad = squads[gi],
           side0 = (gi - (groups - 1) / 2) * apart;
-        const file = t.str('Land_Model_Name');
-        const data = file && (await loadALO(file).catch(() => null));
-        while (data && !this.fixed && this.sliceOver()) await this.nextSlice();
+        const { data, anims } = assets[n];
         let inst = null;
         try {
           inst = data ? buildModel(data, { teamColor: this.teamColorFor(side, t), livery: this.liveryFor(side) }) : null;
@@ -4134,8 +4306,7 @@ export class LandWorld {
           inst = null;
         }
         if (!inst) return;
-        const [idle, move, attack, die] = await Promise.all(['IDLE', 'MOVE', 'ATTACK', 'DIE'].map(k => animOf(t, k)));
-        while (!this.fixed && this.sliceOver()) await this.nextSlice();
+        const [idle, move, attack, die] = anims;
         const off = { x: -Math.floor(i / cols) * gap, y: ((i % cols) - (Math.min(cols, inGroup) - 1) / 2) * gap };
         const c = Math.cos(heading),
           s = Math.sin(heading);
@@ -4186,7 +4357,8 @@ export class LandWorld {
                 ? 'STRUCTURE'
                 : 'VEHICLE',
           hitRadius: t.num('Custom_Soft_Footprint_Radius', 0) || Math.max(4, t.num('Select_Box_Scale', 12) * 0.3),
-          captures: t.str('Influences_Capture_Point') ? t.bool('Influences_Capture_Point') : inCategory(t, 'INFANTRY'),
+          // as the engine: every type counts toward a capture point unless it sets Influences_Capture_Point to no
+          captures: t.str('Influences_Capture_Point') ? t.bool('Influences_Capture_Point') : true,
           lift: /hover|flying/i.test(t.str('MovementClass')) ? t.num('Hover_Offset', 0) : 0,
           flies: /flying/i.test(t.str('MovementClass')),
           hoverH: /LOCOMOTOR/i.test(t.str('LandBehavior') + ' ' + t.str('Behavior')) ? t.num('Hover_Height', 0) : 0,
@@ -4224,12 +4396,6 @@ export class LandWorld {
             if (!bb.isEmpty()) u.crushR = Math.max(bb.max.x - bb.min.x, bb.max.y - bb.min.y) * 0.5 * holder.scale.x;
           }
         }
-        const muzzle = name => {
-          const bone = inst.bone(name);
-          return bone
-            ? { bone, flash: [...inst.meshByName].filter(([k]) => k.startsWith(name.toUpperCase() + '_FLASH')).map(([, m]) => m) }
-            : null;
-        };
         if (u.weapon) this.muzzlesOf(u, t, inst);
         if (u.turret && u.turret.barrel && u.turret.barrel !== u.turret.bone && u.weapon && u.weapon.muzzles[0]) {
           const T = u.turret,
@@ -4243,7 +4409,14 @@ export class LandWorld {
             rb = mz.parent && mz.parent !== T.bone ? mz.parent : null,
             len = rb ? mz.position.length() : 0;
           if (rb && len > 0.5)
-            T.kick = { bone: rb, dir: mz.position.clone().normalize().applyQuaternion(rb.quaternion), len: len * BARREL_KICK.share, at: -99, base: new THREE.Vector3(), out: null };
+            T.kick = {
+              bone: rb,
+              dir: mz.position.clone().normalize().applyQuaternion(rb.quaternion),
+              len: len * BARREL_KICK.share,
+              at: -99,
+              base: new THREE.Vector3(),
+              out: null
+            };
         }
         if (t.has('Turret_Targets_Ground_Vehicles') || t.has('Turret_Targets_Anything_Else')) {
           const rank = k => t.num('Turret_Targets_' + k, 9999);
@@ -4254,60 +4427,13 @@ export class LandWorld {
             ELSE: rank('Anything_Else')
           };
         }
-        if (!landAbilities(t).some(d => d.kind === 'ROCKET_ATTACK'))
+        const rocket = landAbilities(t).some(d => d.kind === 'ROCKET_ATTACK');
+        if (!rocket || !u.weapon)
           for (const name of t.list('HardPoints')) {
             const h = db.hardpoint(name),
               P = h && db.type(h.str('Fire_Projectile_Type'));
             if (!P) continue;
-            (u.guns ||= []).push({
-              proj: P,
-              damage: h.num('Projectile_Damage', 0) > 0 ? h.num('Projectile_Damage', 0) : P.num('Projectile_Damage', 2),
-              damageType: P.str('Damage_Type'),
-              speed: P.num('Max_Speed', 10) * LOGIC_FPS,
-              pulses: Math.max(1, h.num('Fire_Pulse_Count', 1)),
-              pulseDelay: h.num('Fire_Pulse_Delay_Seconds', 0.2),
-              recharge:
-                (h.num('Fire_Min_Recharge_Seconds', 1) + h.num('Fire_Max_Recharge_Seconds', h.num('Fire_Min_Recharge_Seconds', 1))) / 2,
-              cooldown: simRandom() * 1.5,
-              left: 0,
-              timer: 0,
-              baseRange: h.num('Fire_Range_Distance', u.baseRange),
-              minRange: h.num('Fire_Min_Range_Distance', 0),
-              modes: hardpointModes(h),
-              get range() {
-                return u.cmods ? this.baseRange * u.cmods.factor(MOD.RANGE) : this.baseRange;
-              },
-              spare: new Set(h.list('Fire_Category_Restrictions').map(c => c.toUpperCase())),
-              inacc: h.tuples('Fire_Inaccuracy_Distance').map(([c, v]) => [c.toUpperCase(), parseFloat(v)]),
-              muzzles: [h.str('Fire_Bone_A'), h.str('Fire_Bone_B')]
-                .filter((b, i, l) => b && l.indexOf(b) === i)
-                .map(muzzle)
-                .filter(Boolean),
-              target: null,
-              scanAt: 0,
-              onHead: false,
-              cone: h.num('Fire_Cone_Width', 360) * DEG,
-              facing: hardpointFacing(inst, h),
-              hp: name,
-              fireSfx: h.str('Fire_SFXEvent').trim(),
-              turret: h.bool('Is_Turret')
-                ? {
-                    name: h.str('Turret_Bone_Name'),
-                    extent: h.num('Turret_Rotate_Extent_Degrees', 360) * DEG,
-                    speed: h.num('Turret_Rotate_Speed', 3),
-                    yaw: 0,
-                    bone: null,
-                    base: null,
-                    barrelName: h.str('Barrel_Bone_Name'),
-                    lift: h.num('Turret_Elevate_Extent_Degrees', 0) * DEG,
-                    pitch: 0,
-                    barrel: null,
-                    barrelBase: null,
-                    pitchAxis: 0,
-                    pitchSign: 1
-                  }
-                : null
-            });
+            (u.guns ||= []).push(this.hardpointGun(u, inst, name, h, P));
           }
         for (const g of u.guns || [])
           if (g.turret && !g.turret.bone && inst.bone) {
@@ -4317,7 +4443,10 @@ export class LandWorld {
               g.turret.base = b.quaternion.clone();
             }
           }
-        const lone = u.guns && !u.weapon && !u.turret ? u.guns.findIndex(g => !g.turret && Math.abs(g.facing) < 30 * DEG) : -1;
+        const lone =
+          u.guns && !u.weapon && !u.turret
+            ? u.guns.findIndex(g => !g.turret && Math.abs(g.facing) < 30 * DEG && (!rocket || g.modes & 1))
+            : -1;
         if (lone >= 0) {
           u.weapon = u.guns.splice(lone, 1)[0];
           if (!u.guns.length) u.guns = null;
@@ -4337,61 +4466,7 @@ export class LandWorld {
             T.pitchSign = Math.sign(best.dz);
           }
         }
-        for (const name of t.list('HardPoints')) {
-          const h = db.hardpoint(name),
-            file = h && h.str('Model_To_Attach'),
-            bone = file && inst.bone ? inst.bone(h.str('Attachment_Bone')) : null;
-          if (bone)
-            loadModel(file, { teamColor: this.teamColorFor(side, t), livery: this.liveryFor(side) })
-              .then(a => {
-                if (!a || !a.root || u.gone) return;
-                bone.add(a.root);
-                (inst.attached ||= []).push(a.root);
-                inst.pcGen = (inst.pcGen || 0) + 1;
-                const g = [...(u.guns || []), ...(u.weapon && u.weapon.hp ? [u.weapon] : [])].find(x => x.hp === name);
-                const own = g && g.turret && a.bone ? a.bone(g.turret.name) : null;
-                if (own) {
-                  g.turret.bone = own;
-                  g.turret.base = own.quaternion.clone();
-                }
-                if (g && !g.muzzles.length && a.bone)
-                  g.muzzles = [h.str('Fire_Bone_A'), h.str('Fire_Bone_B')]
-                    .filter((b, i, l) => b && l.indexOf(b) === i)
-                    .map(b => {
-                      const m = a.bone(b);
-                      return m ? { bone: m, flash: [] } : null;
-                    })
-                    .filter(Boolean);
-                const T = g && g.turret,
-                  B = T && T.lift > 0 && a.bone ? a.bone(T.barrelName) : null,
-                  M = g && g.muzzles[0] && g.muzzles[0].bone;
-                if (B && M && B !== T.bone) {
-                  const q0 = B.quaternion.clone(),
-                    p0 = new THREE.Vector3(),
-                    p1 = new THREE.Vector3(),
-                    ax = i => (i === 1 ? _Y : i === 0 ? _X : _Z);
-                  a.root.updateMatrixWorld(true);
-                  M.getWorldPosition(p0);
-                  let best = null;
-                  for (const i of [0, 1, 2]) {
-                    B.quaternion.copy(q0).multiply(_q.setFromAxisAngle(ax(i), 0.3));
-                    B.updateMatrixWorld(true);
-                    M.getWorldPosition(p1);
-                    const dz = p1.z - p0.z;
-                    if (!best || Math.abs(dz) > Math.abs(best.dz) * 1.5) best = { i, dz };
-                  }
-                  B.quaternion.copy(q0);
-                  B.updateMatrixWorld(true);
-                  if (best && Math.abs(best.dz) > 0.02) {
-                    T.barrel = B;
-                    T.barrelBase = q0;
-                    T.pitchAxis = best.i;
-                    T.pitchSign = Math.sign(best.dz);
-                  }
-                }
-              })
-              .catch(() => {});
-        }
+        this.attachHardpointModels(u, t, inst, side);
         if (t.sub) {
           const ab = t.sub('Abilities').flatMap(a => a.all('Absorb_Blaster_Ability'))[0];
           u.deflects = t
@@ -4405,9 +4480,21 @@ export class LandWorld {
               block: rb.num('Block_Chance', 0),
               arc: (rb.num('Reaction_Arc_In_Degrees', 180) * DEG) / 2,
               turn: Math.min(180, Math.max(0, rb.num('Max_Projectile_Redirection_Angle_In_Degrees', 180))) * DEG,
-              cats: rb.val('Applicable_Unit_Categories').split(/[\s,|]+/).filter(Boolean).map(c => c.toUpperCase()),
-              types: rb.val('Applicable_Unit_Types').split(/[\s,|]+/).filter(Boolean).map(c => c.toUpperCase()),
-              excluded: rb.val('Excluded_Unit_Types').split(/[\s,|]+/).filter(Boolean).map(c => c.toUpperCase()),
+              cats: rb
+                .val('Applicable_Unit_Categories')
+                .split(/[\s,|]+/)
+                .filter(Boolean)
+                .map(c => c.toUpperCase()),
+              types: rb
+                .val('Applicable_Unit_Types')
+                .split(/[\s,|]+/)
+                .filter(Boolean)
+                .map(c => c.toUpperCase()),
+              excluded: rb
+                .val('Excluded_Unit_Types')
+                .split(/[\s,|]+/)
+                .filter(Boolean)
+                .map(c => c.toUpperCase()),
               sfx: rb.val('SFXEvent_Activate')
             }));
           u.deflect = u.deflects.some(d => d.on);
@@ -4550,34 +4637,64 @@ export class LandWorld {
           const h = this.bonusSource(u.rider, side, u);
           if (h) h.carried = true;
         }
-      })
-    );
-    const made = squads.filter(q => q.members.length);
-    for (const squad of made) {
-      squad.full = Math.max(
-        squad.full,
-        squad.members.reduce((a, u) => a + u.maxHealth, 0)
-      );
-      squad.mates = made;
-      this.squads.push(squad);
-    }
-    if (type.has('Company_Units') && made[0])
-      this.carryBonuses(
-        type,
-        made[0].members[0],
-        made.flatMap(q => q.members.flatMap(u => (u.rider ? [u.type, u.rider] : [u.type])))
-      );
-    if (this.shooter && !saved) for (const q of made) this.shooter.made(q);
-    const exits = saved ? [] : this.unloadGrid(made, x, y, heading, from);
-    for (const q of squads) q.forming = false;
-    this.walkOut(exits, heading);
-    for (const q of made)
-      if (q.scriptQueue) {
-        const list = q.scriptQueue;
-        q.scriptQueue = null;
-        for (const go of list) go();
+      };
+      for (let n = 0; n < kinds.length; n++) {
+        // a single player battle spreads a big spawn over frames; the order stays the same
+        if (!this.fixed && this.sliceOver()) await this.nextSlice();
+        place(kinds[n], n);
       }
-    return made[0] || squads[0];
+      const made = squads.filter(q => q.members.length);
+      for (const squad of made) {
+        squad.full = Math.max(
+          squad.full,
+          squad.members.reduce((a, u) => a + u.maxHealth, 0)
+        );
+        squad.mates = made;
+        this.squads.push(squad);
+      }
+      if (type.has('Company_Units') && made[0])
+        this.carryBonuses(
+          type,
+          made[0].members[0],
+          made.flatMap(q => q.members.flatMap(u => (u.rider ? [u.type, u.rider] : [u.type])))
+        );
+      if (this.shooter && !saved) for (const q of made) this.shooter.made(q);
+      const exits = saved ? [] : this.unloadGrid(made, x, y, heading, from);
+      for (const q of squads) q.forming = false;
+      this.walkOut(exits, heading);
+      for (const q of made)
+        if (q.scriptQueue) {
+          const list = q.scriptQueue;
+          q.scriptQueue = null;
+          for (const go of list) go();
+        }
+      return made[0] || squads[0];
+    } finally {
+      turn.done();
+    }
+  }
+
+  // A turn for something the simulation adds once its files have loaded (a company, a landing transport). Turns are
+  // handed out when it is asked for, inside a tick, so the same on every machine; each waits for the turns before it,
+  // whichever of their loads finish first. While any is out the land lockstep holds the next tick (spawnsPending),
+  // so what it adds comes in between the same two ticks everywhere.
+  spawnTurn() {
+    const before = this.spawnTail || null;
+    let release;
+    const mine = new Promise(r => (release = r));
+    this.spawnTail = mine;
+    this.spawnsPending = (this.spawnsPending || 0) + 1;
+    let open = true;
+    return {
+      ready: before || Promise.resolve(),
+      done: () => {
+        if (!open) return;
+        open = false;
+        this.spawnsPending--;
+        if (this.spawnTail === mine) this.spawnTail = null;
+        release();
+      }
+    };
   }
 
   unloadGrid(made, x, y, heading, from = null) {
@@ -4913,7 +5030,9 @@ export class LandWorld {
       t = u.type,
       lb = t.str('LandBehavior') + ' ' + t.str('Behavior'),
       reacts = /\bUNIT_AI\b/i.test(lb),
-      f = Math.max(0, t.num('Idle_Chase_Range', 0)) + (reacts && /\bDAMAGE_TRACKING\b/i.test(lb) ? t.num('Autonomous_Move_Extension_Vs_Attacker', 0) : 0);
+      f =
+        Math.max(0, t.num('Idle_Chase_Range', 0)) +
+        (reacts && /\bDAMAGE_TRACKING\b/i.test(lb) ? t.num('Autonomous_Move_Extension_Vs_Attacker', 0) : 0);
     if (q.march) {
       const G = this.marchGroup(q),
         live = this.marchSquads(G);
@@ -4959,9 +5078,10 @@ export class LandWorld {
       squad.aimAt = null;
       return;
     }
-    const reach = Math.min(...m.map(u => u.range)) * 0.8;
+    const rim = this.edgeOf(foe.members[0]),
+      reach = Math.min(...m.map(u => u.range)) * 0.8 + rim;
     if (d <= reach) return;
-    if (m.some(u => u.setup) && d <= Math.min(...m.map(u => u.range))) return;
+    if (m.some(u => u.setup) && d <= Math.min(...m.map(u => u.range)) + rim) return;
     let gx = b.x - ((b.x - a.x) / d) * reach,
       gy = b.y - ((b.y - a.y) / d) * reach;
     const L = squad.leash;
@@ -5048,6 +5168,161 @@ export class LandWorld {
     if (u.weapon) u.range = u.weapon.reach;
   }
 
+  // One gun per weapon hardpoint, each with its own cone, turret and target, shared by units and structures.
+  hardpointGun(u, inst, name, h, P) {
+    const muzzle = b => {
+      const bone = inst.bone(b);
+      return bone
+        ? { bone, flash: [...inst.meshByName].filter(([k]) => k.startsWith(b.toUpperCase() + '_FLASH')).map(([, m]) => m) }
+        : null;
+    };
+    return {
+      proj: P,
+      damage: h.num('Projectile_Damage', 0) > 0 ? h.num('Projectile_Damage', 0) : P.num('Projectile_Damage', 2),
+      damageType: P.str('Damage_Type'),
+      speed: P.num('Max_Speed', 10) * LOGIC_FPS,
+      pulses: Math.max(1, h.num('Fire_Pulse_Count', 1)),
+      pulseDelay: h.num('Fire_Pulse_Delay_Seconds', 0.2),
+      recharge: (h.num('Fire_Min_Recharge_Seconds', 1) + h.num('Fire_Max_Recharge_Seconds', h.num('Fire_Min_Recharge_Seconds', 1))) / 2,
+      cooldown: simRandom() * 1.5,
+      left: 0,
+      timer: 0,
+      baseRange: h.num('Fire_Range_Distance', u.baseRange ?? u.range),
+      minRange: h.num('Fire_Min_Range_Distance', 0),
+      modes: hardpointModes(h),
+      get range() {
+        return u.cmods ? this.baseRange * u.cmods.factor(MOD.RANGE) : this.baseRange;
+      },
+      spare: new Set(h.list('Fire_Category_Restrictions').map(c => c.toUpperCase())),
+      inacc: h.tuples('Fire_Inaccuracy_Distance').map(([c, v]) => [c.toUpperCase(), parseFloat(v)]),
+      muzzles: [h.str('Fire_Bone_A'), h.str('Fire_Bone_B')]
+        .filter((b, i, l) => b && l.indexOf(b) === i)
+        .map(muzzle)
+        .filter(Boolean),
+      target: null,
+      scanAt: 0,
+      onHead: false,
+      cone: h.num('Fire_Cone_Width', 360) * DEG,
+      facing: hardpointFacing(inst, h),
+      hp: name,
+      fireSfx: h.str('Fire_SFXEvent').trim(),
+      turret: h.bool('Is_Turret')
+        ? {
+            name: h.str('Turret_Bone_Name'),
+            extent: h.num('Turret_Rotate_Extent_Degrees', 360) * DEG,
+            speed: h.num('Turret_Rotate_Speed', 3),
+            yaw: 0,
+            bone: null,
+            base: null,
+            barrelName: h.str('Barrel_Bone_Name'),
+            lift: h.num('Turret_Elevate_Extent_Degrees', 0) * DEG,
+            pitch: 0,
+            barrel: null,
+            barrelBase: null,
+            pitchAxis: 0,
+            pitchSign: 1
+          }
+        : null
+    };
+  }
+
+  // Hardpoints that name a Model_To_Attach get that model on their Attachment_Bone, for units and structures alike;
+  // the attached model's own turret and muzzle bones then drive the matching gun.
+  attachHardpointModels(u, t, inst, side) {
+    for (const name of t.list('HardPoints')) {
+      const h = db.hardpoint(name),
+        file = h && h.str('Model_To_Attach'),
+        bone = file && inst.bone ? inst.bone(h.str('Attachment_Bone')) : null;
+      if (bone)
+        loadModel(file, { teamColor: this.teamColorFor(side, t) })
+          .then(a => {
+            if (!a || !a.root || u.gone) return;
+            bone.add(a.root);
+            (inst.attached ||= []).push(a.root);
+            (inst.attachedModels ||= []).push(a);
+            inst.pcGen = (inst.pcGen || 0) + 1;
+            const g = [...(u.guns || []), ...(u.weapons || []), ...(u.weapon && u.weapon.hp ? [u.weapon] : [])].find(
+              x => x && x.hp === name
+            );
+            const own = g && g.turret && a.bone ? a.bone(g.turret.name) : null;
+            if (own) {
+              g.turret.bone = own;
+              g.turret.base = own.quaternion.clone();
+            }
+            // A turret's muzzles turn with it, so its own model's fire bones win over same-named hull bones.
+            const mine =
+              g && a.bone && (!g.muzzles.length || g.turret)
+                ? [h.str('Fire_Bone_A'), h.str('Fire_Bone_B')]
+                    .filter((b, i, l) => b && l.indexOf(b) === i)
+                    .map(b => {
+                      const m = a.bone(b);
+                      return m ? { bone: m, flash: [] } : null;
+                    })
+                    .filter(Boolean)
+                : [];
+            if (mine.length) g.muzzles = mine;
+            const T = g && g.turret,
+              B = T && T.lift > 0 && a.bone ? a.bone(T.barrelName) : null,
+              M = g && g.muzzles[0] && g.muzzles[0].bone;
+            if (B && M && B !== T.bone) {
+              const q0 = B.quaternion.clone(),
+                p0 = new THREE.Vector3(),
+                p1 = new THREE.Vector3(),
+                ax = i => (i === 1 ? _Y : i === 0 ? _X : _Z);
+              a.root.updateMatrixWorld(true);
+              M.getWorldPosition(p0);
+              let best = null;
+              for (const i of [0, 1, 2]) {
+                B.quaternion.copy(q0).multiply(_q.setFromAxisAngle(ax(i), 0.3));
+                B.updateMatrixWorld(true);
+                M.getWorldPosition(p1);
+                const dz = p1.z - p0.z;
+                if (!best || Math.abs(dz) > Math.abs(best.dz) * 1.5) best = { i, dz };
+              }
+              B.quaternion.copy(q0);
+              B.updateMatrixWorld(true);
+              if (best && Math.abs(best.dz) > 0.02) {
+                T.barrel = B;
+                T.barrelBase = q0;
+                T.pitchAxis = best.i;
+                T.pitchSign = Math.sign(best.dz);
+              }
+            }
+          })
+          .catch(() => {});
+    }
+  }
+
+  // A structure with no weapon of its own fights with its hardpoints, each one a gun that aims and fires on its own.
+  armHardPoints(u, t, inst) {
+    for (const name of t.list('HardPoints')) {
+      const h = db.hardpoint(name),
+        P = h && db.type(h.str('Fire_Projectile_Type'));
+      if (P) (u.guns ||= []).push(this.hardpointGun(u, inst, name, h, P));
+    }
+    if (!u.guns) return;
+    for (const g of u.guns) {
+      const b = g.turret && inst.bone(g.turret.name);
+      if (b) {
+        g.turret.bone = b;
+        g.turret.base = b.quaternion.clone();
+      }
+    }
+    u.range = Math.max(...u.guns.map(g => g.range));
+  }
+
+  barred(u, e) {
+    const no = (u.type._barred ??= u.type
+      .str('Attack_Category_Restrictions')
+      .split(/[\s,|]+/)
+      .filter(Boolean)
+      .map(c => c.toUpperCase()));
+    if (!no.length) return false;
+    const cats = e.type.categories();
+    for (const c of no) if (cats.has(c)) return true;
+    return false;
+  }
+
   muzzlesOf(u, t, inst) {
     const name = (t.str('Muzzle_Bone_Name').trim() || 'MuzzleA').toUpperCase(),
       out = [];
@@ -5070,7 +5345,7 @@ export class LandWorld {
     if (this.aiSuspended && among === this.units) return null;
     if (u.retreating) return null;
     const auto = among === this.units;
-    if (auto && u.x !== undefined) among = this.foesNear(u.x, u.y, reach);
+    if (auto && u.x !== undefined) among = this.foesNear(u.x, u.y, reach + this.edgeMost());
     const w = gun || u.weapon,
       first = this.pickFoe(u, among, reach, gun, null, auto);
     if (!first || !w || !this.clearShooting() || !this.shotBlocked(u, first, w)) return first;
@@ -5084,20 +5359,57 @@ export class LandWorld {
     return first;
   }
 
+  headTurns(u) {
+    return !u.weapon && !u.path.length && !u.rooted && !u.setup && !u.flies && u.speed > 0 && u.turn > 0;
+  }
+
+  edgeOf(e) {
+    return e.structure && e.hitRadius > 0 ? e.hitRadius : 0;
+  }
+
+  edgeMost() {
+    if (this.edgeAt !== this.time) {
+      this.edgeAt = this.time;
+      let m = 0;
+      for (const e of this.units) if (e && e.structure && !e.dead && e.hitRadius > m) m = e.hitRadius;
+      this.edgeMax = m;
+    }
+    return this.edgeMax;
+  }
+
   pickFoe(u, among, reach, gun, skip, auto = false) {
     const aa = (u.antiAir ??= !!(
       u.flies ||
       (u.ranks ? u.ranks.AIR < 9999 : /ANTIAIR/i.test(u.type.str('CategoryMask').replace(/\s/g, '')) || /ANTI_AIR/i.test(u.type.name))
     ));
-    const set = gun ? null : setOf(u),
+    const set = setOf(u),
       low = (this.healthLow ??= db.constants.num('Health_Low_Percent_Threshold', 0.33));
     let best = null,
       bd = Infinity,
       bl = false,
       bf = null,
-      bp = Infinity;
+      bp = Infinity,
+      shareOf = null,
+      share = 0;
     const T = this.team,
       mine = u.confuseUntil > this.time ? undefined : T[u.side];
+    // whether u may take e at all: sight, categories, the gun's arc
+    const allowed = e => {
+      if (!this.targetEnemy(u, e) || e.x === undefined || (skip && skip.has(e))) return false;
+      if (gun && gun.spare.has(e.flies ? 'AIR' : e.kind)) return false;
+      if (!e.spot && this.barred(u, e)) return false;
+      if (this.shooter && !this.shooter.sees(u, e)) return false;
+      if (gun && !gun.turret && gun.cone < Math.PI * 2) {
+        let a = Math.atan2(e.y - u.y, e.x - u.x) - u.heading - (gun.facing || 0);
+        a = Math.atan2(Math.sin(a), Math.cos(a));
+        if (Math.abs(a) > gun.cone / 2 + (gun.onHead ? u.turret.extent : 0) && !(gun.onHead && this.headTurns(u))) return false;
+      }
+      return true;
+    };
+    // Most foes in reach lose to the best one found so far, and for those the answer above does not matter: it is
+    // asked only of a foe that would be taken. Not in the shooter, whose sight test keeps its own state and has to
+    // be asked of every foe as before.
+    const late = !this.shooter;
     for (const e of among) {
       if (mine !== undefined && e && T[e.side] === mine) continue;
       if (
@@ -5109,24 +5421,26 @@ export class LandWorld {
         e.inside ||
         (auto && e.noOpportunity) ||
         e.side < 0 ||
-        (e.flies && !aa && !gun) ||
-        !this.targetEnemy(u, e) ||
-        e.x === undefined ||
-        (skip && skip.has(e))
+        (e.flies && !aa && !gun)
       )
         continue;
-      if (gun && gun.spare.has(e.flies ? 'AIR' : e.kind)) continue;
-      const d = (e.x - u.x) ** 2 + (e.y - u.y) ** 2;
-      if (d >= reach * reach) continue;
-      if (this.shooter && !this.shooter.sees(u, e)) continue;
-      if (gun && !gun.turret && gun.cone < Math.PI * 2) {
-        let a = Math.atan2(e.y - u.y, e.x - u.x) - u.heading - (gun.facing || 0);
-        a = Math.atan2(Math.sin(a), Math.cos(a));
-        if (Math.abs(a) > gun.cone / 2 + (gun.onHead ? u.turret.extent : 0)) continue;
+      // out of reach is the usual answer, so it is asked before the sight and category tests, which cost more
+      const d = (e.x - u.x) ** 2 + (e.y - u.y) ** 2,
+        far = reach + this.edgeOf(e);
+      if (d >= far * far) continue;
+      if (!late && !allowed(e)) continue;
+      let p = this.priorityFor(set, e);
+      if (p < 0) {
+        if (auto) continue;
+        p = 1e18;
       }
-      const p = this.priorityFor(set, e);
-      if (p < 0) continue;
-      const l = this.healthShare(e) <= low;
+      // the members of a company share one health figure, and they come one after another
+      const q = e.squad;
+      if (!(q && q === shareOf && q.members.length > 1)) {
+        share = this.healthShare(e);
+        shareOf = q;
+      }
+      const l = share <= low;
       let take = !best;
       if (!take) {
         if (l !== bl) take = l;
@@ -5137,7 +5451,7 @@ export class LandWorld {
           take = f !== bf ? f : d < bd;
         }
       }
-      if (take) {
+      if (take && (!late || allowed(e))) {
         bp = p;
         bl = l;
         bd = d;
@@ -5172,7 +5486,18 @@ export class LandWorld {
   canFireNow(u, e, gun) {
     if (gun) return true;
     if (!u.weapon) return false;
-    let a = Math.atan2(e.y - u.y, e.x - u.x) - u.heading;
+    const dx = e.x - u.x,
+      dy = e.y - u.y;
+    // a unit that fires all round has every bearing inside its cone: no angle to work out, as long as there is one
+    if (
+      !u.turret &&
+      (u.cone ??= (u.type.num('Turret_Rotate_Extent_Degrees', 360) || 360) * DEG) >= Math.PI &&
+      dx === dx &&
+      dy === dy &&
+      Number.isFinite(u.heading)
+    )
+      return true;
+    let a = Math.atan2(dy, dx) - u.heading;
     a = Math.atan2(Math.sin(a), Math.cos(a));
     if (u.turret) {
       const d = a - u.turret.yaw;
@@ -5186,7 +5511,7 @@ export class LandWorld {
       ln = this.healthShare(n) <= low,
       lc = this.healthShare(c) <= low;
     if (ln !== lc) return ln;
-    const set = gun ? null : setOf(u),
+    const set = setOf(u),
       pn = this.priorityFor(set, n),
       pc = this.priorityFor(set, c);
     if (pn < 0) return false;
@@ -5274,7 +5599,7 @@ export class LandWorld {
       return t;
     }
     u.rethinkAt = this.time + (30 + Math.floor(simRandom() * 16)) / LOGIC_FPS;
-    if (this.priorityFor(gun ? null : setOf(u), t) === 1 || this.sticky(u, t)) return t;
+    if (this.priorityFor(setOf(u), t) === 1 || this.sticky(u, t)) return t;
     const n = this.nearestFoe(u, this.units, reach, gun);
     return n && n !== t && this.beats(u, n, t, gun) ? n : t;
   }
@@ -5302,7 +5627,8 @@ export class LandWorld {
       ),
       b = unit(cross(a, d)),
       an = unit(a);
-    const th = Math.random() * Math.PI * 2,
+    // the spinning wreck stays a unit until it hits the ground, so its path is the simulation's: the sim generator
+    const th = simRandom() * Math.PI * 2,
       sn = Math.sin(th),
       cs = Math.cos(th),
       r = L * 0.3;
@@ -5349,7 +5675,13 @@ export class LandWorld {
     let KIND = (clone && clone.str('Specific_Death_Anim_Type').toUpperCase()) || (how && u.foot ? how : 'DIE');
     const index = clone && clone.str('Specific_Death_Anim_Index') !== '' ? clone.num('Specific_Death_Anim_Index', 0) : -1;
     const P = 'Death_Persistence_Duration',
-      lie = inCategory(u.type, 'INFANTRY') ? db.constants.num('Override_Death_Persistence_Duration', 30) : src.has(P) ? src.num(P, -1) : u.structure ? 0 : -1;
+      lie = inCategory(u.type, 'INFANTRY')
+        ? db.constants.num('Override_Death_Persistence_Duration', 30)
+        : src.has(P)
+          ? src.num(P, -1)
+          : u.structure
+            ? 0
+            : -1;
     u.endFx = src.list('Death_Explosions_End');
     u.endSfx = src.str('Death_SFXEvent_End_Die');
     u.fadeTime = src.num('Death_Fade_Time', 0.25);
@@ -5418,7 +5750,8 @@ export class LandWorld {
       if (this.retreatState.phase === 'flight') return;
       amount *= this.retreatState.damaged(u.side);
     }
-    if (shot && !this.shooter && from && from.type && !(from.mod && from.mod.noDiminish) && normalDamage(shot)) amount *= diminishedHit(u, this.time);
+    if (shot && !this.shooter && from && from.type && !(from.mod && from.mod.noDiminish) && normalDamage(shot))
+      amount *= diminishedHit(u, this.time);
     if (this.shooter) amount *= this.shooter.footTaken(u);
     amount *=
       (from instanceof LandUnit && !from.dead ? this.combatFactor(from, MOD.DAMAGE) : 1) *
@@ -5436,6 +5769,7 @@ export class LandWorld {
     if (contact && amount > soak && u.health > 0) this.onArmorHit?.(u,contact,amount-soak);
     u.lastHit = this.time;
     this.trackDamage(u, amount, from);
+    if (this.onHurt && amount > 0) this.onHurt(u, from, amount);
     if (from && from.side !== undefined) u.hitBy = from.side;
     if (from && from !== u && from.type && !from.dead) {
       const m = (u.hurtBy ||= new Map()),
@@ -5484,6 +5818,7 @@ export class LandWorld {
       !u.path.length &&
       !u.inside &&
       !(u.once && u.once !== 'attack' && this.time < u.onceEnd) &&
+      !(u.cast > this.time) &&
       (u.squad.spread || 1) <= 1 &&
       simRandom() < 0.35
     ) {
@@ -5493,7 +5828,16 @@ export class LandWorld {
       const firing = u.animKind === 'ATTACKIDLE' || u.animKind === 'attack' || u.once === 'attack';
       this.oneShot(u, (firing ? 'ATTACKFLINCH' : 'FLINCH') + side, firing ? 'attack' : 'idle');
     }
-    if (from && !from.dead && !this.ally(from.side, u.side) && !u.structure && !u.squad.foe && !u.squad.busy && (!u.path.length || u.squad.march)) this.retaliate(u, from);
+    if (
+      from &&
+      !from.dead &&
+      !this.ally(from.side, u.side) &&
+      !u.structure &&
+      !u.squad.foe &&
+      !u.squad.busy &&
+      (!u.path.length || u.squad.march)
+    )
+      this.retaliate(u, from);
     if (u.health <= 0) {
       if (u.flies && u.type.bool('Spin_Away_On_Death') && simRandom() <= u.type.num('Spin_Away_On_Death_Chance', 0)) {
         u.spin = this.spinAway(u);
@@ -5562,7 +5906,13 @@ export class LandWorld {
     }
     const P = w.proj,
       cat = categoryOf(P);
-    const tbs = t.type && t.inst?.bone ? (t.targetBones ??= t.type.list('Target_Bones').map(n => t.inst.bone(n)).filter(Boolean)) : null;
+    const tbs =
+      t.type && t.inst?.bone
+        ? (t.targetBones ??= t.type
+            .list('Target_Bones')
+            .map(n => t.inst.bone(n))
+            .filter(Boolean))
+        : null;
     let tx = t.x,
       ty = t.y,
       tz = t.z + t.aimZ;
@@ -5877,7 +6227,8 @@ export class LandWorld {
     return null;
   }
   deflects(t, s) {
-    if (!t.deflect || s.turned || !s.from || s.from.dead || t.stunUntil > this.time || !/LASER/i.test(s.w.proj.str('Projectile_Category'))) return false;
+    if (!t.deflect || s.turned || !s.from || s.from.dead || t.stunUntil > this.time || !/LASER/i.test(s.w.proj.str('Projectile_Category')))
+      return false;
     const pick = this.deflectFor(t, s);
     if (!pick) return false;
     const [D, back] = pick;
@@ -5893,7 +6244,20 @@ export class LandWorld {
         d = 150 + simRandom() * 150,
         x = t.x + Math.cos(a) * d,
         y = t.y + Math.sin(a) * d;
-      const spot = { x, y, z: this.groundZ(x, y), aimZ: 0, kind: 'STRUCTURE', hitRadius: -1, side: this.wild, dead: false, flies: false, type: t.type, spot: true, path: [] };
+      const spot = {
+        x,
+        y,
+        z: this.groundZ(x, y),
+        aimZ: 0,
+        kind: 'STRUCTURE',
+        hitRadius: -1,
+        side: this.wild,
+        dead: false,
+        flies: false,
+        type: t.type,
+        spot: true,
+        path: []
+      };
       this.fire(t, spot, { ...s.w, muzzles: null, quiet: true, blastR: 0, blastD: 0 });
       const n = this.shots[this.shots.length - 1];
       n.turned = true;
@@ -5999,13 +6363,15 @@ export class LandWorld {
       let hit = null,
         ht = 2;
       for (const o of this.foesNear(s.x, s.y, step + this.hitMax, step)) {
-        // The shared grid searches for the largest hull on the map. Most of
-        // the returned infantry cannot reach this segment. Cheap per-unit
-        // rejection first; keep eligibility and exact cast order for survivors.
-        const dx = o.x - s.x, dy = o.y - s.y;
-        const coarse = Math.max(o.hitRadius, o.shotBound || 0) + step;
-        const distance2 = dx * dx + dy * dy;
-        if (distance2 > coarse * coarse && o.collModel === (o.inst && o.inst.model)) continue;
+        // Nearly every unit the grid hands over is too far for this step. Nothing dead is ever struck, and for a
+        // unit whose collision mesh is already known the reach test below can be asked first, before whose side
+        // it is on.
+        if (o.dead) continue;
+        const distance2 = (o.x - s.x) ** 2 + (o.y - s.y) ** 2;
+        if (o.coll !== undefined && o.collModel === (o.inst && o.inst.model)) {
+          const near = Math.max(o.coll ? o.collR : o.hitRadius, o.collBall || 0, o.shotBound || 0) + step;
+          if (distance2 > near * near) continue;
+        }
         if (!this.shotMeets(o, s) && !(this.shooter && this.shooter.blocks(o, s))) continue;
         const C = this.meshOf(o),
           r = C ? Math.max(o.collR, this.weaponCasts?.enabled ? o.shotR || 0 : 0) : o.hitRadius,
@@ -6208,7 +6574,10 @@ export class LandWorld {
       if (!this.deflects(hit, s))
         this.hurt(
           hit,
-          this.shotDamage(s) * db.damageMod(s.w.damageType, hit.armor) * this.absorbs(hit, s) * (this.shooter ? this.shooter.hitScale(s, hit) : 1),
+          this.shotDamage(s) *
+            db.damageMod(s.w.damageType, hit.armor) *
+            this.absorbs(hit, s) *
+            (this.shooter ? this.shooter.hitScale(s, hit) : 1),
           s.from,
           '',
           s.w.proj,
@@ -6227,8 +6596,10 @@ export class LandWorld {
     if (this.shooter && !this.shooter.manned(u)) return;
     let hidden = null,
       hideG = null,
-      seen = false;
-    const own = u.squad.direct && !(this.shooter && this.shooter.artyOf(u.squad)) ? u.squad.direct : null;
+      seen = false,
+      face = null;
+    const own = u.squad.direct && !(this.shooter && this.shooter.artyOf(u.squad)) ? u.squad.direct : null,
+      foe = u.squad.foe && u.squad.foe.members.length ? u.squad.foe : null;
     for (const g of u.guns) {
       g.cooldown -= dt;
       if (!modeAllows(g.modes, u.squad.abilities)) continue;
@@ -6242,12 +6613,12 @@ export class LandWorld {
             !g.target.dead &&
             !g.target.inside &&
             this.targetEnemy(u, g.target) &&
-            Math.hypot(g.target.x - u.x, g.target.y - u.y) <= g.range
+            Math.hypot(g.target.x - u.x, g.target.y - u.y) <= g.range + this.edgeOf(g.target)
           ? g.target
           : null;
-      if (!t && !D && this.time >= g.scanAt) {
+      if (!D && this.time >= g.scanAt && (!t || (foe && t.squad !== foe))) {
         g.scanAt = this.time + 0.3 + simRandom() * 0.2;
-        t = this.nearestFoe(u, this.units, g.range, g);
+        t = (foe && this.nearestFoe(u, foe.members, g.range, g)) || t || this.nearestFoe(u, this.units, g.range, g);
       }
       if (t && g.minRange > 0 && !t.spot && Math.hypot(t.x - u.x, t.y - u.y) < g.minRange) t = null;
       if (t) {
@@ -6264,7 +6635,7 @@ export class LandWorld {
           head.target !== t &&
           !head.target.dead &&
           this.targetEnemy(u, head.target) &&
-          Math.hypot(head.target.x - u.x, head.target.y - u.y) <= g.range
+          Math.hypot(head.target.x - u.x, head.target.y - u.y) <= g.range + this.edgeOf(head.target)
         ) {
           t = head.target;
           rel = cone();
@@ -6272,7 +6643,7 @@ export class LandWorld {
         if (
           head &&
           Math.abs(rel) > g.cone / 2 &&
-          Math.abs(Math.atan2(Math.sin(rel + head.yaw), Math.cos(rel + head.yaw))) <= head.extent + g.cone / 2
+          (Math.abs(Math.atan2(Math.sin(rel + head.yaw), Math.cos(rel + head.yaw))) <= head.extent + g.cone / 2 || this.headTurns(u))
         ) {
           g.target = t;
           g.left = 0;
@@ -6303,6 +6674,7 @@ export class LandWorld {
           let off = rel - T.yaw;
           off = Math.atan2(Math.sin(off), Math.cos(off));
           if (Math.abs(off) > Math.max(0.12, Math.min(g.cone / 2, 0.3))) {
+            if (!D && face === null && Math.abs(rel) > T.extent / 2) face = rel;
             g.target = t;
             g.left = 0;
             continue;
@@ -6327,6 +6699,10 @@ export class LandWorld {
       if (this.shooter && !this.shooter.footGun(u, t, dt)) continue;
       this.burst(u, t, g, dt);
     }
+    if (face !== null && !seen && this.headTurns(u)) {
+      const step = u.turn * dt;
+      u.heading += Math.abs(face) <= step ? face : Math.sign(face) * step;
+    }
     if (hidden && !seen && !u.weapon && this.repositions(u.squad)) this.seekClear(u.squad, u, hidden, hideG);
   }
 
@@ -6350,6 +6726,11 @@ export class LandWorld {
         else if (d > u.range && this.time >= (sq.advance || 0)) this.advance(sq);
       }
       return false;
+    }
+    if (!w && u.guns && u.squad.foe && !u.squad.direct) {
+      const q = u.squad;
+      if (!q.foe.members.length || (this.fowOn && !q.foe.members.some(m => !m.dead && this.sightOf(q.side, m)))) q.foe = null;
+      else if (this.time >= (q.advance || 0)) this.advance(q);
     }
     if (!w || (u.cloaked && !u.squad.foe)) return false;
     w.cooldown -= dt;
@@ -6381,7 +6762,10 @@ export class LandWorld {
       }
       if (foe && this.time >= sq.advance && (team || !sq.members.some(m => m.target && m.target.squad === foe))) this.advance(sq);
       t =
-        u.target && !u.target.dead && this.targetEnemy(u, u.target) && Math.hypot(u.target.x - u.x, u.target.y - u.y) <= reach
+        u.target &&
+        !u.target.dead &&
+        this.targetEnemy(u, u.target) &&
+        Math.hypot(u.target.x - u.x, u.target.y - u.y) <= reach + this.edgeOf(u.target)
           ? u.target
           : null;
       if (t && !foe) t = this.rethink(u, t, reach);
@@ -6459,7 +6843,7 @@ export class LandWorld {
       if (u.special && u.special.kind === 'quake') this.setAnim(u, 'attack');
       return true;
     }
-    if (aimed) this.burst(u, t, w, dt);
+    if (aimed && (w.modes === undefined || modeAllows(w.modes, sq.abilities))) this.burst(u, t, w, dt);
     if (u.path.length) return false;
     this.setAnim(u, 'attack');
     return true;
@@ -6562,7 +6946,7 @@ export class LandWorld {
     }
     if (t && u.minRange > 0 && Math.hypot(t.x - u.x, t.y - u.y) < u.minRange) t = null;
     u.target = t;
-    if (!t || (this.clearShooting() && this.shotBlocked(u, t, w))) {
+    if (!t || (this.clearShooting() && this.shotBlocked(u, t, w)) || (w.modes !== undefined && !modeAllows(w.modes, u.squad.abilities))) {
       w.left = 0;
       return;
     }
@@ -6724,6 +7108,10 @@ export class LandWorld {
     const rise = Math.atan2(t.z + t.aimZ - (u.z + u.aimZ), Math.hypot(t.x - u.x, t.y - u.y));
     T.wantPitch = Math.max(-T.lift, Math.min(T.lift, rise));
     this.aimTurret(u, Math.max(-T.extent, Math.min(T.extent, rel)), dt);
+    if (!aimAt && Math.abs(rel) > T.extent && this.headTurns(u)) {
+      const step = u.turn * dt;
+      u.heading += Math.abs(rel) <= step ? rel : Math.sign(rel) * step;
+    }
   }
 
   ropeStep(u, dt) {
@@ -6762,7 +7150,12 @@ export class LandWorld {
 
   pose(u, dt) {
     u.lagDt = 0;
-    if (this.poseCache && !u.pilot && !(u.turret?.kick && this.time - u.turret.kick.at < BARREL_KICK.snap + BARREL_KICK.back) && cachedPose(u, dt, this)) {
+    if (
+      this.poseCache &&
+      !u.pilot &&
+      !(u.turret?.kick && this.time - u.turret.kick.at < BARREL_KICK.snap + BARREL_KICK.back) &&
+      cachedPose(u, dt, this)
+    ) {
       if (u.looksOf !== false) looks(this, u, dt);
       return;
     }
@@ -7260,9 +7653,11 @@ export class LandWorld {
           }
           box.path[0] = { x: box.x + (dx / len) * keep, y: box.y + (dy / len) * keep };
         }
+        // nearFp holds each neighbour's soft footprint beside it: teamWalk() asks for it once per walker and tick
         const near = box.near || (box.near = []),
+          fps = box.nearFp || (box.nearFp = []),
           reach = box.slack + 45;
-        near.length = 0;
+        near.length = fps.length = 0;
         box.nearFootprint = 0;
         for (const o of this.squads) {
           if (o === q || o.structure || !o.members.length) continue;
@@ -7271,6 +7666,7 @@ export class LandWorld {
           for (const u of o.members) if (!u.dead && !u.inside && !u.flies) {
             near.push(u);
             const fp = (u.fp ??= u.type.num('Custom_Soft_Footprint_Radius', 0) || 3);
+            fps.push(fp);
             box.nearFootprint = Math.max(box.nearFootprint, Math.abs(fp));
           }
         }
@@ -7397,16 +7793,20 @@ export class LandWorld {
           hy = Math.sin(wantH),
           lx2 = -hy,
           ly2 = hx,
-          mine = (u.fp ??= t.num('Custom_Soft_Footprint_Radius', 0) || 3),
-          wide = (Math.abs(mine) + (box.nearFootprint ?? Infinity)) * 1.3;
+          mine = (u.fp ??= t.num('Custom_Soft_Footprint_Radius', 0) || 3);
+        const wide = (Math.abs(mine) + (box.nearFootprint ?? Infinity)) * 1.3;
+        const fps = box.nearFp || [],
+          ux = u.x,
+          uy = u.y;
         let ax = 0,
           ay = 0;
-        for (const o of near) {
-          const ox = o.x - u.x;
-          if (Math.abs(ox) > wide) continue;
-          const oy = o.y - u.y;
-          if (Math.abs(oy) > wide) continue;
-          const R = (mine + (o.fp ??= o.type.num('Custom_Soft_Footprint_Radius', 0) || 3)) * 1.3,
+        for (let i = 0; i < near.length; i++) {
+          const o = near[i];
+          if (Math.abs(o.x-ux)>wide || Math.abs(o.y-uy)>wide) continue;
+          const
+            ox = o.x - ux,
+            oy = o.y - uy,
+            R = (mine + (fps[i] ?? (o.fp ??= o.type.num('Custom_Soft_Footprint_Radius', 0) || 3))) * 1.3,
             d2 = ox * ox + oy * oy;
           if (d2 >= R * R || o.dead) continue;
           if ((o.v || 0) > 1 && Math.cos(o.heading - u.heading) > 0.5) continue;
@@ -8317,6 +8717,15 @@ export class LandWorld {
   }
 
   placeAnchors(x, y, need, attempt) {
+    const held = this.clutterHold();
+    try {
+      return this.placeAnchorsNow(x, y, need, attempt);
+    } finally {
+      this.clutterFree(held);
+    }
+  }
+
+  placeAnchorsNow(x, y, need, attempt) {
     let zone = null;
     for (let k = 0; k <= 41; k++) {
       const forced = k === 41,
@@ -8431,10 +8840,13 @@ export class LandWorld {
     return len + Math.hypot(bx - px, by - py);
   }
 
-  clutterNear(px, py, reach) {
+  // The grid of squads that cluttered() searches. It is filled where a tick first asks for it and kept for the rest
+  // of that tick, so the moment of the first question decides which cell a squad that moves later is found in.
+  clutterFresh() {
     if (this.clutterAt !== this.time || this.clutterCount !== this.squads.length) {
       this.clutterAt = this.time;
       this.clutterCount = this.squads.length;
+      this.clutterGen = (this.clutterGen || 0) + 1;
       const G = (this.clutterGrid ||= new Map());
       for (const l of G.values()) l.length = 0;
       (this.clutterSent ||= []).length = 0;
@@ -8447,65 +8859,163 @@ export class LandWorld {
         l.push(q);
       }
     }
-    const out = (this.clutterList ||= []),
-      G = this.clutterGrid,
-      r = reach + FOE_PAD;
-    out.length = 0;
-    const x0 = Math.floor((px - r) / CLUTTER_CELL),
-      x1 = Math.floor((px + r) / CLUTTER_CELL),
-      y0 = Math.floor((py - r) / CLUTTER_CELL),
-      y1 = Math.floor((py + r) / CLUTTER_CELL);
-    for (let cx = x0; cx <= x1; cx++)
-      for (let cy = y0; cy <= y1; cy++) {
-        const l = G.get(cx * 4096 + cy);
-        if (l) for (let i = 0; i < l.length; i++) out.push(l[i]);
+  }
+
+  // A search for a free place asks cluttered() about hundreds of spots while nothing on the field moves. Between
+  // clutterHold() and clutterFree() the squads' members are read once per grid cell into flat lists (clutterPack),
+  // in the order the grid holds them, and every spot of the search is tested against those.
+  clutterHold() {
+    const was = !!this.clutterHeld;
+    if (!was) {
+      this.clutterHeld = true;
+      this.clutterGen = (this.clutterGen || 0) + 1;
+    }
+    return was;
+  }
+
+  clutterFree(was) {
+    this.clutterHeld = was;
+  }
+
+  // One grid cell's squads and their members as flat lists. A member's place is read here; what cluttered() works
+  // out about it when a spot first comes near (whether it can be in the way at all, its extents, its facing) is
+  // kept beside it for the other spots of the same search: state 0 not asked yet, 1 in the way, 2 never.
+  clutterPack(l) {
+    let P = l.pack;
+    if (!P) {
+      const f = () => new Float64Array(64),
+        lists = { X: f(), Y: f(), C: f(), S: f(), HX: f(), HY: f(), R: f(), state: new Uint8Array(64) };
+      P = l.pack = { gen: -1, ...lists, units: [], squads: [], from: [] };
+    }
+    if (P.gen === this.clutterGen) return P;
+    P.gen = this.clutterGen;
+    let n = 0;
+    P.squads.length = P.from.length = 0;
+    for (const q of l) {
+      const m = q.members;
+      if (!m.length) continue;
+      if (n + m.length > P.X.length) {
+        const size = Math.max(n + m.length, P.X.length * 2);
+        for (const k of ['X', 'Y', 'C', 'S', 'HX', 'HY', 'R', 'state']) {
+          const a = new P[k].constructor(size);
+          a.set(P[k]);
+          P[k] = a;
+        }
       }
-    return out;
+      P.squads.push(q);
+      P.from.push(n);
+      for (const u of m) {
+        P.X[n] = u.x;
+        P.Y[n] = u.y;
+        P.state[n] = 0;
+        P.units[n++] = u;
+      }
+    }
+    P.from.push(n);
+    P.units.length = n;
+    return P;
   }
 
   cluttered(px, py, hx, hy, c, s, need, sent, slots = null) {
     const most = 0.15 * hx * hy,
       wide = Math.hypot(hx, hy) + db.constants.num('Destination_Collision_Query_Extension', 60);
-    let mine;
-    const attackers = () => {
-      if (!mine) {
-        mine=[];
-        for (const q of sent) for (const u of q.members) if (!u.dead && !u.inside && !u.flies) mine.push(u);
-      }
+    // This runs thousands of times while a large group is given places, so it keeps its own scratch and leaves
+    // out work that cannot change the answer: the sent squads' members are listed only when a box needs them, and
+    // overlap() is asked only about a unit whose circle reaches the box's.
+    let mine = null;
+    const sentMembers = () => {
+      mine = [];
+      for (const q of sent) for (const u of q.members) if (!u.dead && !u.inside && !u.flies) mine.push(u);
       return mine;
     };
-    const boxes = (slots && slots.length ? slots : [{ x: 0, y: 0, hx, hy, q: null }]).map(b => ({
-      x: px + c * b.x - s * b.y,
-      y: py + s * b.x + c * b.y,
-      c,
-      s,
-      hx: b.hx,
-      hy: b.hy,
-      q: b.q
-    }));
+    let boxes;
+    if (slots && slots.length)
+      boxes = slots.map(b => ({ x: px + c * b.x - s * b.y, y: py + s * b.x + c * b.y, c, s, hx: b.hx, hy: b.hy, q: b.q, r: 0 }));
+    else {
+      boxes = this.clutterOne ||= [{ x: 0, y: 0, c: 0, s: 0, hx: 0, hy: 0, q: null, r: 0 }];
+      const b = boxes[0];
+      b.x = px + c * 0 - s * 0;
+      b.y = py + s * 0 + c * 0;
+      b.c = c;
+      b.s = s;
+      b.hx = hx;
+      b.hy = hy;
+    }
     const crushed = (list, u) =>
       list.length > 0 &&
       list.every(v => v.dead || v.inside || (v.crusher && this.enemy(v, u) && (u.squashable || (v.supercrusher && u.squashableBig))));
-    let area = 0;
-    for (const q of this.clutterNear(px, py, wide)) {
-      if (!q.members.length || sent.includes(q)) continue;
-      for (const u of q.members) {
-        if (u.dead || u.inside || u.flies || (u.ccls ??= collisionClass(u.type)) < 5) continue;
-        if ((u.x - px) ** 2 + (u.y - py) ** 2 > wide * wide) continue;
-        const ux = u.hardX ?? hardExtent(u, 'X'),
-          uy = u.hardY ?? hardExtent(u, 'Y'),
-          ub = { x: u.x, y: u.y, c: Math.cos(u.heading), s: Math.sin(u.heading), hx: ux, hy: uy };
-        let hit = false;
-        for (const b of boxes) {
-          if (this.overlap(b, ub) <= 0 || crushed(b.q ? b.q.members : attackers(), u)) continue;
-          hit = true;
-          break;
-        }
-        if (!hit) continue;
-        area += ux * uy;
-        if (area > most) return true;
-      }
+    let among = null;
+    if (sent.length > 4) {
+      among = this.clutterAmong ||= new Set();
+      among.clear();
+      for (const q of sent) among.add(q);
     }
+    const ub = (this.clutterUnit ||= { x: 0, y: 0, c: 0, s: 0, hx: 0, hy: 0 });
+    for (const b of boxes) b.r = Math.sqrt(b.hx * b.hx + b.hy * b.hy);
+    this.clutterFresh();
+    // outside a held search nothing says the units stand still between two calls: the cells are read afresh
+    if (!this.clutterHeld) this.clutterGen++;
+    const grid = this.clutterGrid,
+      turns = c === c && s === s,
+      reach = wide + FOE_PAD,
+      wide2 = wide * wide,
+      x0 = Math.floor((px - reach) / CLUTTER_CELL),
+      x1 = Math.floor((px + reach) / CLUTTER_CELL),
+      y0 = Math.floor((py - reach) / CLUTTER_CELL),
+      y1 = Math.floor((py + reach) / CLUTTER_CELL);
+    let area = 0;
+    for (let cx = x0; cx <= x1; cx++)
+      for (let cy = y0; cy <= y1; cy++) {
+        const l = grid.get(cx * 4096 + cy);
+        if (!l || !l.length) continue;
+        const P = this.clutterPack(l),
+          { X, Y, C, S, HX, HY, R, state, units, squads, from } = P;
+        for (let k = 0; k < squads.length; k++) {
+          const q = squads[k];
+          if (among ? among.has(q) : sent.includes(q)) continue;
+          for (let i = from[k], end = from[k + 1]; i < end; i++) {
+            if ((X[i] - px) ** 2 + (Y[i] - py) ** 2 > wide2 || state[i] === 2) continue;
+            const u = units[i];
+            if (!state[i]) {
+              if (u.dead || u.inside || u.flies || (u.ccls ??= collisionClass(u.type)) < 5) {
+                state[i] = 2;
+                continue;
+              }
+              state[i] = 1;
+              HX[i] = hardExtent(u, 'X');
+              HY[i] = hardExtent(u, 'Y');
+              R[i] = Math.sqrt(HX[i] * HX[i] + HY[i] * HY[i]);
+              C[i] = Math.cos(u.heading);
+              S[i] = Math.sin(u.heading);
+            }
+            const ux = HX[i],
+              uy = HY[i],
+              ur = R[i];
+            let hit = false,
+              turned = false;
+            for (const b of boxes) {
+              // two boxes whose circles stay apart are apart along one of their own axes, where overlap() gives 0
+              const far = b.r + ur;
+              if (turns && C[i] === C[i] && (b.x - X[i]) ** 2 + (b.y - Y[i]) ** 2 > far * far * FAR_APART) continue;
+              if (!turned) {
+                turned = true;
+                ub.x = X[i];
+                ub.y = Y[i];
+                ub.c = C[i];
+                ub.s = S[i];
+                ub.hx = ux;
+                ub.hy = uy;
+              }
+              if (this.overlap(b, ub) <= 0 || crushed(b.q ? b.q.members : mine || sentMembers(), u)) continue;
+              hit = true;
+              break;
+            }
+            if (!hit) continue;
+            area += ux * uy;
+            if (area > most) return true;
+          }
+        }
+      }
     return false;
   }
 
@@ -8544,67 +9054,128 @@ export class LandWorld {
       c = Math.cos(dir),
       s = Math.sin(dir);
     cands.sort((a, b) => -(a.x - T.x) * s + (a.y - T.y) * c - (-(b.x - T.x) * s + (b.y - T.y) * c));
-    const least = edge * 1.4;
+    const least = edge * 1.4,
+      spots = new Map();
     const ring = (set, r, half) => {
       const n = set.length,
         mid = n >> 1,
         out = new Array(n),
         FIVE = 5 * DEG;
+      // Whether a squad can stand at an angle of this ring does not change while one attack is planned, and the
+      // rings are tried again for every smaller count and every wider arc: each spot is worked out once.
+      const stands = (g, ang, px, py) => {
+        let byR = spots.get(g);
+        if (!byR) spots.set(g, (byR = new Map()));
+        let byAng = byR.get(r);
+        if (!byAng) byR.set(r, (byAng = new Map()));
+        let ok = byAng.get(ang);
+        if (ok === undefined) {
+          const stop = Math.max(0, r - edge - 10);
+          ok =
+            this.isOpen(px, py, g.need) &&
+            !this.cluttered(px, py, g.hx, g.hy, Math.cos(dir + ang + Math.PI), Math.sin(dir + ang + Math.PI), g.need, list) &&
+            this.clear(px, py, px - Math.cos(dir + ang) * stop, py - Math.sin(dir + ang) * stop, 1) &&
+            this.reaches(g.x, g.y, px, py, g.need);
+          byAng.set(ang, ok);
+        }
+        return ok;
+      };
       const at = (g, ang) => {
         const px = T.x + Math.cos(dir + ang) * r,
           py = T.y + Math.sin(dir + ang) * r;
         for (const o of out) if (o && (o.x - px) ** 2 + (o.y - py) ** 2 < ((o.g.hy + g.hy) * 0.9) ** 2) return null;
-        if (
-          !this.isOpen(px, py, g.need) ||
-          this.cluttered(px, py, g.hx, g.hy, Math.cos(dir + ang + Math.PI), Math.sin(dir + ang + Math.PI), g.need, list)
-        )
-          return null;
-        const stop = Math.max(0, r - edge - 10);
-        if (!this.clear(px, py, px - Math.cos(dir + ang) * stop, py - Math.sin(dir + ang) * stop, 1)) return null;
-        if (!this.route(g.x, g.y, px, py, g.need)) return null;
-        return { g, x: px, y: py };
+        return stands(g, ang, px, py) ? { g, x: px, y: py } : null;
       };
-      const step = (i, k) => Math.asin(Math.min(1, (set[i].hy + set[k].hy) / (2 * r)));
-      let a = n & 1 ? 0 : 2 * Math.asin(Math.min(1, set[mid].hy / (2 * r)));
-      for (; Math.abs(a) <= half && !(out[mid] = at(set[mid], a)); a = a === 0 ? FIVE : a > 0 ? -a : -a + FIVE);
-      if (!out[mid]) return null;
+      // the angle between two neighbours of the ring; gap[i] is the one between squads i and i + 1
+      const gap = new Array(Math.max(0, n - 1));
+      for (let i = 0; i + 1 < n; i++) gap[i] = Math.asin(Math.min(1, (set[i].hy + set[i + 1].hy) / (2 * r)));
+      const step = (i, k) => gap[Math.min(i, k)];
+      // The squads after k on one side of the ring, each given its first angle past the one before: a squad that
+      // has to look further only moves outward, so a ring that does not fit this way cannot be filled at all.
+      const fits = (cur, from, way) => {
+        for (let k = from; k >= 0 && k < n; k += way) {
+          cur += way * (k === mid + way ? 2 : 1) * step(k, k - way);
+          if (!(way > 0 ? cur <= half : cur >= -half)) return false;
+        }
+        return true;
+      };
+      const next = a => (a === 0 ? FIVE : a > 0 ? -a : -a + FIVE);
+      const a0 = n & 1 ? 0 : 2 * Math.asin(Math.min(1, set[mid].hy / (2 * r)));
+      let last;
+      for (let a = a0; Math.abs(a) <= half; a = next(a)) if (fits(a, mid - 1, -1) && fits(a, mid + 1, 1)) last = a;
+      if (last === undefined) return null;
+      let a = a0;
+      for (; Math.abs(a) <= half && !(out[mid] = at(set[mid], a)); a = next(a)) if (a === last) return null;
+      if (!out[mid] || !fits(a, mid - 1, -1) || !fits(a, mid + 1, 1)) return null;
       for (const way of [-1, 1]) {
         let cur = a;
         for (let k = mid + way; k >= 0 && k < n; k += way) {
-          let ang = cur + way * (k === mid + way ? 2 : 1) * step(k, k - way);
+          const first = cur + way * (k === mid + way ? 2 : 1) * step(k, k - way);
+          let ang = first;
           for (; Math.abs(ang) <= half && !(out[k] = at(set[k], ang)); ang += way * FIVE);
           if (!out[k]) return null;
           cur = ang;
+          if (ang !== first && !fits(cur, k + way, way)) return null;
         }
       }
       return out;
     };
-    let plan = null;
-    for (let k = db.constants.num('Base_Land_Targeting_Arc_Angle_Coefficient', 0.2); k > -1 && !plan; k -= 0.2) {
-      const half = ((1 - k) * Math.PI) / 2,
-        got = [];
-      let rest = cands.slice(),
-        r = R,
-        ok = true;
-      while (rest.length && ok) {
-        const D = Math.max(...rest.map(g => g.hx)),
-          at = r - D;
-        if (at - D < least || at < Math.max(least, R * k)) {
-          ok = false;
-          break;
+    const arc = db.constants.num('Base_Land_Targeting_Arc_Angle_Coefficient', 0.2);
+    // The search below skips rings that cannot be filled, and with them the spots they would have looked at. The
+    // first open spot of the full search is where this tick's clutter grid gets filled, so that moment is kept:
+    // the middle squad's spots are walked in the full search's order up to the first open one.
+    {
+      const D = Math.max(...cands.map(g => g.hx)),
+        r = R - D,
+        FIVE = 5 * DEG;
+      first: for (let k = arc; k > -1; k -= 0.2) {
+        if (r - D < least || r < Math.max(least, R * k)) continue;
+        const half = ((1 - k) * Math.PI) / 2;
+        for (let n = cands.length; n > 0; n--) {
+          const g = cands[n >> 1];
+          for (
+            let a = n & 1 ? 0 : 2 * Math.asin(Math.min(1, g.hy / (2 * r)));
+            Math.abs(a) <= half;
+            a = a === 0 ? FIVE : a > 0 ? -a : -a + FIVE
+          )
+            if (this.isOpen(T.x + Math.cos(dir + a) * r, T.y + Math.sin(dir + a) * r, g.need)) {
+              this.clutterFresh();
+              break first;
+            }
         }
-        let put = null,
-          n = rest.length;
-        for (; n > 0 && !(put = ring(rest.slice(0, n), at, half)); n--);
-        if (!put) {
-          ok = false;
-          break;
-        }
-        got.push(...put);
-        rest = rest.slice(n);
-        r = at - D;
       }
-      if (ok) plan = got;
+    }
+    let plan = null;
+    const held = this.clutterHold();
+    try {
+      for (let k = arc; k > -1 && !plan; k -= 0.2) {
+        const half = ((1 - k) * Math.PI) / 2,
+          got = [];
+        let rest = cands.slice(),
+          r = R,
+          ok = true;
+        while (rest.length && ok) {
+          const D = Math.max(...rest.map(g => g.hx)),
+            at = r - D;
+          if (at - D < least || at < Math.max(least, R * k)) {
+            ok = false;
+            break;
+          }
+          let put = null,
+            n = rest.length;
+          for (; n > 0 && !(put = ring(rest.slice(0, n), at, half)); n--);
+          if (!put) {
+            ok = false;
+            break;
+          }
+          got.push(...put);
+          rest = rest.slice(n);
+          r = at - D;
+        }
+        if (ok) plan = got;
+      }
+    } finally {
+      this.clutterFree(held);
     }
     if (!plan) {
       for (const g of cands) this.attack(g.q, foe);
@@ -8894,10 +9465,11 @@ export class LandWorld {
       if (u.energy !== null) this.serviceEnergy(u, dt);
       if (u.cinematicTransport) continue;
       if (u.structure) {
-        if (u.weapon && u.side >= 0 && !u.unpowered && !(u.stunUntil > this.time)) {
-          this.fight(u, dt);
+        if ((u.weapon || u.guns) && u.side >= 0 && !u.unpowered && !(u.stunUntil > this.time)) {
+          if (u.weapon) this.fight(u, dt);
+          else this.fireGuns(u, dt);
           if (!u.fixedHeading) u.holder.rotation.z = u.heading + Math.PI / 2;
-          if (u.turret) this.show(u, dt);
+          if (u.turret || u.guns) this.show(u, dt);
         } else if (u.anim) this.show(u, dt);
         continue;
       }
@@ -8996,7 +9568,10 @@ export class LandWorld {
         }
         const L0 = (u.loco ??= this.locoOf(u)),
           rest = !(u.mv > 0),
-          gate = rest && Math.abs(da) > (u.stopTurn || u.turn) / LOGIC_FPS && (Math.abs(da) > L0.close || Math.abs(da) >= Math.PI / 2 || L0.minFrac > 0);
+          gate =
+            rest &&
+            Math.abs(da) > (u.stopTurn || u.turn) / LOGIC_FPS &&
+            (Math.abs(da) > L0.close || Math.abs(da) >= Math.PI / 2 || L0.minFrac > 0);
         if (u.preTurns && !u.preTurn && gate) u.preTurn = this.preTurnOf(u, da);
         const step = (u.preTurn ? u.preTurn.rate : rest ? u.stopTurn || u.turn : u.turn) * dt,
           turned = Math.abs(da) <= step ? da : Math.sign(da) * step;
@@ -9087,7 +9662,8 @@ export class LandWorld {
           }
         }
         const from = u.legFrom || u;
-        if (d < Math.max(2, u.speed * dt * 1.5) || (next.x - u.x) * (next.x - from.x) + (next.y - u.y) * (next.y - from.y) <= 0) u.path.shift();
+        if (d < Math.max(2, u.speed * dt * 1.5) || (next.x - u.x) * (next.x - from.x) + (next.y - u.y) * (next.y - from.y) <= 0)
+          u.path.shift();
         if (!u.path.length) u.mv = 0;
         this.setAnim(u, pivot ? (da > 0 ? 'turnL' : 'turnR') : 'move');
         this.moveRate(u);

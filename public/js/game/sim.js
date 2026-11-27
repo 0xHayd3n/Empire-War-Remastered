@@ -1,5 +1,9 @@
 import { takeReserve, reserveSlot } from './campaignreserve.js';
 import { ScanAhead } from './scanjobs.js';
+import { TacticalMarker } from './tacticalobjects.js';
+import { FighterMoves } from './fightermoves.js';
+import { FighterDecisions } from './fighterdecisions.js';
+import { wrapAngle as wrapAngleShared } from './fighterflight.js';
 import { hardpointModes, hardpointDelays, modeAllows, modeDelay, rechargeDelay } from './firemodes.js';
 import { ProjectileMods } from './projectilemods.js';
 import { survivorPicks } from './survivors.js';
@@ -10,7 +14,9 @@ import { Pathfinder, layerMask, ASTEROID_LAYERS } from './pathfind.js';
 import { prioritySet, priorityOf, setOf } from './priorities.js';
 import { BountyBook, bountyValue } from './bounty.js';
 import { losingSideBonus } from './losingbonus.js';
-import { getModelData, buildModel, flattenModel } from '../model.js';
+import { getModelData, buildModel, flattenModel, PartGroup } from '../model.js';
+import { HitGrid } from './hitgrid.js';
+import { Shot, ShotStore, SHOT_PLAIN, SHOT_GENERAL } from './shots.js';
 import { getALA, animName, AnimState } from '../ala.js';
 import {
   parseAbilities,
@@ -47,6 +53,8 @@ import { CombatMods, MOD, SPACE, bonusSourceDefs, bonusTypeFits, bonusOwnerFits 
 export const spacePop = t =>
   t.has('Space_Override_Population_Value') ? t.num('Space_Override_Population_Value', 0) : t.num('Population_Value', 0);
 
+export const reinforcePop = t => Math.trunc(spacePop(t) + 0.5);
+
 export const LOGIC_FPS = 30;
 
 export function stationLevel(unit) {
@@ -60,20 +68,37 @@ export function stationLevel(unit) {
 }
 const PROBE_CELL = 1024,
   PROBE_PAD = 80;
-const _nearCap = [],
+const _seek = { p: null, best: null, bi: 0, bd: 0 },
+  _nearCap = [],
   byGridAt = (a, b) => a.gridAt - b.gridAt;
 const LAUNCHES_PER_STEP = 2;
 const ESCORT_SPACING = 140;
+const ESCORT_KEEP = 400;
 const ESCORT_EASE = 200;
 const NO_CATS = new Set();
 const UNIT_CELL = 1024,
   UNIT_PAD = 200;
 const HIT_CELL = 256;
+// Teams the projectile grid keeps separate lists for; the list after them holds every unit.
+const HIT_TEAMS = 7;
+// How a hittable unit is tested against a shot's step.
+const HIT_SPHERE = 0,
+  HIT_BOX = 1,
+  HIT_MESH = 2;
+// What the shot step keeps for each hittable unit of a step: where it is, how far it reaches, and its hit shape.
+function hitNumbersFor(room) {
+  const numbers = {};
+  for (const name of ['x', 'y', 'z', 'reach', 'radius', 'ball', 'meshReach', 'boxX', 'boxY', 'boxZ', 'boxHeading', 'boxA', 'boxB', 'boxC'])
+    numbers[name] = new Float64Array(room);
+  numbers.shape = new Uint8Array(room);
+  numbers.ownList = new Int32Array(room);
+  return numbers;
+}
 const ATTACKER_DECAY_FRAMES = 150;
 const VIS_CELL = 512;
-const LOOP_OVER = (170 * Math.PI) / 180,
-  LOOP_KEEP = Math.PI / 2,
-  DOG_CELL = 400,
+const FIELD_CELL = 1024;
+const NO_FIELDS = Object.freeze([]);
+const DOG_CELL = 400,
   DOG_NEAR = 80000,
   PAIR_TIME = 10,
   PAIR_CONE = Math.PI / 2,
@@ -87,12 +112,7 @@ const TAU = Math.PI * 2;
 export const SHIELD_FLASH = 0.1,
   SHIELD_FADE = 0.28;
 
-export const wrapAngle = a => {
-  a %= TAU;
-  if (a > Math.PI) a -= TAU;
-  else if (a < -Math.PI) a += TAU;
-  return a;
-};
+export const wrapAngle = wrapAngleShared;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const rand = (a, b) => a + simRandom() * (b - a);
 const dist2 = (a, b) => {
@@ -142,6 +162,55 @@ export function sizeClass(type) {
   for (const c of SIZE_CLASSES) if (cats.has(c)) return c;
   const sc = type.str('Ship_Class').toUpperCase();
   return SIZE_CLASSES.includes(sc) ? sc : 'FRIGATE';
+}
+
+// A unit still out in hyperspace: before its arrival streak shows it is not in the battle (it cannot be seen,
+// targeted or hit). Once it shows (HYPER.show) it fights while it finishes the jump.
+export const inJump = o => !!o.hyper && !o.hyper.shown;
+// Units are more vulnerable right after they are brought in (GameConstants: "Units are more vulnerable right after
+// being unloaded"). The engine gives each reinforcement, and each member of a reinforced squadron, a timed DEFENSE
+// combat modifier named "Elevated_Vulnerability" of Space_Elevated_Vulnerability_Factor for
+// Space_Elevated_Vulnerability_Duration seconds (land: Elevated_Vulnerability_*), in stacking category 0, from the
+// moment it is created, in the same place the Defense_Bonus_Percentage of a combat bonus goes. Take_Damage scales
+// damage by (1 + attacker damage bonus) * (1 - target defense bonus), the rule bonus.defense already
+// follows, so a factor of -2.0 (Thrawn's Revenge) is 3x damage and -3.0 (FoC) 4x. The values the engine's
+// GameConstants constructor sets when the tags are missing are 15 s and -3.0.
+// The battle keeps it beside the unit's combat modifiers (unit.vulnerable), not in them, because only damage reads
+// it and the page mirror does not deal damage; arrivalDefense adds it to the DEFENSE sum the way CombatMods does.
+export function elevatedVulnerability(land = false) {
+  const c = db.constants,
+    pre = land ? '' : 'Space_';
+  return { duration: c.num(pre + 'Elevated_Vulnerability_Duration', 15), factor: c.num(pre + 'Elevated_Vulnerability_Factor', -3) };
+}
+const noVulnerability = new WeakMap();
+// A type's Battlefield_Modifier_Ability with Disable_Reinforcement_Vulnerability: null, or whether it covers allies.
+function disablesReinforcementVulnerability(type) {
+  if (!type || typeof type.sub !== 'function') return null;
+  if (noVulnerability.has(type)) return noVulnerability.get(type);
+  const yes = v => /^(yes|true)$/i.test(String(v || '').trim());
+  let out = null;
+  for (const node of type.sub('Abilities').flatMap(a => a.all('Battlefield_Modifier_Ability')))
+    if (yes(node.val('Disable_Reinforcement_Vulnerability'))) out = { allies: !!(out?.allies || yes(node.val('Apply_To_All_Allies'))) };
+  noVulnerability.set(type, out);
+  return out;
+}
+// The defense damage factor (1 - DEFENSE sum) with one more DEFENSE modifier of `value` in stacking category `key`:
+// per category the highest value counts (own and shared lists alike), the categories add up in key order, and the
+// sum is held to the DEFENSE limits of combatmods.js (no floor, 0.75 at most).
+export function arrivalDefense(m, key, value) {
+  const mine = m ? m.lists[MOD.DEFENSE] : null,
+    shared = m ? m.shared(MOD.DEFENSE) : null,
+    other = shared && shared.size ? shared.lists[MOD.DEFENSE] : null;
+  const keys = new Set([key]);
+  if (mine) for (const k of mine.keys()) keys.add(k);
+  if (other) for (const k of other.keys()) keys.add(k);
+  let sum = 0;
+  for (const k of [...keys].sort((a, b) => a - b)) {
+    let best = k === key ? value : -Infinity;
+    for (const list of [mine && mine.get(k), other && other.get(k)]) if (list) for (const x of list) if (x.value > best) best = x.value;
+    sum += best;
+  }
+  return 1 - Math.min(sum, 0.75);
 }
 
 export function hiddenInJump(e) {
@@ -319,6 +388,10 @@ const inLookTree = t =>
       .split(/[|,\s]+/)
       .some(k => LOOK_LAYERS.has(k)));
 const MODE_PROXY = { pptw: ['POWER_TO_WEAPONS', 'FULL_SALVO'], prs: ['MISSILE_SHIELD'], pem: ['INVULNERABILITY'] };
+const modeAbility = (type, mode) => {
+  const kinds = (type._modeKinds ??= parseAbilities(type).map(d => d.kind));
+  return MODE_PROXY[mode].some(k => kinds.includes(k));
+};
 const ambientDelay = type => {
   const lo = Math.max(0, type.num('SFXEvent_Ambient_Moving_Min_Delay_Seconds', 0)),
     hi = Math.max(0, type.num('SFXEvent_Ambient_Moving_Max_Delay_Seconds', 0));
@@ -333,17 +406,18 @@ const castsShadow = m => {
   if (v === undefined) shadowModels.set(m, (v = !!m.meshes?.some(x => x.subs?.some(s => /shadowvolume/i.test(s.material?.shader || '')))));
   return v;
 };
-function bankIntoTurn(unit, turn, turnRate, dt) {
+export function bankIntoTurn(unit, turn, turnRate, dt) {
   const bank = unit.bankAngle;
   if (!(dt > 0)) return;
   if (!(bank > 0) || !(unit.rollRate > 0)) {
     if (!(bank > 0)) unit.roll = 0;
     return;
   }
-  const turnShare = Math.min(1, Math.abs(turn) / (turnRate * dt || 1));
-  let want = turn >= 0 ? bank : -bank;
-  if (turnShare < 0.5) want *= turnShare * 2;
-  const step = clamp(Math.abs(want - unit.roll) / bank, 0.1, 1) * unit.rollRate * dt;
+  // Bank_Turn_Angle is the lean at Max_Rate_Of_Turn; the lean follows how much of that rate the ship is turning at,
+  // and moves at no more than Max_Rate_Of_Roll.
+  const share = turnRate > 0 ? Math.min(1, Math.abs(turn) / (turnRate * dt)) : 0;
+  const want = (turn >= 0 ? bank : -bank) * share;
+  const step = unit.rollRate * dt;
   unit.roll = unit.roll < want ? Math.min(want, unit.roll + step) : Math.max(want, unit.roll - step);
 }
 const spaceSpeedFactor = () => db.constants.num('Object_Max_Speed_Multiplier_Space', 1);
@@ -388,6 +462,12 @@ function incomeModOn(u, m) {
       }
   return m.reverse ? !on : on;
 }
+// Who holds a capture point: a build pad's holder (or whoever stands on it), a captured object's player, else nobody.
+export function captureOwner(u) {
+  if (u.isPad) return u.padChild && !u.padChild.dead && u.padChild.player.id >= 0 ? u.padChild.player : u.padOwner || null;
+  return u.player && u.player.id >= 0 ? u.player : null;
+}
+
 const blastTier = (d, r, tiers) => Math.max(0, Math.min(1, 1 - Math.floor(d * (tiers / r)) / (tiers + 1)));
 
 export class Team {
@@ -725,6 +805,7 @@ export class Unit {
     this.pathExt = undefined;
     this.construction = undefined;
     this.heal = undefined;
+    this.heals = undefined;
     this.padOwner = undefined;
     this.capAff = undefined;
     this.influences = undefined;
@@ -749,31 +830,11 @@ export class Unit {
     this.spotLine = undefined;
     this.revealSize = undefined;
     this.lastSeen = undefined;
-    this.px = undefined;
-    this.py = undefined;
-    this.pz = undefined;
-    this.ph = undefined;
-    this.pr = undefined;
-    this.cx = undefined;
-    this.cy = undefined;
-    this.cz = undefined;
-    this.ch = undefined;
-    this.cr = undefined;
-    this.tx = undefined;
-    this.ty = undefined;
-    this.tz = undefined;
-    this.th = undefined;
-    this.tr = undefined;
-    this.ix = undefined;
-    this.iy = undefined;
-    this.iz = undefined;
-    this.ih = undefined;
-    this.ir = undefined;
+    this.poseSlot = -1;
     this.wasShown = undefined;
+    this.smokingPoints = 0;
+    this.instPlan = null;
     this.pitch = undefined;
-    this.pp = undefined;
-    this.cp = undefined;
-    this.tp = undefined;
     this.pitched = undefined;
     this.flip = undefined;
     this.launchZ = undefined;
@@ -788,6 +849,7 @@ export class Unit {
     this.spawnDelay = undefined;
     this.pickAt = undefined;
     this.lossRate = undefined;
+    this.vulnerable = null;
     this.lossAt = undefined;
     this.hurtBy = undefined;
     this.hurtByNext = undefined;
@@ -821,6 +883,8 @@ export class Unit {
     this.holdFire = undefined;
     this.invulnerable = undefined;
     this.noAI = undefined;
+    this.scriptNoAI = undefined;
+    this.scriptSelectable = undefined;
     this.noGarrison = undefined;
     this.suspended = undefined;
     this.aiPower = undefined;
@@ -833,6 +897,10 @@ export class Unit {
     this.prioSet = undefined;
     this.modsIncome = undefined;
     this.passives = undefined;
+    this.tickedAbilities = undefined;
+    this.deflectFrom = undefined;
+    this.deflectShield = undefined;
+    this.deflectJamming = undefined;
     this.instTurretsOnly = undefined;
     this.instPosed = undefined;
     this.aim = undefined;
@@ -1003,7 +1071,10 @@ export class Unit {
           });
           continue;
         }
-        const mode = px.hidden ? /^(pptw|prs|pem)/i.exec(px.name)?.[1].toLowerCase() : null;
+        // PPTW, PRS and PEM effects belong to an ability. Some models ship them unhidden (Thrawn's Admonitor, Rogue
+        // Squadron, the Arc Hammer); they still show only while the ability is on when the unit has that ability.
+        const named = /^(pptw|prs|pem)/i.exec(px.name)?.[1].toLowerCase(),
+          mode = named && (px.hidden || modeAbility(this.type, named)) ? named : null;
         if (mode) {
           (this.modeProxies ||= []).push({
             name: px.name,
@@ -1059,25 +1130,31 @@ export class Unit {
       this.modsIncome = true;
       (this.world.incomeModUnits ??= []).push(this);
     }
-    const heal = t.sub('Abilities').flatMap(a => a.all('Force_Healing_Ability'))[0];
-    if (heal) {
-      this.heal = {
+    for (const heal of t.sub('Abilities').flatMap(a => a.all('Force_Healing_Ability'))) {
+      const names = tag =>
+        heal
+          .val(tag)
+          .split(/[,|\s]+/)
+          .filter(Boolean)
+          .map(c => c.toUpperCase());
+      (this.heals ||= []).push({
         range: heal.num('Heal_Range', 0),
         percent: heal.num('Heal_Percent', 0),
         amount: heal.num('Heal_Amount', 0),
         interval: Math.max(0.1, heal.num('Heal_Interval_In_Secs', 1)),
         single: !/^(no|false)$/i.test(heal.val('Single_Target_Heal', 'Yes')),
-        cats: heal
-          .val('Applicable_Unit_Categories')
-          .split(/[,|\s]+/)
-          .filter(Boolean)
-          .map(c => c.toUpperCase()),
+        cats: names('Applicable_Unit_Categories'),
+        types: names('Applicable_Unit_Types'),
+        excluded: names('Excluded_Unit_Types'),
         sfx: heal.val('SFXEvent_Target_Affected'),
+        // The area overlay shown while the healer is selected (ShadowBlobMaterials.xml), sized to Heal_Range.
+        blob: heal.val('Heal_Range_Blob_Material').trim().toUpperCase(),
         targetLook: healFeedbackLook(heal, 'Target'),
         ownerLook: healFeedbackLook(heal, 'Owner'),
         timer: 1
-      };
+      });
     }
+    if (this.heals) this.heal = this.heals[0];
     if (this.player && this.player.id >= 0) {
       this.buildList = buildListFor(t, this.player.factionName);
       for (const e of spawnList(t, this.player.techLevel))
@@ -1168,14 +1245,23 @@ export class Unit {
         return;
       }
     }
-    if (this.isFighter) this.playAnim('DEPLOY');
-    else this.playAnim('IDLE', { loop: true, random: true });
+    // A fighter's rest pose is its attack pose (S-foils open). Its DEPLOY clip folds them into the
+    // locked cruise pose, so it only plays while Lock S-foils is on; a model built mid-lock starts folded.
+    if (this.isFighter) {
+      if (this.abilities?.some(s => s.active && s.def.kind === 'SPOILER_LOCK') && this.playAnim('DEPLOY')) this.anim.time = this.anim.anim.duration;
+    } else this.playAnim('IDLE', { loop: true, random: true });
   }
 
-  playAnim(kind, { loop = false, random = false } = {}) {
+  // `reverses` names the clip this one undoes (DEPLOY/UNDEPLOY): when that clip is still playing, the new one
+  // starts at the mirrored point so a quick re-toggle turns the parts back instead of snapping, as the engine does.
+  playAnim(kind, { loop = false, random = false, reverses = null } = {}) {
     const a = this.model && getALA(animName(this.modelFile || '', kind));
     if (!a) return false;
-    this.anim = new AnimState(this.model, a, { loop, time: random ? Math.random() * a.duration : 0 });
+    let time = random ? Math.random() * a.duration : 0;
+    const p = this.anim;
+    if (reverses && p && !p.done && p.anim.duration > 0 && p.anim === getALA(animName(this.modelFile || '', reverses)))
+      time = Math.max(0, Math.min(a.duration, a.duration * (1 - p.time / p.anim.duration)));
+    this.anim = new AnimState(this.model, a, { loop, time });
     return true;
   }
 
@@ -1313,7 +1399,7 @@ export class Unit {
       }
       let part = flattenModel(hp.model);
       if (!part) {
-        part = new THREE.Group();
+        part = new PartGroup();
         part.matrixAutoUpdate = false;
         part.add(hp.model.root);
       }
@@ -1496,6 +1582,11 @@ export class Unit {
 }
 
 const MAP_EDGE = 100;
+// Hunt search moves (our own values): close enough to count as arrived, and how much closer a unit must have come
+// in the given time to count as still getting there.
+const HUNT_ARRIVED = 400,
+  HUNT_PROGRESS_SECONDS = 5,
+  HUNT_PROGRESS_MIN = 100;
 function onMap(w, o) {
   if (!w?.min || !w.max || (o.kind !== 'move' && o.kind !== 'attackmove') || !Number.isFinite(o.x) || !Number.isFinite(o.y)) return o;
   const x = clamp(o.x, w.min.x + MAP_EDGE, w.max.x - MAP_EDGE),
@@ -1513,6 +1604,7 @@ const _m1 = new THREE.Matrix4(),
   _m2 = new THREE.Matrix4(),
   _m3 = new THREE.Matrix4();
 const _fl = { x: 0, y: 0, z: 0 };
+const _arc = { cos: 1, sin: 0, x: 0, y: 0, z: 0, frame: null, cosFacing: 1, sinFacing: 0, turret: false, turretLimit: 0, coneHalf: 0, coneUp: 0 };
 const _p = { x: 0, y: 0, z: 0 },
   _p2 = { x: 0, y: 0, z: 0 },
   _p3 = { x: 0, y: 0, z: 0 },
@@ -1641,6 +1733,15 @@ const velocityOf = (u, out) => {
   out.z = u.isFighter ? Math.sin(p) * s : 0;
   return out;
 };
+// The last two positions a unit had before its moves, which lead prediction reads.
+function shiftHistory(u) {
+  u.l2x = u.l1x;
+  u.l2y = u.l1y;
+  u.l2z = u.l1z;
+  u.l1x = u.x;
+  u.l1y = u.y;
+  u.l1z = u.z;
+}
 const leadOf = (out, x, y, z, T, ax, ay, az, speed) => {
   if (T.l1x === undefined) {
     const v = velocityOf(T, _p5);
@@ -1695,7 +1796,9 @@ export class Squad {
     this.mode = undefined;
     this.tolerance = undefined;
     this.err = undefined;
-    this.alone = false;
+    // A squadron put down on the map (starting forces, map objects) stands as one that has arrived: it chases what
+    // comes within Idle_Chase_Range. Only a Stop order parks it (see squadPick).
+    this.alone = true;
     this.route = undefined;
     this.routed = false;
     this.goal = undefined;
@@ -1733,6 +1836,8 @@ export class Squad {
     this._iconFrame = undefined;
     this.scripted = undefined;
     this.noAI = undefined;
+    this.scriptNoAI = undefined;
+    this.scriptSelectable = undefined;
     this.spotted = undefined;
     this.spotLine = undefined;
     this.aiPower = undefined;
@@ -1767,7 +1872,9 @@ export class Squad {
         avoid: undefined,
         partner: undefined,
         lock: undefined,
-        dog: undefined
+        dog: undefined,
+        move: undefined,
+        fireAt: null
       };
       this.fighters.push(u);
       world.units.push(u);
@@ -1803,7 +1910,7 @@ export class Squad {
         if (i < 0) defs.push(d);
         else if (says(d) > says(defs[i])) defs[i] = d;
       }
-      for (const f of this.fighters) attachAbilities(f, defs);
+      for (const f of this.fighters) attachAbilities(f, defs, f.passives.map(s => s.def));
     }
     this.speed = f0 ? Math.min(...this.fighters.map(f => f.maxSpeed)) : 100;
     this.sizeClass = f0 ? f0.sizeClass : 'FIGHTER';
@@ -1865,6 +1972,8 @@ export class World {
     this.wingSeq = 0;
     this.forceSeq = 0;
     this.projectiles = [];
+    this.shots = null;
+    this.shotStore();
     this.obstacles = [];
     this.specialWeapons = [];
     this.tacticalSuperweapons = null;
@@ -1880,6 +1989,13 @@ export class World {
     this.reveal = false;
     this.fogTimer = 0;
     this.solid = [];
+    this.fighterMoves = new FighterMoves(this);
+    this.fighterDecisions = new FighterDecisions(this);
+    this.stepTimes = { begin: 0, units: 0, decide: 0, move: 0, fire: 0, squads: 0, shots: 0, fog: 0, end: 0 };
+    this.unitGridHitReach = 0;
+    this.unitGridCells = { minX: 0, maxX: -1, minY: 0, maxY: -1 };
+    this.squadPickCandidates = [];
+    this.unitsAroundSeen = null;
     this.beams = [];
     this.reveals = [];
     this.fogLifted = 0;
@@ -1888,6 +2004,7 @@ export class World {
     this.respawns = [];
     this.mapGone = new Set();
     this.fields = [];
+    this.fieldGrid = { count: -1, cells: new Map() };
     this.onEvent = () => {};
     this.hitPart = null;
     this.bonusHolders = [];
@@ -1925,9 +2042,16 @@ export class World {
       this.units.push(e);
       if (bonusSourceDefs(type, SPACE).length) this.bonusSource(type, player, e);
       this.takeBonuses(e);
+      // A starbase made for a side whose main station is gone takes its place. Mods start a side on a
+      // placeholder station and swap in the real one from Lua (Create_Generic_Object, then Despawn the old):
+      // the side keeps a station for the empty-selection build bar, tech level and the loss check.
+      const team = player && player.id >= 0 && player.team;
+      if (e.isStation && team && (!team.station || team.station.dead)) team.station = e;
     }
     this.tacticalSuperweapons?.add(e);
-    if (opts.hyperspace && !this.tacticalSuperweapons?.record(e)) this.startHyperspace(e);
+    // Only something with a locomotor jumps in. A reinforcement that cannot move (a defence platform built and
+    // deployed like a unit) is set down where it was placed at once, as the original does.
+    if (opts.hyperspace && (e.isSquad || e.isMobile) && !this.tacticalSuperweapons?.record(e)) this.startHyperspace(e);
     this.recountPop();
     return e;
   }
@@ -1935,6 +2059,36 @@ export class World {
   bonusSource(type, owner, host = null, alias = false, carried = false) {
     const defs = bonusSourceDefs(type, SPACE);
     if (!defs.length || !owner) return null;
+    // Units of one type and owner offer the same bonus, and a unit keeps the largest of a category, so they share
+    // one source that lives while any of them does (ours): with hundreds of such squadrons every unit took and
+    // stored an entry from each, which froze big instant battles while they loaded.
+    if (host && !alias && !carried) {
+      const gk = type.name + '|' + owner.id,
+        groups = (this.bonusGroups ||= new Map());
+      const g = groups.get(gk);
+      if (g) {
+        g.hosts.add(host);
+        // the first host takes the bonus from the second one, as each host did from the others
+        if (g.hosts.size === 2) for (const o of g.hosts) if (o !== host) this.giveBonus(g, o);
+        return g;
+      }
+      const h = {
+        type,
+        defs,
+        owner,
+        host: null,
+        hosts: new Set([host]),
+        group: gk,
+        alias,
+        carried,
+        keys: defs.map((d, i) => 'bonusgrp:' + gk + ':' + d.index + ':' + i),
+        hit: new Set()
+      };
+      groups.set(gk, h);
+      this.bonusHolders.push(h);
+      for (const u of this.units) if (!u.dead) this.giveBonus(h, u);
+      return h;
+    }
     const h = { type, defs, owner, host, alias, carried, keys: defs.map((d, i) => type.name + ':' + d.index + ':' + i), hit: host ? [] : null };
     if (host) {
       const id = host.id;
@@ -1978,7 +2132,7 @@ export class World {
     const list = this.bonusHolders;
     for (let i = 0; i < list.length; i++) {
       const h = list[i];
-      if (!h.host || !h.host.dead) this.giveBonus(h, u);
+      if (h.hosts ? h.hosts.size > 0 : !h.host || !h.host.dead) this.giveBonus(h, u);
     }
   }
 
@@ -1988,13 +2142,17 @@ export class World {
     for (let i = 0; i < h.defs.length; i++) {
       const d = h.defs[i];
       if (u === h.host && !d.self && !h.carried) continue;
+      if (h.hosts && !d.self && h.hosts.has(u) && h.hosts.size < 2) continue;
       if (!bonusTypeFits(d, u.type, h.alias && u.type.parent ? u.type.parent.name.toUpperCase() : '')) continue;
       if (!bonusOwnerFits(d, u.player.factionName, h.owner.team === u.player.team)) continue;
       const m = (u.cmods ||= new CombatMods());
       for (const [t, v] of d.mods) if (m.set(t, d.key, h.keys[i], v)) hit = true;
     }
     if (!hit) return;
-    if (h.hit) {
+    if (h.hosts) {
+      if (h.hit.size > 4096) for (const x of h.hit) if (x.dead) h.hit.delete(x);
+      h.hit.add(u);
+    } else if (h.hit) {
       if (h.hit.length > 512) h.hit = h.hit.filter(x => !x.dead);
       h.hit.push(u);
     }
@@ -2006,6 +2164,38 @@ export class World {
     let k = 0;
     for (let i = 0; i < list.length; i++) {
       const h = list[i];
+      if (h.hosts) {
+        let lost = false;
+        for (const o of h.hosts)
+          if (o.dead) {
+            h.hosts.delete(o);
+            lost = true;
+          }
+        if (lost && h.hosts.size === 1) {
+          // a lone host no longer takes its own kind's bonus, unless the ability applies to itself
+          const [last] = h.hosts;
+          if (last.cmods) {
+            let gone = false;
+            h.defs.forEach((d, k) => {
+              if (!d.self && last.cmods.drop(h.keys[k])) gone = true;
+            });
+            if (gone) last.applyBonuses();
+          }
+        }
+        if (!h.hosts.size) {
+          for (const u of h.hit) {
+            if (u.dead || !u.cmods) continue;
+            let gone = false;
+            for (const key of h.keys) if (u.cmods.drop(key)) gone = true;
+            if (gone) u.applyBonuses();
+          }
+          h.hit.clear();
+          this.bonusGroups.delete(h.group);
+          continue;
+        }
+        list[k++] = h;
+        continue;
+      }
       if (h.host && h.host.dead) {
         for (const u of h.hit) {
           if (u.dead || !u.cmods) continue;
@@ -2041,7 +2231,7 @@ export class World {
       return;
     }
     if (!(s.dps > 0)) return;
-    const foe = o => !o.dead && !o.hyper && !o.limbo && o.targetableUnit && o.player.id >= 0 && o.player.team !== u.player.team;
+    const foe = o => !o.dead && !inJump(o) && !o.limbo && o.targetableUnit && o.player.id >= 0 && o.player.team !== u.player.team;
     let prey = null,
       best = s.chase * s.chase;
     for (const o of this.units) {
@@ -2084,11 +2274,57 @@ export class World {
       e.hyper = HYPER.frames / LOGIC_FPS;
       e.alone = true;
     }
+    this.elevateVulnerability(e);
+  }
+
+  // The arrival vulnerability (see elevatedVulnerability): a DEFENSE modifier in stacking category 0 for the
+  // configured time from the moment the unit is brought in. A player holding a Battlefield_Modifier_Ability with
+  // Disable_Reinforcement_Vulnerability (FoC Enhanced Deployment) is spared.
+  elevateVulnerability(e) {
+    const { duration, factor } = elevatedVulnerability(false);
+    if (!(duration > 0) || !factor || this.reinforcementVulnerabilityOff(e.player)) return;
+    const until = this.time + duration;
+    for (const u of e.isSquad ? e.fighters : [e]) if (!u.dead) u.vulnerable = { until, factor };
+  }
+
+  // The defense damage factor of a unit, its arrival vulnerability included while that lasts.
+  defenseOf(u) {
+    const v = u.vulnerable;
+    if (!v) return u.bonus.defense;
+    if (this.time >= v.until) {
+      u.vulnerable = null;
+      return u.bonus.defense;
+    }
+    return arrivalDefense(u.cmods && u.cmods.size ? u.cmods : null, 0, v.factor);
+  }
+
+  reinforcementVulnerabilityOff(player) {
+    if (!player) return false;
+    for (const u of this.units) {
+      if (u.dead || !u.player || u.player.team !== player.team) continue;
+      const off = disablesReinforcementVulnerability(u.type);
+      if (off && (u.player === player || off.allies)) return true;
+    }
+    return false;
   }
 
   removeUnit(u) {
     u.dead = true;
     this.scene.remove(u.obj);
+  }
+
+  // A script took a side's main station away (Despawn, not a kill): another live starbase of the same owner
+  // becomes the main one, the newest first, as when a mod swaps its placeholder for the real station.
+  handOverStation(u) {
+    const team = u.isStation && u.player && u.player.team;
+    if (!team || team.station !== u) return;
+    for (let i = this.units.length - 1; i >= 0; i--) {
+      const s = this.units[i];
+      if (s !== u && s.isStation && !s.dead && s.player === u.player) {
+        team.station = s;
+        return;
+      }
+    }
   }
 
   recountPop() {
@@ -2100,7 +2336,7 @@ export class World {
     for (const u of this.units) {
       if (u.dead || !u.player || u.player.id < 0) continue;
       if (!u.squad) u.player.pop += u.pop;
-      const cap = u.type.num('Additional_Population_Capacity', 0);
+      const cap = (u.type._popCapacity ??= u.type.num('Additional_Population_Capacity', 0));
       if (cap) for (const p of u.isStation ? u.player.team.players : [u.player]) p.popExtra += cap;
     }
     for (const p of this.players) if (!(p.popCap > 0)) p.popCap = p.popExtra;
@@ -2307,7 +2543,7 @@ export class World {
     uc.construction = { left: secs, total: secs, result: db.type(type.str('Tactical_Buildable_Constructed')) };
     builder.obj.visible = !builder.type.bool('Hides_When_Built_On', true);
     this.audio.playFor(p, type.str('SFXEvent_Build_Started'));
-    this.audio.playAt(p, p.faction.str('SFXEvent_Tactical_Object_Building_Started'), builder.x, builder.y);
+    if (this.audible(builder.x, builder.y, p)) this.audio.playAt(p, p.faction.str('SFXEvent_Tactical_Object_Building_Started'), builder.x, builder.y);
     return uc;
   }
 
@@ -2335,6 +2571,7 @@ export class World {
     p.stats.built++;
     if (isUpgradeType(type)) {
       this.applyUpgrade(p, type, builder);
+      this.upgradeObject(p, type, builder);
       this.onEvent('upgrade', { player: p, type });
       return;
     }
@@ -2380,9 +2617,7 @@ export class World {
       pool.pop();
       return null;
     }
-    let fielded = p.pop;
-    if (!this.campaign) for (const t of p.reinforcements) fielded -= spacePop(t);
-    if (p.popCap - fielded < Math.trunc(spacePop(type) + 0.5)) return null;
+    if (this.popRoom(p) < reinforcePop(type)) return null;
     const th = this.startFacing(p);
     for (let i = 0; i < 10; i++) {
       const a = th + i * 0.6283185;
@@ -2407,6 +2642,14 @@ export class World {
     }
     st.r += 500;
     return null;
+  }
+
+  // Population still free on the battlefield. Skirmish counts queued
+  // reinforcements in p.pop, a campaign battle does not.
+  popRoom(p) {
+    let fielded = p.pop;
+    if (!this.campaign) for (const t of p.reinforcements) fielded -= spacePop(t);
+    return p.popCap - fielded;
   }
 
   insidePrevention(p, at) {
@@ -2520,6 +2763,7 @@ export class World {
   deployReinforcement(player, type, x, y, heading, vesselId) {
     const i = reserveSlot(player, type, vesselId);
     if (i < 0) return 'Not available';
+    if (this.popRoom(player) < reinforcePop(type)) return 'Population cap reached';
     const why = this.cantReinforce(player, x, y, footprintOf(type), type, Number.isFinite(heading) ? heading : this.startFacing(player));
     if (why) return why;
     const bind = takeReserve(player, i);
@@ -2574,6 +2818,20 @@ export class World {
     }
   }
 
+  // A finished upgrade is a game object owned by the buyer. Mods hang a Lua_Script on it
+  // (Get_Type, Get_Owner, Despawn) to spawn units or grant effects, so it has to exist for scripts.
+  upgradeObject(p, type, at = null) {
+    if (!type.str('Lua_Script').trim()) return null;
+    const host = (at && !at.dead && at) || p.station,
+      o = new TacticalMarker(
+        { type, id: nextId++, pos: host ? [host.x, host.y, host.z || 0] : [0, 0, 0], rot: [0, 0, host ? (host.heading * 180) / Math.PI : 0] },
+        () => p
+      );
+    this.upgradeObjects = (this.upgradeObjects || []).filter(u => !u.dead);
+    this.upgradeObjects.push(o);
+    return o;
+  }
+
   upgradeStation(p, at = null) {
     const old = at && at.isStation ? at : p.station;
     if (!old || old.dead) return;
@@ -2619,7 +2877,7 @@ export class World {
   damage(target, amount, opts) {
     const hook = this.onUnitHit,
       from = opts && opts.from;
-    if (!hook || !from || target.dead || target.hyper || target.invulnerable || target.limbo) return this.applyDamage(target, amount, opts);
+    if (!hook || !from || target.dead || inJump(target) || target.invulnerable || target.limbo) return this.applyDamage(target, amount, opts);
     const before = target.health + (target.shield || 0);
     this.applyDamage(target, amount, opts);
     hook(target, from, before - target.health - (target.shield || 0));
@@ -2643,7 +2901,7 @@ export class World {
       proj = null
     } = {}
   ) {
-    if (target.dead || target.hyper || target.invulnerable || target.limbo) return;
+    if (target.dead || inJump(target) || target.invulnerable || target.limbo) return;
     if (target.noOpportunity) target.noOpportunity = false;
     if (attacker?.noOpportunity) attacker.noOpportunity = false;
     const retreating = this.retreatState?.list.has(target);
@@ -2652,7 +2910,7 @@ export class World {
       amount *= this.retreatState.damaged(target.player);
     }
     if (proj && from && from.mods && from.mods.diminish !== false && normalDamage(proj)) amount *= diminishedHit(target, this.time);
-    amount *= target.mods.damageTaken * target.bonus.defense;
+    amount *= target.mods.damageTaken * this.defenseOf(target);
     if (proj) this.projectileMods.apply(this.time, target, proj, (u, pm, fresh) => {
       if ((u.cmods ||= new CombatMods()).set(pm.type, pm.key, pm, pm.value)) u.applyBonuses();
       if (fresh && pm.spaceFx && this.viewerSees(u)) this.fx.attachFx?.(u, pm.spaceFx, pm.dur);
@@ -2901,6 +3159,7 @@ export class World {
       if (!(unit.shieldDownTimer > 0)) unit.shieldDownTimer = db.constants.num('Depleted_Shield_Disable_Time', 5);
     }
     hp.smoke = !unit.proxies.some(px => px.hp === hp);
+    if (hp.smoke) unit.smokingPoints++;
     if (unit.player && unit.player.human) {
       const ev = unit.type.tuples('SFXEvent_Hardpoint_Destroyed').find(t => t[0].toUpperCase() === hp.kind);
       if (ev && ev[1]) this.audio.playFor(unit.player, ev[1], unit);
@@ -3032,7 +3291,9 @@ export class World {
       }
     }
     const seen = u.l1x !== undefined;
-    this.fx.deathClone(
+    // A wreck tumbling away in the fog stays hidden like the ship it was.
+    if (this.viewerSees(u))
+      this.fx.deathClone(
       u,
       ct.name,
       spin,
@@ -3071,9 +3332,16 @@ export class World {
     if (u.padOf) {
       const pad = u.padOf;
       pad.padChild = null;
-      pad.obj.visible = true;
       pad.padOwner = null;
       if (pad.capture) pad.capture.progress = 0;
+      // Destroy_When_Child_Dies (the mining asteroid under an extractor): the pad goes with its building and
+      // comes back after its Tactical_Respawn_Time_In_Secs, not at once.
+      if (!pad.dead && pad.type.bool('Destroy_When_Child_Dies') && this.razable(pad)) {
+        this.removeUnit(pad);
+        this.mapGone.add(pad.mapIndex);
+        this.respawnLater(pad);
+        this.onEvent('died', { entity: pad });
+      } else pad.obj.visible = true;
     }
     if (u.isStation && u.player.team.station === u && !this.campaign) this.checkVictory(u.player.team);
     this.recountPop();
@@ -3096,6 +3364,7 @@ export class World {
 
   updateBegin(dt) {
     this.ramImpacts?.begin(this.units,dt);
+    const beginFrom = performance.now();
     this.stepDt = dt;
     this.stepAt = 0;
     this.time += dt;
@@ -3127,16 +3396,28 @@ export class World {
     }
     const ug = this.unitGrid || (this.unitGrid = new Map());
     for (const l of ug.values()) l.length = 0;
+    let hitReach = 0;
+    const cells = this.unitGridCells;
+    cells.minX = cells.minY = Infinity;
+    cells.maxX = cells.maxY = -Infinity;
     for (let i = 0; i < units.length; i++) {
       const o = units[i];
       o.gridAt = i;
       if (o.dead) continue;
-      const k = Math.floor(o.x / UNIT_CELL) * 65536 + Math.floor(o.y / UNIT_CELL);
+      if (o.hitRadius > hitReach) hitReach = o.hitRadius;
+      const cellX = Math.floor(o.x / UNIT_CELL),
+        cellY = Math.floor(o.y / UNIT_CELL);
+      if (cellX < cells.minX) cells.minX = cellX;
+      if (cellX > cells.maxX) cells.maxX = cellX;
+      if (cellY < cells.minY) cells.minY = cellY;
+      if (cellY > cells.maxY) cells.maxY = cellY;
+      const k = cellX * 65536 + cellY;
       let l = ug.get(k);
       if (!l) ug.set(k, (l = []));
       l.push(o);
     }
     this.unitGridN = units.length;
+    this.unitGridHitReach = hitReach;
     (this.ahead ||= new ScanAhead()).prepare(units, dt);
     if (this.timers.length) {
       const due = this.timers.filter(t => t.at <= this.time);
@@ -3157,16 +3438,18 @@ export class World {
       for (const u of units) if (u.pendingAbility && !u.dead) this.checkPending(u);
       for (const sq of this.squads) if (sq.pendingAbility && !sq.dead) this.checkPending(sq);
       for (const u of units) {
-        if (u.dead || !u.player.human || u.hyper || !u.abilities.length || !u.abilities.some(a => a.auto)) continue;
+        if (u.dead || u.player.id < 0 || u.hyper || !u.abilities.length || !u.abilities.some(a => a.auto)) continue;
         if (!u.squad) aiUseAbilities(this, u, true);
         else if (u.squad.fighters[0] === u) aiUseAbilities(this, u.squad, true);
       }
     }
+    this.stepTimes.begin += performance.now() - beginFrom;
   }
 
   updateSome(upTo) {
     const units = this.units,
-      dt = this.stepDt;
+      dt = this.stepDt,
+      from = performance.now();
     let i = this.stepAt;
     for (; i < units.length && i < upTo; i++) {
       const u = units[i];
@@ -3177,30 +3460,33 @@ export class World {
         u.l1y = u.y;
         u.l1z = u.z;
       }
-      u.l2x = u.l1x;
-      u.l2y = u.l1y;
-      u.l2z = u.l1z;
-      u.l1x = u.x;
-      u.l1y = u.y;
-      u.l1z = u.z;
+      // A fighter moves later, in moveFighters, which shifts its history right before the move.
+      if (!u.isFighter || u.hyper) shiftHistory(u);
       if (u.hyper) {
         this.updateHyper(u, dt);
+        if (u.hyper && u.hyper.shown && !u.isFighter && !u.dead && u.player.id >= 0) this.arrivalFire(u, dt);
         continue;
       }
       if (u.retreatFlight) continue;
       this.updateUnit(u, dt);
     }
     this.stepAt = i;
+    this.stepTimes.units += performance.now() - from;
     return i >= units.length;
   }
 
   updateEnd() {
     const units = this.units,
-      dt = this.stepDt;
+      dt = this.stepDt,
+      times = this.stepTimes;
+    this.moveFighters(dt);
+    let at = performance.now();
     this.ahead?.clear();
     if (this.wings.length) mergeWings(this);
     if (this.forces.length) recheckForces(this);
     for (const s of this.squads) if (!s.dead) this.updateSquad(s, dt);
+    times.squads += performance.now() - at;
+    at = performance.now();
     this.ramImpacts?.end(units,(a,b,amount,at)=>{
       for (const [target,from] of [[a,b],[b,a]]) this.damage(target,amount,{...at,damageType:'Damage_Normal',attacker:from,from});
     });
@@ -3215,10 +3501,14 @@ export class World {
       this.losingTeamBonus(0.5);
     }
     this.updateProjectiles(dt);
+    times.shots += performance.now() - at;
+    at = performance.now();
     if ((this.fogTimer -= dt) <= 0) {
       this.fogTimer = 0.25;
       this.updateVisibility();
     }
+    times.fog += performance.now() - at;
+    at = performance.now();
     if ((this.overrunFrame = (this.overrunFrame || 0) + 1) % 15 === 0) this.checkOverrun();
     if (units.length > 64 && (this._gc = (this._gc || 0) + dt) > 3) {
       this._gc = 0;
@@ -3233,6 +3523,7 @@ export class World {
       this.unitGridN = Infinity;
     }
     this.paths.flush();
+    times.end += performance.now() - at;
   }
 
   checkOverrun() {
@@ -3261,6 +3552,18 @@ export class World {
     }
   }
 
+  // Weapons of a ship still finishing its hyperspace arrival: it picks targets and fires as it would on arrival.
+  arrivalFire(u, dt) {
+    if (!(u.hasWeapons || u.weapon)) return;
+    u.scanTimer -= dt;
+    if (u.scanTimer <= 0) {
+      u.scanTimer = 0.4 + simRandom() * 0.2;
+      this.scan(u);
+    }
+    this.updateWeapons(u, dt);
+    if (u.weapon) this.updateTurret(u, dt);
+  }
+
   updateHyper(u, dt) {
     const h = u.hyper;
     if (this.holdHyperspace) return;
@@ -3283,7 +3586,7 @@ export class World {
       h.shown = true;
       u.obj.scale.setScalar(u.scale);
       u.obj.updateMatrix();
-      if (!u.isFighter || u.squad.fighters[0] === u)
+      if ((!u.isFighter || u.squad.fighters[0] === u) && this.audible(h.tx, h.ty, u.player))
         this.audio.playAt(
           u.player,
           u.player.faction
@@ -3297,7 +3600,7 @@ export class World {
   }
 
   updateUnit(u, dt) {
-    if (u.abilities.length || u.statuses.length) {
+    if (u.abilities.length || u.statuses.length || (u.passives && u.passives.length)) {
       tickAbilities(this, u, dt);
       if (u.dead) return;
     }
@@ -3353,7 +3656,7 @@ export class World {
         }
       }
     }
-    if (u.heal && u.player.id >= 0 && !u.construction) this.updateHeal(u, dt);
+    if (u.heals && u.player.id >= 0 && !u.construction) for (const h of u.heals) this.updateHeal(u, dt, h);
     if (u.income && u.player.id >= 0 && !(u.income.skirmish && this.campaign)) {
       const inc = u.income;
       let v = inc.value,
@@ -3421,7 +3724,7 @@ export class World {
     }
     if (u.flyBy && (u.flyTimer -= dt) <= 0) {
       u.flyTimer = ambientDelay(u.type);
-      if (u.speed > 1 && (!u.squad || u.squad.fighters?.[0] === u)) this.audio.playAt(u.player, u.flyBy, u.x, u.y, u);
+      if (u.speed > 1 && (!u.squad || u.squad.fighters?.[0] === u) && this.audible(u.x, u.y, u.player)) this.audio.playAt(u.player, u.flyBy, u.x, u.y, u);
     }
     if (u.player.id < 0) {
       if (u.isMobile) u.syncObj();
@@ -3432,11 +3735,13 @@ export class World {
       u.scanTimer -= dt;
       if (u.scanTimer <= 0) {
         u.scanTimer = (u.isFighter ? 1.2 : 0.4) + simRandom() * 0.2;
-        this.scan(u);
+        // A fighter flies and fires at its squadron's target and never reads a list of enemies of its own; with
+        // thousands of fighters, each listing every enemy in reach, those lists were a large part of a step.
+        if (!u.isFighter) this.scan(u);
       }
     }
     if (u.isFighter) {
-      if (!u.suspended) this.updateFighter(u, dt);
+      if (!u.suspended) this.fighterDecisions.add(u);
     } else {
       if (u.isMobile && !u.suspended) this.updateShip(u, dt);
       this.updateWeapons(u, dt);
@@ -3450,7 +3755,7 @@ export class World {
     const sel = u.selected;
     this.removeUnit(u);
     if (!result) return;
-    this.audio.playAt(u.player, u.player.faction.str('SFXEvent_Tactical_Object_Building_Complete'), u.x, u.y);
+    if (this.audible(u.x, u.y, u.player)) this.audio.playAt(u.player, u.player.faction.str('SFXEvent_Tactical_Object_Building_Complete'), u.x, u.y);
     const built = this.spawn(result, u.player, u.x, u.y, u.heading);
     built.padOf = pad;
     built.selected = sel;
@@ -3720,8 +4025,32 @@ export class World {
     return u.jammedAt >= 0 && this.time - u.jammedAt < (this.jamTime ??= db.constants.num('Sensor_Jamming_Time', 0.5));
   }
 
+  // The fields whose circle reaches the cell a point is in. Fields are only ever added, never moved, so the
+  // grid is rebuilt when one is added; the checks that use it only count and flag, so order does not matter.
+  fieldsNear(x, y) {
+    const grid = this.fieldGrid;
+    if (grid.count !== this.fields.length) {
+      grid.cells.clear();
+      for (const f of this.fields) {
+        const x0 = Math.floor((f.x - f.r) / FIELD_CELL),
+          x1 = Math.floor((f.x + f.r) / FIELD_CELL),
+          y0 = Math.floor((f.y - f.r) / FIELD_CELL),
+          y1 = Math.floor((f.y + f.r) / FIELD_CELL);
+        for (let cellX = x0; cellX <= x1; cellX++)
+          for (let cellY = y0; cellY <= y1; cellY++) {
+            const key = cellX * 65536 + cellY;
+            let list = grid.cells.get(key);
+            if (!list) grid.cells.set(key, (list = []));
+            list.push(f);
+          }
+      }
+      grid.count = this.fields.length;
+    }
+    return grid.cells.get(Math.floor(x / FIELD_CELL) * 65536 + Math.floor(y / FIELD_CELL)) || NO_FIELDS;
+  }
+
   ionFieldAt(u) {
-    for (const f of this.fields) if (f.ion && (u.x - f.x) ** 2 + (u.y - f.y) ** 2 <= f.r * f.r) return true;
+    for (const f of this.fieldsNear(u.x, u.y)) if (f.ion && (u.x - f.x) ** 2 + (u.y - f.y) ** 2 <= f.r * f.r) return true;
     return false;
   }
 
@@ -3733,7 +4062,7 @@ export class World {
     let ast = 0,
       neb = false,
       ion = false;
-    for (const f of this.fields) {
+    for (const f of this.fieldsNear(u.x, u.y)) {
       const dx = u.x - f.x,
         dy = u.y - f.y;
       if (dx * dx + dy * dy > f.r * f.r) continue;
@@ -3768,7 +4097,7 @@ export class World {
       const show = this.time >= (u.asteroidFx ?? 0);
       if (show) {
         u.asteroidFx = this.time + rand(0.6, 1.2);
-        this.audio.playAt(u.player, t.str('SFXEvent_Damaged_By_Asteroid'), x, y);
+        if (this.audible(x, y, u.player)) this.audio.playAt(u.player, t.str('SFXEvent_Damaged_By_Asteroid'), x, y);
       }
       const dmg = c.num('Asteroid_Field_Damage', 20),
         fx = { hit: particleFile(t.str('Asteroid_Damage_Hit_Particles')) };
@@ -3857,7 +4186,10 @@ export class World {
     }
     const C = VIS_CELL,
       grid = this.visGrid || (this.visGrid = new Map());
-    for (const l of grid.values()) l.length = 0;
+    for (const cell of grid.values()) {
+      cell.units.length = 0;
+      cell.unseen.fill(0);
+    }
     let maxHit = 0,
       gx0 = Infinity,
       gx1 = -Infinity,
@@ -3886,28 +4218,74 @@ export class World {
       if (cx > gx1) gx1 = cx;
       if (cy < gy0) gy0 = cy;
       if (cy > gy1) gy1 = cy;
-      let l = grid.get(k);
-      if (!l) grid.set(k, (l = []));
-      l.push(u);
+      let cell = grid.get(k);
+      if (!cell) grid.set(k, (cell = { units: [], unseen: new Int32Array(32) }));
+      cell.units.push(u);
     }
+    // Each cell counts, per team, the units that team does not see yet, and a squadron's fighters scan their shared
+    // cells once (each target still tests every fighter's own circle and cell box). A group skips a cell its team
+    // already sees all of; visibility only ever gains bits here, so the result is the same as a full walk.
+    const teamBits = this.teams.map(t => t.bit).filter(bit => bit);
+    for (const cell of grid.values())
+      for (const u of cell.units)
+        for (const bit of teamBits) if (!(u.visMask & bit)) cell.unseen[31 - Math.clz32(bit)]++;
+    const groups = (this.visGroups ||= new Map()),
+      box = (this.visBox ||= []);
+    for (const g of groups.values()) g.length = 0;
+    box.length = 0;
     for (const o of units) {
       if (o.dead || o.player.id < 0) continue;
-      const bit = o.player.bit,
-        reach = Math.max(o.revealRange + maxHit, 160);
+      const reach = Math.max(o.revealRange + maxHit, 160);
       if (!(reach >= 0)) continue;
-      const x0 = Math.max(gx0, Math.floor((o.x - reach) / C)),
-        x1 = Math.min(gx1, Math.floor((o.x + reach) / C)),
-        y0 = Math.max(gy0, Math.floor((o.y - reach) / C)),
-        y1 = Math.min(gy1, Math.floor((o.y + reach) / C));
+      const key = o.squad || o;
+      let g = groups.get(key);
+      if (!g) groups.set(key, (g = []));
+      g.push(o, box.length);
+      box.push(
+        Math.max(gx0, Math.floor((o.x - reach) / C)),
+        Math.min(gx1, Math.floor((o.x + reach) / C)),
+        Math.max(gy0, Math.floor((o.y - reach) / C)),
+        Math.min(gy1, Math.floor((o.y + reach) / C))
+      );
+    }
+    for (const [key, g] of groups) {
+      if (!g.length) {
+        groups.delete(key);
+        continue;
+      }
+      // A squadron's fighters all belong to one player.
+      const bit = g[0].player.bit,
+        slot = 31 - Math.clz32(bit);
+      let x0 = Infinity,
+        x1 = -Infinity,
+        y0 = Infinity,
+        y1 = -Infinity;
+      for (let i = 1; i < g.length; i += 2) {
+        const b = g[i];
+        if (box[b] < x0) x0 = box[b];
+        if (box[b + 1] > x1) x1 = box[b + 1];
+        if (box[b + 2] < y0) y0 = box[b + 2];
+        if (box[b + 3] > y1) y1 = box[b + 3];
+      }
       for (let ix = x0; ix <= x1; ix++)
         for (let iy = y0; iy <= y1; iy++) {
-          const l = grid.get(ix * 65536 + iy);
-          if (l)
-            for (const u of l) {
-              if (u.visMask & bit) continue;
+          const cell = grid.get(ix * 65536 + iy);
+          if (!cell || !cell.unseen[slot]) continue;
+          for (const u of cell.units) {
+            if (u.visMask & bit) continue;
+            for (let i = 0; i < g.length; i += 2) {
+              const o = g[i],
+                b = g[i + 1];
+              if (ix < box[b] || ix > box[b + 1] || iy < box[b + 2] || iy > box[b + 3]) continue;
               const r = u.cloaked ? 160 : o.revealRange + u.hitRadius;
-              if (dist2(u, o) <= r * r) u.visMask |= bit;
+              if (dist2(u, o) <= r * r) {
+                u.visMask |= bit;
+                cell.unseen[slot]--;
+                break;
+              }
             }
+            if (!cell.unseen[slot]) break;
+          }
         }
     }
     const FC = (this.fowCell ||= db.constants.num('DesiredSpaceFOWCellSize', 100)),
@@ -3985,6 +4363,47 @@ export class World {
     for (const u of this.units)
       if (!u.dead && u.spotted)
         for (const s of u.spotted) if (s.team === v.team && s.until > now) mark((s.cx + 0.5) * C, (s.cy + 0.5) * C, s.n * C);
+    // Capture points (mining asteroids, build pads) stay on screen under fog, so what the viewer is shown of them is
+    // what the viewer last saw: grey until first seen, then the owner at the last look, never a capture it missed.
+    // Only a cell in sight this tick counts: the fog's regrow time keeps a cell open after the last look, and a
+    // capture made in that window was not seen.
+    for (const u of this.units) {
+      if (u.dead || !u.capture) continue;
+      const cx = Math.floor(u.x / C) - g.x0,
+        cy = Math.floor(u.y / C) - g.y0,
+        sees = this.fogLifted & v.bit ? true : cx >= 0 && cy >= 0 && cx < g.w && cy < g.h && at[cy * g.w + cx] === now;
+      u.viewSees = sees;
+      if (sees) u.viewOwner = captureOwner(u);
+    }
+  }
+
+  // The owner the viewer is shown for a capture point: the real one when its own side holds it, it is in sight,
+  // or there is no fog; otherwise the owner when the viewer last saw it (neutral if never).
+  shownOwner(u) {
+    const real = captureOwner(u),
+      v = this.viewer;
+    if (!this.fog || !v || this.reveal || (v.bit && this.fogLifted & v.bit) || (real && real.team === v.team)) return real;
+    if (u.viewSees) return real;
+    return u.viewOwner && u.viewOwner.team !== v.team ? u.viewOwner : null;
+  }
+
+  // Whether the viewer can watch a capture point right now (its capture bar, its build-on child).
+  viewWatches(u) {
+    const v = this.viewer;
+    if (!this.fog || !v || this.reveal || (v.bit && this.fogLifted & v.bit)) return true;
+    const real = captureOwner(u);
+    if (real && real.team === v.team) return true;
+    if (u.capture && u.capture.by && u.capture.by.team === v.team) return true;
+    return u.viewSees !== false;
+  }
+
+  // Whether a sound made at (x, y) by `player` reaches the viewer: its own side's sounds always do, others only out
+  // of the fog, as the original's fogged objects make no sound.
+  audible(x, y, player) {
+    const v = this.viewer;
+    if (!this.fog || !v || this.reveal) return true;
+    if (player && player.team === v.team) return true;
+    return !this.viewFogged(x, y);
   }
 
   viewFogged(x, y) {
@@ -4048,6 +4467,131 @@ export class World {
     return out;
   }
 
+  // The live unit nearest to the point (by centre) that passes the test, searched ring by ring over
+  // the unit grid. Ties go to the unit earlier in this.units, as a walk over every unit would give.
+  nearestUnit(from, accept) {
+    const units = this.units;
+    let best = null,
+      bestDistance = Infinity;
+    const orderOf = unit => (units[unit.gridAt] === unit ? unit.gridAt : units.indexOf(unit));
+    const consider = unit => {
+      if (unit === from || unit.dead || !accept(unit)) return;
+      const distance = Math.hypot(unit.x - from.x, unit.y - from.y);
+      if (distance < bestDistance || (distance === bestDistance && orderOf(unit) < orderOf(best))) {
+        best = unit;
+        bestDistance = distance;
+      }
+    };
+    const grid = this.unitGrid;
+    if (!grid || this.unitGridN > units.length) {
+      for (const unit of units) consider(unit);
+      return best;
+    }
+    for (let i = this.unitGridN; i < units.length; i++) consider(units[i]);
+    const cells = this.unitGridCells,
+      centreX = Math.floor(from.x / UNIT_CELL),
+      centreY = Math.floor(from.y / UNIT_CELL);
+    const lastRing = Math.max(centreX - cells.minX, cells.maxX - centreX, centreY - cells.minY, cells.maxY - centreY);
+    const visit = (cellX, cellY) => {
+      if (cellX < cells.minX || cellX > cells.maxX || cellY < cells.minY || cellY > cells.maxY) return;
+      const list = grid.get(cellX * 65536 + cellY);
+      if (list) for (const unit of list) consider(unit);
+    };
+    for (let ring = 0; ring <= lastRing; ring++) {
+      if (best && bestDistance < (ring - 1) * UNIT_CELL - UNIT_PAD) break;
+      if (ring === 0) {
+        visit(centreX, centreY);
+        continue;
+      }
+      for (let cellX = centreX - ring; cellX <= centreX + ring; cellX++) {
+        visit(cellX, centreY - ring);
+        visit(cellX, centreY + ring);
+      }
+      for (let cellY = centreY - ring + 1; cellY <= centreY + ring - 1; cellY++) {
+        visit(centreX - ring, cellY);
+        visit(centreX + ring, cellY);
+      }
+    }
+    return best;
+  }
+
+  // The units that pass the test and whose hit circle can reach within either radius of the two
+  // points, in the order of this.units. The test runs on grid cells first and only the units that
+  // pass are put in order, so a search over the result picks exactly what a walk over every unit
+  // would, without sorting every unit near a crowded fight.
+  unitsAround(first, firstRange, second, secondRange, accept, out) {
+    out.length = 0;
+    const units = this.units,
+      grid = this.unitGrid;
+    if (!grid || this.unitGridN > units.length) {
+      for (const unit of units) if (accept(unit)) out.push(unit);
+      return out;
+    }
+    const cellsSeen = (this.unitsAroundSeen ||= new Set()),
+      reach = this.unitGridHitReach + UNIT_PAD;
+    cellsSeen.clear();
+    // Every unit sits in exactly one cell, so visiting each cell once visits each unit once.
+    const gather = (at, range) => {
+      const pad = range + reach,
+        x0 = Math.floor((at.x - pad) / UNIT_CELL),
+        x1 = Math.floor((at.x + pad) / UNIT_CELL),
+        y0 = Math.floor((at.y - pad) / UNIT_CELL),
+        y1 = Math.floor((at.y + pad) / UNIT_CELL);
+      for (let cellX = x0; cellX <= x1; cellX++)
+        for (let cellY = y0; cellY <= y1; cellY++) {
+          const key = cellX * 65536 + cellY;
+          if (cellsSeen.has(key)) continue;
+          cellsSeen.add(key);
+          const list = grid.get(key);
+          if (list) for (const unit of list) if (accept(unit)) out.push(unit);
+        }
+    };
+    gather(first, firstRange);
+    if (second) gather(second, secondRange);
+    if (out.length > 1) out.sort(byGridAt);
+    for (let i = this.unitGridN; i < units.length; i++) if (accept(units[i])) out.push(units[i]);
+    return out;
+  }
+
+  // Nearest enemy within a homing projectile's scan range; ties go to the earlier unit, as a scan of this.units in order would.
+  seekTarget(p) {
+    const ug = this.unitGrid,
+      units = this.units,
+      sk = _seek;
+    sk.p = p;
+    sk.best = null;
+    sk.bi = 0;
+    sk.bd = p.scan * p.scan;
+    if (!ug || this.unitGridN > units.length) {
+      for (let i = 0; i < units.length; i++) this.seekTake(units[i], i);
+      return sk.best;
+    }
+    const pad = p.scan + UNIT_PAD,
+      x0 = Math.floor((p.x - pad) / UNIT_CELL),
+      x1 = Math.floor((p.x + pad) / UNIT_CELL),
+      y0 = Math.floor((p.y - pad) / UNIT_CELL),
+      y1 = Math.floor((p.y + pad) / UNIT_CELL);
+    for (let ix = x0; ix <= x1; ix++)
+      for (let iy = y0; iy <= y1; iy++) {
+        const l = ug.get(ix * 65536 + iy);
+        if (l) for (const o of l) this.seekTake(o, o.gridAt);
+      }
+    for (let i = this.unitGridN; i < units.length; i++) this.seekTake(units[i], i);
+    return sk.best;
+  }
+
+  seekTake(o, i) {
+    const sk = _seek,
+      p = sk.p;
+    if (o.dead || inJump(o) || !o.targetableUnit || o.player.id < 0 || o.player.team === p.team) return;
+    const d2 = (o.x - p.x) ** 2 + (o.y - p.y) ** 2 + (o.z - p.z) ** 2;
+    if ((d2 < sk.bd || (d2 === sk.bd && sk.best && i < sk.bi)) && !this.jammed(o)) {
+      sk.bd = d2;
+      sk.best = o;
+      sk.bi = i;
+    }
+  }
+
   scan(u) {
     const range = u.maxRange + 250;
     const r2 = range * range;
@@ -4057,7 +4601,7 @@ export class World {
     const bit = me.bit;
     const take = o => {
       if (
-        !(o.dead || o.player.team === me.team || o.player.id < 0 || !o.targetableUnit || o.hyper || o.limbo || o.noOpportunity || !(o.seenBy & bit)) &&
+        !(o.dead || o.player.team === me.team || o.player.id < 0 || !o.targetableUnit || inJump(o) || o.limbo || o.noOpportunity || !(o.seenBy & bit)) &&
         dist2(u, o) <= r2
       )
         list.push(o);
@@ -4065,7 +4609,7 @@ export class World {
     const ug = this.unitGrid,
       pre = this.ahead && this.ahead.take(u);
     if (pre) {
-      for (const o of pre) if (!o.dead && !o.hyper) list.push(o);
+      for (const o of pre) if (!o.dead && !inJump(o)) list.push(o);
       for (let i = this.unitGridN; i < this.units.length; i++) take(this.units[i]);
     } else if (ug && this.unitGridN <= this.units.length) {
       const pad = range + UNIT_PAD,
@@ -4092,7 +4636,7 @@ export class World {
     const inReach = o => dist2(u, o) <= (reach + o.hitRadius) ** 2;
     const rate = o => (set ? priorityOf(set, o.type) : 1);
     let cur =
-      u.target && !u.target.dead && !u.target.hyper && u.target.targetableUnit && u.target.seenBy & bit && inReach(u.target)
+      u.target && !u.target.dead && !inJump(u.target) && u.target.targetableUnit && u.target.seenBy & bit && inReach(u.target)
         ? u.target
         : null;
     if (cur) {
@@ -4108,8 +4652,10 @@ export class World {
     }
     u.pickAt = this.time + 1 + simRandom() * 0.5;
     const low = db.constants.num('Health_Low_Percent_Threshold', 0.33);
+    // whether the best so far is low on health is asked once for each best, not again for every enemy weighed against it
     let best = cur,
-      br = cur ? rate(cur) : 0;
+      br = cur ? rate(cur) : 0,
+      bestIsLow;
     for (const o of list) {
       if (o === cur || !inReach(o)) continue;
       const r = rate(o);
@@ -4120,10 +4666,11 @@ export class World {
         continue;
       }
       const lo = o.healthFrac <= low,
-        lb = best.healthFrac <= low;
-      if (lo !== lb ? lo : r < br || dist2(u, o) < dist2(u, best)) {
+        lb = (bestIsLow ??= best.healthFrac <= low);
+      if (lo !== lb ? lo : r !== br ? r < br : dist2(u, o) < dist2(u, best)) {
         best = o;
         br = r;
+        bestIsLow = lo;
       }
     }
     u.target = best;
@@ -4503,8 +5050,8 @@ export class World {
   arrived(e) {
     const next = e.queue && e.queue.shift();
     if (next) e.setOrder(next, true);
-    else if (e.isSquad && this.keepEscorting(e)) {
-      e.setOrder({ kind: 'guard', target: e.order.wing.escort || e.order.wing.escorted });
+    else if (e.isSquad && this.guardAfter(e)) {
+      e.setOrder({ kind: 'guard', target: this.guardAfter(e) });
       e.alone = false;
     } else {
       e.setOrder(e.order.face !== undefined ? { kind: 'idle', face: e.order.face } : { kind: 'idle' });
@@ -4512,13 +5059,14 @@ export class World {
     }
   }
 
-  keepEscorting(s) {
+  // The ship a squadron guards once a move ends (ours): the one it was guarding when the move was given, else the
+  // ship its wing escorted on the way. The guard holds until the player gives the squadron another order.
+  guardAfter(s) {
+    const ok = t => !!t && !t.dead && !t.isSquad && t.player.team === s.player.team;
+    if (ok(s.order.guard)) return s.order.guard;
     const w = s.order.wing,
-      ship = w && (w.escort || w.escorted),
-      lead = s.fighters[0];
-    if (!ship || ship.dead || ship.isSquad || !lead || ship.player.team !== s.player.team || ship.order.kind !== 'idle') return false;
-    const reach = (ship.radius || 0) + s.type.num('Guard_Chase_Range', 0);
-    return (lead.x - ship.x) ** 2 + (lead.y - ship.y) ** 2 <= reach * reach;
+      ship = w && (w.escort || w.escorted);
+    return ok(ship) ? ship : null;
   }
 
   repairHardpoint(player, u, index) {
@@ -4558,8 +5106,7 @@ export class World {
     }
   }
 
-  updateHeal(u, dt) {
-    const h = u.heal;
+  updateHeal(u, dt, h = u.heal) {
     if ((h.timer -= dt) > 0) return;
     h.timer = h.interval;
     const mend = t => {
@@ -4590,8 +5137,15 @@ export class World {
       if (t.dead || t === u || t.hyper || t.player.team !== u.player.team || t.isStructure) continue;
       const f = t.healShare();
       if (f >= 1 || (t.x - u.x) ** 2 + (t.y - u.y) ** 2 > h.range * h.range) continue;
-      const cats = t.type.categories();
-      if (h.cats.length && !h.cats.some(c => cats.has(c) || (c === 'HERO' && (cats.has('SPACEHERO') || cats.has('HERO'))))) continue;
+      const cats = t.type.categories(),
+        name = h.types.length || h.excluded.length ? t.type.name.toUpperCase() : '';
+      if (h.excluded.includes(name)) continue;
+      if (
+        !h.types.includes(name) &&
+        (h.cats.length || h.types.length) &&
+        !h.cats.some(c => c === 'ALL' || cats.has(c) || (c === 'HERO' && (cats.has('SPACEHERO') || cats.has('HERO'))))
+      )
+        continue;
       if (!h.single) {
         mend(t);
         this.showHealFeedback(t, h.targetLook);
@@ -4609,7 +5163,7 @@ export class World {
       healedAny = true;
       if (h.sfx && this.time - (h.said ?? -9) > 1.5) {
         h.said = this.time;
-        this.audio.playAt(best.player, h.sfx, best.x, best.y);
+        if (this.audible(best.x, best.y, best.player)) this.audio.playAt(best.player, h.sfx, best.x, best.y);
       }
       this.onEvent('healed', { unit: best, by: u });
     }
@@ -4771,19 +5325,25 @@ export class World {
   }
 
   canBear(u, hp, t) {
-    if (this.restricted(hp, t)) return false;
     hp.worldPos(_ph);
-    const dx = t.x - _ph.x,
-      dy = t.y - _ph.y;
+    return this.bearsFrom(hp, t, _ph.x, _ph.y, this.arcOf(u, hp));
+  }
+
+  // canBear with the hardpoint's place and firing arc already worked out: a hardpoint looking for a target asks this
+  // of every enemy in reach, thousands of times a step in a big battle, and neither changes from one enemy to the next.
+  bearsFrom(hp, t, hardpointX, hardpointY, arc) {
+    if (this.restricted(hp, t)) return false;
+    const dx = t.x - hardpointX,
+      dy = t.y - hardpointY;
     const reach = hp.range + t.hitRadius;
     if (!t.free && dx * dx + dy * dy > reach * reach) return false;
     if (hp.minRange > 0 && dx * dx + dy * dy < hp.minRange * hp.minRange) return false;
-    if (this.hpInCone(u, hp, t.x, t.y, t.z || 0)) return true;
+    if (this.inArc(arc, t.x, t.y, t.z || 0)) return true;
     if (!t.hardpoints) return false;
     for (const h of t.hardpoints) {
       if (!h.alive) continue;
       h.worldPos(_ph);
-      if (this.hpInCone(u, hp, _ph.x, _ph.y, _ph.z)) return true;
+      if (this.inArc(arc, _ph.x, _ph.y, _ph.z)) return true;
     }
     return false;
   }
@@ -4802,7 +5362,14 @@ export class World {
   }
 
   hpInCone(u, hp, x, y, z) {
-    const h = hp.onTurret && u.turretAim ? u.heading + u.turretAim.yaw : u.heading,
+    return this.inArc(this.arcOf(u, hp), x, y, z);
+  }
+
+  // A hardpoint's firing arc as it stands now: where it fires from and which way, from the unit's pose. The one arc
+  // is reused, so it is only good until the next call.
+  arcOf(u, hp) {
+    const arc = _arc,
+      h = hp.onTurret && u.turretAim ? u.heading + u.turretAim.yaw : u.heading,
       c = Math.cos(h),
       s = Math.sin(h),
       turret = hp.turret >= 0,
@@ -4811,9 +5378,28 @@ export class World {
     const ox = F ? F.ox : o.x,
       oy = F ? F.oy : o.y,
       oz = F ? F.oz : o.z || 0;
-    const dx = x - (u.x + c * ox - s * oy),
-      dy = y - (u.y + s * ox + c * oy),
-      dz = z - ((u.z || 0) + oz);
+    arc.cos = c;
+    arc.sin = s;
+    arc.x = u.x + c * ox - s * oy;
+    arc.y = u.y + s * ox + c * oy;
+    arc.z = (u.z || 0) + oz;
+    arc.frame = F;
+    arc.cosFacing = F ? 1 : Math.cos(hp.facing);
+    arc.sinFacing = F ? 0 : Math.sin(hp.facing);
+    arc.turret = turret;
+    arc.turretLimit = hp.turret;
+    arc.coneHalf = hp.coneHalf;
+    arc.coneUp = hp.coneUp;
+    return arc;
+  }
+
+  inArc(arc, x, y, z) {
+    const c = arc.cos,
+      s = arc.sin,
+      F = arc.frame;
+    const dx = x - arc.x,
+      dy = y - arc.y,
+      dz = z - arc.z;
     const ax = c * dx + s * dy,
       ay = c * dy - s * dx;
     let lx, ly, lz;
@@ -4822,16 +5408,16 @@ export class World {
       ly = ax * F.yx + ay * F.yy + dz * F.yz;
       lz = ax * F.zx + ay * F.zy + dz * F.zz;
     } else {
-      const cf = Math.cos(hp.facing),
-        sf = Math.sin(hp.facing);
+      const cf = arc.cosFacing,
+        sf = arc.sinFacing;
       lx = ax * cf + ay * sf;
       ly = ay * cf - ax * sf;
       lz = dz;
     }
     const yaw = lx || ly ? Math.atan2(ly, lx) : 0;
-    if (turret) return Math.abs(F ? wrapAngle(yaw + Math.PI / 2) : yaw) <= hp.turret;
-    if (Math.abs(yaw) > hp.coneHalf) return false;
-    return Math.abs(Math.atan2(lz, Math.hypot(lx, ly))) <= hp.coneUp;
+    if (arc.turret) return Math.abs(F ? wrapAngle(yaw + Math.PI / 2) : yaw) <= arc.turretLimit;
+    if (Math.abs(yaw) > arc.coneHalf) return false;
+    return Math.abs(Math.atan2(lz, Math.hypot(lx, ly))) <= arc.coneUp;
   }
 
   nearestHp(t, from) {
@@ -4879,28 +5465,35 @@ export class World {
       !(!u.player.human && !(hp.rechargeMax > db.constants.num('Hardpoint_Recharge_Cutoff_For_Opportunity_Fire', 3)))
     )
       return null;
-    const had = hp.target;
-    if (had && !had.dead && had !== ord && this.canBear(u, hp, had)) return had;
+    const set = setOf(u),
+      rank = o => (set ? priorityOf(set, o.type) : 1);
+    const had = hp.target && !hp.target.dead && hp.target !== ord && this.canBear(u, hp, hp.target) ? hp.target : null;
+    if (had && (rank(had) === 1 || this.time < (hp.lookAt || 0))) return had;
     if (this.time < (hp.lookAt || 0)) return null;
     hp.lookAt = this.time + 0.5;
-    const set = setOf(u);
-    let best = null,
-      br = Infinity;
+    let best = had,
+      br = had ? rank(had) : Infinity,
+      bd = Infinity;
     hp.worldPos(_p);
     const px = _p.x,
       py = _p.y,
-      range = hp.range;
+      range = hp.range,
+      arc = this.arcOf(u, hp);
+    if (had) bd = (had.x - px) ** 2 + (had.y - py) ** 2;
     for (const o of u.enemies) {
-      if (o.dead) continue;
+      if (o.dead || o === had) continue;
       const dx = o.x - px,
         dy = o.y - py,
+        d = dx * dx + dy * dy,
         reach = range + o.hitRadius;
-      if (dx * dx + dy * dy > reach * reach || !this.canBear(u, hp, o)) continue;
-      const r = set ? priorityOf(set, o.type) : 1;
-      if (r < 0 || (best && !(r < br))) continue;
+      if (d > reach * reach) continue;
+      const r = rank(o);
+      // The held target stays unless something ranks above it; among fresh picks the nearest of the best rank wins.
+      if (r < 0 || (best && (r > br || (r === br && (best === had || d >= bd))))) continue;
+      if (!this.bearsFrom(hp, o, px, py, arc)) continue;
       best = o;
       br = r;
-      if (r === 1) break;
+      bd = d;
     }
     return best;
   }
@@ -4942,7 +5535,7 @@ export class World {
           : { range: hp.range, damage: hp.projDamage }
     );
     if (ok === false) return false;
-    this.audio.playFrom(u, weaponFireSound(u.type, hp), x, y);
+    if (this.audible(x, y, u.player)) this.audio.playFrom(u, weaponFireSound(u.type, hp), x, y);
     return true;
   }
 
@@ -5016,7 +5609,7 @@ export class World {
     const homing = cat === CAT.MISSILE;
     const reach = ((opts && opts.range) || proj.num('Projectile_Max_Flight_Distance', 2000)) + (target.hitRadius || 0) + Math.abs(tp.z - z);
     const mult = shooter.bonus.damage * shooter.mods.damageDealt * (opts && opts.mult ? opts.mult : 1);
-    this.projectiles.push({
+    this.addShot({
       id: ++shotIds,
       def: proj,
       x,
@@ -5109,7 +5702,7 @@ export class World {
       dz = tz - z,
       len = Math.hypot(dx, dy, dz) || 1;
     const col = proj.vec('Projectile_Laser_Color', [255, 200, 120, 255]);
-    this.projectiles.push({
+    this.addShot({
       id: ++shotIds,
       def: proj,
       x,
@@ -5174,7 +5767,7 @@ export class World {
       late = proj ? (proj._aeDelay ??= proj.num('Max_Secs_For_AE_Delayed_Damage', 0)) : 0;
     let victims = 0;
     for (const o of this.units.slice()) {
-      if (o.dead || o.hyper || !o.targetableUnit) continue;
+      if (o.dead || inJump(o) || !o.targetableUnit) continue;
       if (immune) {
         if (String(o.player.factionName || '').toUpperCase() === immune) continue;
       } else if (o.player.id < 0 || (owner && o.player.team === owner.team)) continue;
@@ -5235,10 +5828,11 @@ export class World {
       healing = proj.bool('Projectile_Instant_Heal_On_Detonation'),
       detonationParticle =
         particleFile(proj.str('Projectile_Lifetime_Detonation_Particle')) || particleFile(proj.str('Projectile_Object_Detonation_Particle'));
-    if (healing) this.fx.made?.(detonationParticle, x, y, z);
-    else this.fx.explosion(x, y, z, Math.min(600, range * 0.8), big || range > 300, detonationParticle);
+    const shown = this.audible(x, y, owner);
+    if (shown && healing) this.fx.made?.(detonationParticle, x, y, z);
+    else if (shown) this.fx.explosion(x, y, z, Math.min(600, range * 0.8), big || range > 300, detonationParticle);
     const sfx = proj.str('Projectile_SFXEvent_Detonate') || (healing ? '' : 'Unit_Star_Destroyer_Death_SFX');
-    if (sfx) this.audio.play(sfx, x, y);
+    if (sfx && shown) this.audio.play(sfx, x, y);
     this.areaDamage(x, y, range, dmg, proj.str('Damage_Type'), owner, {
       shields: proj.bool('Projectile_Does_Shield_Damage', true),
       hull: proj.bool('Projectile_Does_Hitpoint_Damage', true),
@@ -5248,7 +5842,8 @@ export class World {
     if (healing && owner) this.instantHeal(proj, owner, x, y);
   }
 
-  instantHeal(proj, owner, x, y) {
+  // dry: only tell whether anything in reach would be healed.
+  instantHeal(proj, owner, x, y, dry = false) {
     const R = proj.num('Projectile_Instant_Heal_Radius', 100),
       add = proj.num('Projectile_Instant_Heal_Health_Increase', 0),
       cats = proj
@@ -5256,7 +5851,9 @@ export class World {
         .split(/[|,\s]+/)
         .filter(Boolean)
         .map(c => c.toUpperCase()),
-      file = particleFile(proj.str('Projectile_Instant_Heal_Spawn_Effect'));
+      file = particleFile(proj.str('Projectile_Instant_Heal_Spawn_Effect')),
+      // the healed effect stays on the unit for Projectile_Instant_Heal_Duration_Frames logic frames
+      shown = Math.max(1, proj.num('Projectile_Instant_Heal_Duration_Frames', 30)) / LOGIC_FPS;
     const team = owner.team || owner.player?.team;
     for (const u of this.units) {
       if (u.dead || u.hyper || u.player.team !== team || (u.x - x) ** 2 + (u.y - y) ** 2 > R * R) continue;
@@ -5264,10 +5861,37 @@ export class World {
         const has = u.type.categories();
         if (!cats.some(c => has.has(c))) continue;
       }
-      if (u.health >= u.maxHealth) continue;
-      u.health = Math.min(u.maxHealth, u.health + add);
-      if (file && this.viewerSees(u)) this.fx.attachFx?.(u, file, 1);
+      if (!this.mend(u, add, dry)) continue;
+      if (dry) return true;
+      if (file && this.viewerSees(u)) this.fx.attachFx?.(u, file, shown);
     }
+    return false;
+  }
+
+  // Raises the hull and every surviving hardpoint by the same share, so the two health pools stay in step.
+  mend(u, amount, dry = false) {
+    let parts = false,
+      left = 0,
+      all = 0;
+    if (u.hpDriven)
+      for (const p of u.hardpoints) {
+        if (!p.destroyable) continue;
+        all += p.maxHealth;
+        if (!p.alive || !(p.health > 0)) continue;
+        left += p.health;
+        if (p.health < p.maxHealth) parts = true;
+      }
+    // Lost hardpoints hold the hull below full for good (pullPools); that is not damage a repair can undo.
+    const gap = (this.hullGap ??= db.constants.num('Hull_Vs_Hard_Points_Health_Constraint', 0.2)),
+      cap = u.hpDies && all > 0 ? Math.min(1, left / all + gap) : 1;
+    if (!(amount > 0) || !(u.maxHealth > 0) || (!parts && !(u.health < u.maxHealth * cap - 1e-6))) return false;
+    if (dry) return true;
+    const share = amount / u.maxHealth;
+    u.health = Math.min(u.maxHealth, u.health + amount);
+    if (parts)
+      for (const p of u.hardpoints)
+        if (p.destroyable && p.alive && p.health > 0) p.health = Math.min(p.maxHealth, p.health + p.maxHealth * share);
+    return true;
   }
 
   delayed(seconds, x, y, z, fn) {
@@ -5311,24 +5935,77 @@ export class World {
   }
 
   updateProjectiles(dt) {
-    const ps = this.projectiles;
+    const ps = this.projectiles,
+      store = this.shotStore();
+    store.nextStep();
+    this.alignShotRows();
     if (ps.length) this.makeHitGrid();
     const deflect = (this._deflect ||= []);
     deflect.length = 0;
-    if (ps.some(p => p.homing))
+    if (store.homing > 0)
       for (const u of this.units) {
         if (u.dead) continue;
         let r = (u.type._missileShield ??= u.type.num('Passive_Missile_Shield_Radius', 0));
-        if (u.abilities.length && u.isActive('MISSILE_SHIELD')) r = u.abilityState('MISSILE_SHIELD').def.node.num('Effective_Radius', r);
-        if (u.abilities.length && u.isActive('SENSOR_JAMMING')) r = u.abilityState('SENSOR_JAMMING').def.node.num('Effective_Radius', r);
+        const abilities = u.abilities;
+        if (abilities.length) {
+          // The first ability of each kind decides, as abilityState would pick it. A unit's abilities are looked
+          // through once, not for every step: with thousands of units that was a millisecond of each step.
+          if (u.deflectFrom !== abilities) {
+            u.deflectFrom = abilities;
+            u.deflectShield = u.deflectJamming = null;
+            for (const a of abilities) {
+              const kind = a.def.kind;
+              if (kind === 'MISSILE_SHIELD') u.deflectShield ||= a;
+              else if (kind === 'SENSOR_JAMMING') u.deflectJamming ||= a;
+            }
+          }
+          const shield = u.deflectShield,
+            jamming = u.deflectJamming;
+          if (shield && shield.active) r = shield.def.node.num('Effective_Radius', r);
+          if (jamming && jamming.active) r = jamming.def.node.num('Effective_Radius', r);
+        }
         if (r > 0) deflect.push(u, r);
       }
     let n = 0;
     for (let i = 0; i < ps.length; i++) {
+      const row = this.shotRows[i];
+      if (store.dead[row]) {
+        store.release(row);
+        continue;
+      }
+      if (store.kind[row] === SHOT_PLAIN) {
+        // a plain bolt flies straight from its row of numbers; the shot itself is only needed when it may hit or ends
+        const step = store.speed[row] * dt,
+          age = (store.age[row] += dt),
+          x0 = store.x[row],
+          y0 = store.y[row],
+          z0 = store.z[row],
+          x1 = (store.x[row] = x0 + store.vx[row] * dt),
+          y1 = (store.y[row] = y0 + store.vy[row] * dt),
+          z1 = (store.z[row] = z0 + store.vz[row] * dt),
+          flown = (store.flown[row] += step),
+          reach = store.reach[row],
+          struck = this.shotStrike(store.team[row], x0, y0, z0, x1, y1, z1, step);
+        if (struck < 0 && !(reach > 0 ? flown >= reach : store.life[row] > 0 && age >= store.life[row])) {
+          this.shotRows[n] = row;
+          ps[n++] = ps[i];
+          continue;
+        }
+        const p = ps[i];
+        if (struck >= 0) this.shotStruck(p, struck, x0, y0, z0);
+        if (this.shotFliesOn(p, struck < 0)) {
+          this.shotRows[n] = row;
+          ps[n++] = p;
+        } else {
+          this.shotEnded(p);
+          store.release(row);
+        }
+        continue;
+      }
       const p = ps[i];
-      if (p.dead) continue;
       if (p.wait > 0) {
         p.wait -= dt;
+        this.shotRows[n] = row;
         ps[n++] = p;
         continue;
       }
@@ -5351,6 +6028,7 @@ export class World {
             z: p.point.z
           });
           this.shotEnded(p);
+          store.release(row);
           continue;
         }
       }
@@ -5359,23 +6037,16 @@ export class World {
         p.y += p.vy * dt;
         p.z += p.vz * dt;
         if ((p.flown += step) >= p.reach) keep = false;
-        if (keep) ps[n++] = p;
+        if (keep) {
+          this.shotRows[n] = row;
+          ps[n++] = p;
+        } else store.release(row);
         continue;
       }
-      if (p.homing && (!t || t.dead || t.hyper)) {
+      if (p.homing && (!t || t.dead || inJump(t))) {
         p.target = p.targetHp = null;
         if (p.scan > 0) {
-          let best = null,
-            bd = p.scan * p.scan;
-          for (const o of this.units)
-            if (!o.dead && !o.hyper && o.targetableUnit && o.player.id >= 0 && o.player.team !== p.team && !this.jammed(o)) {
-              const d2 = (o.x - p.x) ** 2 + (o.y - p.y) ** 2 + (o.z - p.z) ** 2;
-              if (d2 < bd) {
-                bd = d2;
-                best = o;
-              }
-            }
-          p.target = best;
+          p.target = this.seekTarget(p);
         }
       }
       const x0 = p.x,
@@ -5448,140 +6119,259 @@ export class World {
         p.flown += step;
       }
       if (keep) {
-        let hit = null,
-          hitPart = null,
-          ht = 2;
-        const hg = this.hitGrid,
-          C = HIT_CELL;
-        const cx0 = Math.floor(Math.min(x0, p.x) / C),
-          cx1 = Math.floor(Math.max(x0, p.x) / C),
-          cy0 = Math.floor(Math.min(y0, p.y) / C),
-          cy1 = Math.floor(Math.max(y0, p.y) / C);
-        for (let ix = cx0; ix <= cx1; ix++)
-          for (let iy = cy0; iy <= cy1; iy++) {
-            const l = hg.get(ix * 65536 + iy);
-            if (l)
-              for (const o of l) {
-                if (o.dead || o.player.team === p.team) continue;
-                const r = Math.max(o.hitReach || o.hitRadius, o.collR || 0, o.collBall || 0) + step;
-                if ((o.x - p.x) ** 2 + (o.y - p.y) ** 2 > r * r) continue;
-                const h = o.heading || 0,
-                  ch = Math.cos(h),
-                  sh = Math.sin(h);
-                this.hitPart = null;
-                let tt =
-                  o.coll || o.hpColl
-                    ? segNear(x0, y0, z0, p.x, p.y, p.z, o.x, o.y, o.z, o.collR)
-                      ? this.meshStep(o, x0, y0, z0, p.x, p.y, p.z)
-                      : -1
-                    : o.hitA
-                      ? sweepBox(
-                          x0,
-                          y0,
-                          z0,
-                          p.x,
-                          p.y,
-                          p.z,
-                          o.x + ch * o.hitF - sh * o.hitL,
-                          o.y + sh * o.hitF + ch * o.hitL,
-                          o.z + o.hitZ,
-                          h,
-                          o.hitA,
-                          o.hitB,
-                          o.hitC,
-                          this.weaponCasts
-                        )
-                      : sweep(x0, y0, z0, p.x, p.y, p.z, o.x, o.y, o.z, 0, o.hitRadius, o.hitRadius, o.hitRadius,this.weaponCasts);
-                if (tt < 0 && o.collBall > 0) tt = sweep(x0, y0, z0, p.x, p.y, p.z, o.x, o.y, o.z, 0, o.collBall, o.collBall, o.collBall,this.weaponCasts);
-                if (tt >= 0 && tt < ht) {
-                  ht = tt;
-                  hit = o;
-                  hitPart = this.hitPart;
-                }
-              }
-          }
-        if (hit) {
-          const hx = x0 + (p.x - x0) * ht,
-            hy = y0 + (p.y - y0) * ht,
-            hz = z0 + (p.z - z0) * ht;
-          const hp = p.target === hit && p.targetHp ? p.targetHp : hitPart;
-          this.damage(hit, p.damage, {
-            damageType: p.damageType,
-            hp,
-            attacker: p.owner,
-            from: p.from,
-            shields: p.shields,
-            hull: p.hull,
-            x: hx,
-            y: hy,
-            z: hz,
-            fx: p.fx,
-            proj: p.def
-          });
-          if (p.def.bool('Projectile_Ion_Stun_On_Detonation')) this.ionHit(p, hit, hx, hy);
-          if (p.blastRange > 0 && p.blastDamage > 0)
-            this.areaDamage(hx, hy, p.blastRange, p.blastDamage * p.mult, p.damageType, p.owner, {
-              shields: p.shields,
-              hull: p.hull,
-              proj: p.def,
-              z: hz,
-              from: p.from,
-              exclude: hit,
-              hitHp: hp || hitPart
-            });
+        const struck = this.shotStrike(p.team, x0, y0, z0, p.x, p.y, p.z, step);
+        if (struck >= 0) {
+          this.shotStruck(p, struck, x0, y0, z0);
           keep = false;
-          p.hitDone = true;
         }
       }
-      if (keep && (p.reach > 0 ? p.flown >= p.reach : p.life > 0 && p.age >= p.life)) keep = false;
-      if (
-        keep &&
-        p.cat === CAT.DEFAULT &&
-        p.def.bool('Explode_When_Reached_Target_Radius', false) &&
-        (p.x - p.sx) ** 2 + (p.y - p.sy) ** 2 + (p.z - p.sz) ** 2 >= (p.aim.x - p.sx) ** 2 + (p.aim.y - p.sy) ** 2 + (p.aim.z - p.sz) ** 2
-      )
-        keep = false;
-      if (!keep && p.reach !== undefined && !p.hitDone) {
-        if (p.end && !p.hidden) this.fx.hit(p.x, p.y, p.z, 8, p.end);
-        if (p.blastRange > 0 && p.blastDamage > 0)
-          this.areaDamage(p.x, p.y, p.blastRange, p.blastDamage * p.mult, p.damageType, p.owner, {
-            shields: p.shields,
-            hull: p.hull,
-            proj: p.def,
-            z: p.z,
-            from: p.from
-          });
+      if (this.shotFliesOn(p, keep)) {
+        this.shotRows[n] = row;
+        ps[n++] = p;
+      } else {
+        this.shotEnded(p);
+        store.release(row);
       }
-      if (keep) ps[n++] = p;
-      else this.shotEnded(p);
     }
     ps.length = n;
+    this.shotRowCount = n;
   }
 
-  makeHitGrid() {
-    const hg = this.hitGrid || (this.hitGrid = new Map()),
-      C = HIT_CELL;
-    for (const l of hg.values()) l.length = 0;
-    for (const o of this.units) {
-      if (o.dead || o.hyper || !o.targetableUnit || (o.player.id < 0 && !this.razable(o))) continue;
-      if (!(o.type.collidable ??= o.type.bool('Collidable_By_Projectile_Living', false))) continue;
-      const r = Math.max(
-        o.hitA ? (o.hitReach ??= Math.hypot(o.hitA, o.hitB) + Math.abs(o.hitF) + Math.abs(o.hitL)) : o.hitRadius,
-        o.collR || 0,
-        o.collBall || 0
-      );
-      const x0 = Math.floor((o.x - r) / C),
-        x1 = Math.floor((o.x + r) / C),
-        y0 = Math.floor((o.y - r) / C),
-        y1 = Math.floor((o.y + r) / C);
-      for (let ix = x0; ix <= x1; ix++)
-        for (let iy = y0; iy <= y1; iy++) {
-          const k = ix * 65536 + iy;
-          let l = hg.get(k);
-          if (!l) hg.set(k, (l = []));
-          l.push(o);
+  // The first unit a shot of this team hits on its step from (x0, y0, z0) to (x1, y1, z1): the unit's place in the
+  // step's list of hittable units, or -1. How far along the step it hit (0 to 1) is left in strikeAlong and the
+  // hardpoint hit, when the unit's collision mesh tells, in strikePart. A unit with a hit sphere or box is tested
+  // from the numbers taken when the grid was made; only a hit, or a unit with a collision mesh, is looked at itself.
+  shotStrike(team, x0, y0, z0, x1, y1, z1, step) {
+    let hit = -1,
+      hitPart = null,
+      ht = 2;
+    const hitters = this._hitters,
+      H = this.hitNumbers,
+      hitX = H.x,
+      hitY = H.y,
+      hitR = H.reach,
+      C = HIT_CELL,
+      shotTeam = this.hitTeams.get(team),
+      everyone = shotTeam === undefined || this.hitTeams.size > HIT_TEAMS;
+    if (everyone && !this.hitWhole) this.fileEveryHitter();
+    const grid = everyone ? this.hitEveryone : this.hitByTeam,
+      list = everyone ? 0 : shotTeam;
+    const cx0 = Math.floor(Math.min(x0, x1) / C),
+      cx1 = Math.floor(Math.max(x0, x1) / C),
+      cy0 = Math.floor(Math.min(y0, y1) / C),
+      cy1 = Math.floor(Math.max(y0, y1) / C);
+    for (let ix = cx0; ix <= cx1; ix++)
+      for (let iy = cy0; iy <= cy1; iy++) {
+        if (!grid.find(ix, iy, list)) continue;
+        for (let k = grid.from, to = grid.to, source = grid.source; k < to; k++) {
+          const index = source[k],
+            r = hitR[index] + step,
+            awayX = hitX[index] - x1,
+            awayY = hitY[index] - y1;
+          if (awayX * awayX + awayY * awayY > r * r) continue;
+          const shape = H.shape[index];
+          this.hitPart = null;
+          let tt;
+          if (shape === HIT_MESH) {
+            const o = hitters[index];
+            if (o.dead || o.player.team === team) continue;
+            tt = segNear(x0, y0, z0, x1, y1, z1, hitX[index], hitY[index], H.z[index], H.meshReach[index]) ? this.meshStep(o, x0, y0, z0, x1, y1, z1) : -1;
+          } else if (shape === HIT_BOX)
+            tt = sweepBox(x0, y0, z0, x1, y1, z1, H.boxX[index], H.boxY[index], H.boxZ[index], H.boxHeading[index], H.boxA[index], H.boxB[index], H.boxC[index], this.weaponCasts);
+          else {
+            const radius = H.radius[index];
+            tt = sweep(x0, y0, z0, x1, y1, z1, hitX[index], hitY[index], H.z[index], 0, radius, radius, radius, this.weaponCasts);
+          }
+          if (tt < 0 && H.ball[index] > 0) {
+            const ball = H.ball[index];
+            tt = sweep(x0, y0, z0, x1, y1, z1, hitX[index], hitY[index], H.z[index], 0, ball, ball, ball, this.weaponCasts);
+          }
+          if (!(tt >= 0 && tt < ht)) continue;
+          if (shape !== HIT_MESH) {
+            const o = hitters[index];
+            if (o.dead || o.player.team === team) continue;
+          }
+          ht = tt;
+          hit = index;
+          hitPart = this.hitPart;
         }
+      }
+    this.strikeAlong = ht;
+    this.strikePart = hitPart;
+    return hit;
+  }
+
+  // Deals the hit shotStrike found for this shot, flown from (x0, y0, z0) to where it is now.
+  shotStruck(p, struck, x0, y0, z0) {
+    const hit = this._hitters[struck],
+      ht = this.strikeAlong,
+      hitPart = this.strikePart;
+    const hx = x0 + (p.x - x0) * ht,
+      hy = y0 + (p.y - y0) * ht,
+      hz = z0 + (p.z - z0) * ht;
+    const hp = p.target === hit && p.targetHp ? p.targetHp : hitPart;
+    this.damage(hit, p.damage, {
+      damageType: p.damageType,
+      hp,
+      attacker: p.owner,
+      from: p.from,
+      shields: p.shields,
+      hull: p.hull,
+      x: hx,
+      y: hy,
+      z: hz,
+      fx: p.fx,
+      proj: p.def
+    });
+    if (p.def.bool('Projectile_Ion_Stun_On_Detonation')) this.ionHit(p, hit, hx, hy);
+    if (p.blastRange > 0 && p.blastDamage > 0)
+      this.areaDamage(hx, hy, p.blastRange, p.blastDamage * p.mult, p.damageType, p.owner, {
+        shields: p.shields,
+        hull: p.hull,
+        proj: p.def,
+        z: hz,
+        from: p.from,
+        exclude: hit,
+        hitHp: hp || hitPart
+      });
+    p.hitDone = true;
+  }
+
+  // After a shot has flown its step: whether it flies on. One that has run out goes off here if it does that.
+  shotFliesOn(p, keep) {
+    if (keep && (p.reach > 0 ? p.flown >= p.reach : p.life > 0 && p.age >= p.life)) keep = false;
+    if (
+      keep &&
+      p.cat === CAT.DEFAULT &&
+      p.def.bool('Explode_When_Reached_Target_Radius', false) &&
+      (p.x - p.sx) ** 2 + (p.y - p.sy) ** 2 + (p.z - p.sz) ** 2 >= (p.aim.x - p.sx) ** 2 + (p.aim.y - p.sy) ** 2 + (p.aim.z - p.sz) ** 2
+    )
+      keep = false;
+    if (!keep && p.reach !== undefined && !p.hitDone) {
+      if (p.end && !p.hidden) this.fx.hit(p.x, p.y, p.z, 8, p.end);
+      if (p.blastRange > 0 && p.blastDamage > 0)
+        this.areaDamage(p.x, p.y, p.blastRange, p.blastDamage * p.mult, p.damageType, p.owner, {
+          shields: p.shields,
+          hull: p.hull,
+          proj: p.def,
+          z: p.z,
+          from: p.from
+        });
     }
+    return keep;
+  }
+
+  // A new shot, as launch and launchPoint describe it.
+  addShot(made) {
+    const plain =
+      !made.wait &&
+      !made.point &&
+      made.cat >= 0 &&
+      !made.homing &&
+      !made.path &&
+      made.cat !== CAT.BOMB &&
+      made.cat !== CAT.CLUSTER_BOMB &&
+      !(made.cat === CAT.DEFAULT && made.def.bool('Explode_When_Reached_Target_Radius', false));
+    const shot = new Shot(this.shotStore(), made, plain ? SHOT_PLAIN : SHOT_GENERAL),
+      ps = this.projectiles,
+      listed = this.shotRowsOf === ps && this.shotRowCount === ps.length;
+    ps.push(shot);
+    if (listed) {
+      if (this.shotRowCount === this.shotRows.length) {
+        const grown = new Int32Array(this.shotRows.length * 2);
+        grown.set(this.shotRows);
+        this.shotRows = grown;
+      }
+      this.shotRows[this.shotRowCount++] = shot.row;
+    }
+    return shot;
+  }
+
+  // The rows of this battle's shots; a world put together without its constructor (tests do) gets them on first use.
+  shotStore() {
+    if (!this.shots) {
+      this.shots = new ShotStore();
+      this.shotRows = new Int32Array(4096);
+      this.shotRowsOf = null;
+      this.shotRowCount = 0;
+    }
+    return this.shots;
+  }
+
+  // shotRows[i] is the row of projectiles[i]. Made anew when the list was replaced or changed behind our back.
+  alignShotRows() {
+    const ps = this.projectiles;
+    if (this.shotRowsOf === ps && this.shotRowCount === ps.length) return;
+    if (this.shotRows.length < ps.length) this.shotRows = new Int32Array(Math.max(4096, ps.length * 2));
+    for (let i = 0; i < ps.length; i++) this.shotRows[i] = ps[i].row;
+    this.shotRowsOf = ps;
+    this.shotRowCount = ps.length;
+  }
+
+  // Each cell keeps its units in unit order, once for every team as the units that team's shots can hit (the
+  // other teams' units) and once whole for shots of a team that has none in the grid. A shot then walks only
+  // possible targets, in the order the whole list would give them. The lists hold places in the step's list of
+  // hittable units, whose position and reach sit in plain number arrays beside it: a shot in a crowd of fighters
+  // rules nearly all of them out by distance, and reading that from each unit was most of the cost of moving shots.
+  makeHitGrid() {
+    const teams = (this.hitTeams ||= new Map()),
+      hitters = (this._hitters ||= []);
+    teams.clear();
+    hitters.length = 0;
+    this.hitWhole = false;
+    for (const o of this.units) {
+      if (o.dead || inJump(o) || !o.targetableUnit || (o.player.id < 0 && !this.razable(o))) continue;
+      if (!(o.type.collidable ??= o.type.bool('Collidable_By_Projectile_Living', false))) continue;
+      hitters.push(o);
+      if (!teams.has(o.player.team)) teams.set(o.player.team, teams.size);
+    }
+    if (!this.hitNumbers || this.hitNumbers.x.length < hitters.length) this.hitNumbers = hitNumbersFor(Math.max(1024, hitters.length * 2));
+    const H = this.hitNumbers;
+    for (let i = 0; i < hitters.length; i++) {
+      const o = hitters[i];
+      if (o.hitA) o.hitReach ??= Math.hypot(o.hitA, o.hitB) + Math.abs(o.hitF) + Math.abs(o.hitL);
+      H.x[i] = o.x;
+      H.y[i] = o.y;
+      H.z[i] = o.z;
+      H.reach[i] = Math.max(o.hitReach || o.hitRadius, o.collR || 0, o.collBall || 0);
+      H.ownList[i] = teams.get(o.player.team);
+      H.ball[i] = o.collBall > 0 ? o.collBall : 0;
+      if (o.coll || o.hpColl) {
+        H.shape[i] = HIT_MESH;
+        H.meshReach[i] = o.collR;
+      } else if (o.hitA) {
+        const h = o.heading || 0,
+          ch = Math.cos(h),
+          sh = Math.sin(h);
+        H.shape[i] = HIT_BOX;
+        H.boxX[i] = o.x + ch * o.hitF - sh * o.hitL;
+        H.boxY[i] = o.y + sh * o.hitF + ch * o.hitL;
+        H.boxZ[i] = o.z + o.hitZ;
+        H.boxHeading[i] = h;
+        H.boxA[i] = o.hitA;
+        H.boxB[i] = o.hitB;
+        H.boxC[i] = o.hitC;
+      } else {
+        H.shape[i] = HIT_SPHERE;
+        H.radius[i] = o.hitRadius;
+      }
+    }
+    const split = teams.size > 0 && teams.size <= HIT_TEAMS;
+    if (split) this.fileHitters((this.hitByTeam ||= new HitGrid(HIT_CELL)), H.ownList, teams.size);
+    let whole = !split;
+    if (!whole) for (let i = 0; i < this.shotRowCount && !whole; i++) if (!teams.has(this.shots.team[this.shotRows[i]])) whole = true;
+    if (whole) this.fileEveryHitter();
+  }
+
+  // The one list of every hittable unit, for shots of a team that has no unit in the grid (or with too many teams).
+  fileEveryHitter() {
+    this.hitWhole = true;
+    this.fileHitters((this.hitEveryone ||= new HitGrid(HIT_CELL)), null, 1);
+  }
+
+  fileHitters(grid, ownList, lists) {
+    const edge = HIT_CELL * 4;
+    grid.build(this._hitters.length, this.hitNumbers.x, this.hitNumbers.y, this.hitNumbers.reach, ownList, lists, this.min.x - edge, this.min.y - edge, this.max.x + edge, this.max.y + edge);
   }
 
   cullOf(o) {
@@ -5745,28 +6535,55 @@ export class World {
     return best;
   }
 
+  // Hunt for enemies: an idle or guarding unit goes after the nearest enemy it can see, or searches the map. Guard
+  // counts as idle because launched squadrons are always given one on their carrier (and fall back to it after a
+  // move), so Hunt would otherwise never start for them. The orders it gives itself are marked as hunt orders and
+  // looked at again every second, so a unit that sees an enemy while searching turns on it, and one that reaches
+  // its search point (or stops getting closer) picks another.
   updateHunt(e, dt) {
-    if (e.order.kind !== 'idle' || !e.isActive('HUNT')) return;
+    const order = e.order;
+    if (!e.isActive('HUNT') || (order.kind !== 'idle' && order.kind !== 'guard' && !order.hunt)) return;
     if ((e.huntTimer = (e.huntTimer || 0) - dt) > 0) return;
     e.huntTimer = 1;
+    if (order.hunt && order.kind === 'attack' && order.target && !order.target.dead) return;
+    const prey = this.nearestHuntTarget(e);
+    if (prey) {
+      e.setOrder({ kind: 'attack', target: prey.squad || prey, hunt: true });
+      if (!e.isSquad) e.target = prey;
+    } else if (!order.hunt || order.kind !== 'attackmove' || this.huntSearchOver(e, order)) {
+      const point = this.clearOf(e, rand(this.min.x, this.max.x) * 0.85, rand(this.min.y, this.max.y) * 0.85);
+      e.setOrder({ kind: 'attackmove', ...point, hunt: true, checkX: e.x, checkY: e.y, checkAt: this.time });
+    }
+  }
+
+  nearestHuntTarget(e) {
     const bit = e.player.bit;
     let best = null,
-      bd = Infinity;
+      bestDistance = Infinity;
     for (const o of this.units) {
-      if (o.dead || o.player.id < 0 || o.player.team === e.player.team || !o.targetableUnit || o.hyper || !(o.seenBy & bit)) continue;
-      let dd = dist2(e, o);
-      if (o.isStructure) dd *= 4;
-      if (dd < bd) {
-        bd = dd;
+      if (o.dead || o.player.id < 0 || o.player.team === e.player.team || !o.targetableUnit || inJump(o) || !(o.seenBy & bit)) continue;
+      let distance = dist2(e, o);
+      if (o.isStructure) distance *= 4;
+      if (distance < bestDistance) {
+        bestDistance = distance;
         best = o;
       }
     }
-    if (best) {
-      e.setOrder({ kind: 'attack', target: best.squad || best });
-      if (!e.isSquad) e.target = best;
-    } else {
-      e.setOrder({ kind: 'attackmove', ...this.clearOf(e, rand(this.min.x, this.max.x) * 0.85, rand(this.min.y, this.max.y) * 0.85) });
-    }
+    return best;
+  }
+
+  // A search move is over when the unit is near its point, or when it has not come closer for a few seconds
+  // (the point lies behind something it cannot pass).
+  huntSearchOver(e, order) {
+    if ((e.x - order.x) ** 2 + (e.y - order.y) ** 2 < HUNT_ARRIVED ** 2) return true;
+    if (this.time - order.checkAt < HUNT_PROGRESS_SECONDS) return false;
+    const before = (order.checkX - order.x) ** 2 + (order.checkY - order.y) ** 2,
+      now = (e.x - order.x) ** 2 + (e.y - order.y) ** 2;
+    if (Math.sqrt(before) - Math.sqrt(now) < HUNT_PROGRESS_MIN) return true;
+    order.checkX = e.x;
+    order.checkY = e.y;
+    order.checkAt = this.time;
+    return false;
   }
 
   closing(s, lead, tgt) {
@@ -5853,7 +6670,10 @@ export class World {
       const b = Math.max(h0, sp),
         dAcc = (b * b - v * v) / (2 * thr);
       if (dAcc <= 0) return h0;
-      const k = Math.max(-along / dAcc, 0);
+      // A wingman behind its slot speeds up towards the upper speed, never past it. Without the limit one far
+      // behind (launched late from a hangar, or left behind by a turn) was given many times its top speed and shot
+      // across the map and along its edge until it found its slot again.
+      const k = clamp(-along / dAcc, 0, 1);
       return (1 - k) * lead.speed + k * h0;
     }
     return v;
@@ -5892,8 +6712,10 @@ export class World {
     return false;
   }
 
-  squadPick(s, lead, cur) {
-    const ord = s.order,
+  // `escorted`: the ship a squadron escorts on an attack order (see escortGoal). The squadron then answers what
+  // comes at that ship or at itself as if it guarded the ship, and goes back to the escort once that is dealt with.
+  squadPick(s, lead, cur, escorted = null) {
+    const ord = escorted ? { kind: 'guard', target: escorted } : s.order,
       kind = ord.kind,
       lt = s.type;
     const range =
@@ -5913,7 +6735,8 @@ export class World {
     const inWeapon = o => dist2(lead, o) <= (reach + o.hitRadius) ** 2;
     const respond = (o, start = true) => {
       if (range < 0) return false;
-      if (kind === 'idle' && !parked && inWeapon(o)) return true;
+      // Idle squadrons take on what comes into weapon reach, parked ones too (ours: they used to shoot only from where they sat).
+      if ((kind === 'idle' || kind === 'guard') && inWeapon(o)) return true;
       const hurt = (ext || parked) && this.hurtBy(s, o);
       if (parked && !hurt) return false;
       const f = hull + range + (ext && (hurt || (guarded && this.hurtBy(guarded, o))) ? ext : 0);
@@ -5925,44 +6748,62 @@ export class World {
       low = db.constants.num('Health_Low_Percent_Threshold', 0.33);
     let keep = cur && !cur.dead ? (cur.isSquad ? cur.fighters[0] : cur) : null;
     if (keep && !respond(keep, false)) keep = null;
-    const was = s.fireTarget && !s.fireTarget.dead ? (s.fireTarget.isSquad ? s.fireTarget.fighters[0] : s.fireTarget) : null;
+    const team = s.player.team,
+      sight = s.player.bit,
+      valid = o => !(o.dead || o.player.team === team || o.player.id < 0 || !o.targetableUnit || inJump(o) || !(o.seenBy & sight));
+    const was0 = s.fireTarget && !s.fireTarget.dead ? (s.fireTarget.isSquad ? s.fireTarget.fighters[0] : s.fireTarget) : null,
+      was = was0 && valid(was0) ? was0 : null;
     const wp = !!lead.weapon;
+    // Two picks from the same scan: what the guns fire at (in weapon reach or answered) and what the squadron goes
+    // after (answered only), so an enemy that only passes in front of the guns never hides one that is answered.
     let best = null,
-      br = 0,
-      bp;
+      chase = null;
     if (was && (inWeapon(was) || respond(was)) && rate(was) >= 0) {
       const left = (was.toKill + (was.shield || 0)) / Math.max(1e-6, this.damageRate(was));
       if (rate(was) === 1 || left <= lead.type.num('Targeting_Stickiness_Time_Threshold', 0)) best = was;
     }
-    if (!best) {
-      for (const o of this.units) {
-        if (o.dead || o.player.team === s.player.team || o.player.id < 0 || !o.targetableUnit || o.hyper || !(o.seenBy & s.player.bit))
-          continue;
-        if (!inWeapon(o) && !respond(o)) continue;
+    const sticky = !!best;
+    if (best && kind !== 'move' && respond(best)) chase = best;
+    if (!best || (!chase && kind !== 'move' && range >= 0)) {
+      const candidates = this.unitsAround(
+        lead,
+        reach,
+        range < 0 ? null : anchor,
+        hull + range + ext + reach,
+        o => valid(o) && (inWeapon(o) || respond(o)),
+        this.squadPickCandidates
+      );
+      const fires = new Map(),
+        fire = o => {
+          let v = fires.get(o);
+          if (v === undefined) fires.set(o, (v = this.canFire(lead, o)));
+          return v;
+        };
+      const better = (o, r, b, brate) => {
+        const lo = o.healthFrac <= low,
+          lb = b.healthFrac <= low;
+        if (lo !== lb) return lo;
+        if (r !== brate) return r < brate;
+        if (wp && fire(b) !== fire(o)) return fire(o);
+        return dist2(lead, o) < dist2(lead, b);
+      };
+      let br = 0,
+        cr = 0;
+      for (const o of candidates) {
         const r = rate(o);
         if (r < 0) continue;
-        if (!best) {
+        if (!sticky && (!best || better(o, r, best, br))) {
           best = o;
           br = r;
-          continue;
         }
-        const lo = o.healthFrac <= low,
-          lb = best.healthFrac <= low;
-        let take,
-          po;
-        if (lo !== lb) take = lo;
-        else if (r < br) take = true;
-        else if (wp && (bp ??= this.canFire(lead, best)) !== (po = this.canFire(lead, o))) take = po;
-        else take = dist2(lead, o) < dist2(lead, best);
-        if (take) {
-          best = o;
-          br = r;
-          bp = po;
+        if (kind !== 'move' && respond(o) && (!chase || better(o, r, chase, cr))) {
+          chase = o;
+          cr = r;
         }
       }
     }
     s.fireTarget = best ? best.squad || best : null;
-    if (best && kind !== 'move' && respond(best)) return best.squad || best;
+    if (chase && kind !== 'move') return chase.squad || chase;
     return keep ? cur : null;
   }
 
@@ -6044,7 +6885,7 @@ export class World {
   }
 
   dogAnswer(t, by) {
-    if (!t.fighters[0] || t.mode === 'move' || t.direct || t.isActive('ION_CANNON_SHOT') || t.isActive('LUCKY_SHOT')) return;
+    if (!t.fighters[0] || t.order.kind === 'move' || t.direct || t.isActive('ION_CANNON_SHOT') || t.isActive('LUCKY_SHOT')) return;
     const tt = t.target || t.fireTarget;
     if (tt && !tt.dead && tt.isSquad) return;
     this.autoAttack(t, by);
@@ -6141,7 +6982,9 @@ export class World {
     s.cruise = undefined;
     const wing = ord.wing && (ord.kind === 'move' || ord.kind === 'attackmove' || ord.kind === 'attack') ? ord.wing : null,
       esc = wing && wing.escort && s.fighters[0] ? this.escortGoal(s, wing) : null;
-    if (ord.kind === 'attack') tgt = esc ? null : ord.target && !ord.target.dead && !this.befriended(s, ord.target) ? ord.target : null;
+    const atkTarget = ord.kind === 'attack' && ord.target && !ord.target.dead && !this.befriended(s, ord.target) ? ord.target : null;
+    // An escort keeps what it took on in defence of its ship (squadPick with the ship) until that is gone.
+    if (ord.kind === 'attack') tgt = esc ? (tgt && tgt !== ord.target && !this.befriended(s, tgt) ? tgt : null) : atkTarget;
     if (!esc && !tgt && s.dogKey >= 0 && (ord.kind === 'attack' || s.target)) {
       const e = this.dogEnemy(s);
       if (e) {
@@ -6157,12 +7000,17 @@ export class World {
     }
     const lead = s.fighters[0];
     if (ord.kind === 'attack' && !esc) s.fireTarget = tgt;
-    else if (ord.kind === 'attack' && ord.target && !ord.target.dead && !this.befriended(s, ord.target)) s.fireTarget = ord.target;
-    else if (s.scanTimer <= 0 && lead) {
+    else if (ord.kind === 'attack' && esc) {
+      if (s.scanTimer <= 0 && lead) {
+        s.scanTimer = 1 + simRandom() * 0.5;
+        tgt = this.squadPick(s, lead, tgt, wing.escort);
+      }
+      if (!tgt && (!s.fireTarget || s.fireTarget.dead)) s.fireTarget = atkTarget;
+    } else if (s.scanTimer <= 0 && lead) {
       s.scanTimer = 1 + simRandom() * 0.5;
       if (ord.kind === 'idle' && s.homeOf !== ord) {
         s.homeOf = ord;
-        s.home = { x: s.x, y: s.y };
+        s.home = { x: lead.x, y: lead.y };
       }
       tgt = this.squadPick(s, lead, tgt);
     }
@@ -6252,8 +7100,10 @@ export class World {
         }
       } else if (ord.kind === 'guard') {
         if (ord.target && ord.target.dead) {
-          const t = this.posOf(ord.target);
-          s.setOrder({ kind: 'move', x: t.x, y: t.y });
+          // As a ship whose guarded unit dies (updateShip): idle where it is, answering what comes within
+          // Idle_Chase_Range, not a move to the wreck that answers nothing on the way.
+          s.setOrder({ kind: 'idle' });
+          s.alone = true;
         } else {
           const p = this.guardSpot(s, ord),
             keep = 150 + (ord.target ? ord.target.radius || 0 : 0);
@@ -6300,28 +7150,38 @@ export class World {
     }
     if (this.time >= w.check) {
       w.check = this.time + 1;
-      if (!sh.going || (sh.order.kind === 'attack' && sh.order.reached)) {
+      // A ship still on its way to a distant move goal keeps its squadrons: it is only waiting for its staggered
+      // start or has stopped to fight on an attack-move. Letting go then sent the whole wing on to its own spot far
+      // ahead of the fleet.
+      const o = sh.order,
+        underway =
+          (o.kind === 'move' || o.kind === 'attackmove') &&
+          o.x !== undefined &&
+          (sh.x - o.x) ** 2 + (sh.y - o.y) ** 2 > (ESCORT_KEEP + (sh.radius || 0)) ** 2;
+      // A ship held still for three checks in a row (a route that failed, turning on the spot, a jam) is no
+      // longer taking its escort anywhere: the squadrons go on to the target themselves.
+      w.still = sh.going && sh.speed < 1 ? (w.still || 0) + 1 : 0;
+      if ((!underway && (!sh.going || w.still >= 3)) || (o.kind === 'attack' && o.reached)) {
         dropEscort(w);
         return null;
       }
-      let L = null;
+      let leader = null;
       for (const q of w.squads)
         if (!q.dead && q.fighters[0] && q.order.wing === w) {
-          L = q.fighters[0];
+          leader = q;
           break;
         }
-      if (!L) L = s.fighters[0];
-      const R = Math.min(
-        (L.type.num('Targeting_Max_Attack_Distance', 0) || L.maxRange || 0) / 2,
-        db.constants.num('Space_Guard_Range', 750)
-      );
-      w.follow = (L.x - sh.x) ** 2 + (L.y - sh.y) ** 2 + ((L.z || 0) - (sh.z || 0)) ** 2 < R * R;
+      leader ||= s;
+      const L = leader.fighters[0],
+        place = this.escortOffset(leader, w, sh),
+        R = Math.min((L.type.num('Targeting_Max_Attack_Distance', 0) || L.maxRange || 0) / 2, db.constants.num('Space_Guard_Range', 750));
+      w.follow = (L.x - sh.x - place.x) ** 2 + (L.y - sh.y - place.y) ** 2 + ((L.z || 0) - (sh.z || 0)) ** 2 < R * R;
       if (!w.follow) {
         const at = (w.at ||= { x: sh.x, y: sh.y });
         if (w.reached) {
           const reach = (L.type.num('Targeting_Max_Attack_Distance', 0) || L.maxRange || 0) + (sh.hitRadius || 0),
-            px = sh.x + Math.cos(sh.heading) * sh.speed,
-            py = sh.y + Math.sin(sh.heading) * sh.speed;
+            px = sh.x + place.x + Math.cos(sh.heading) * sh.speed,
+            py = sh.y + place.y + Math.sin(sh.heading) * sh.speed;
           if ((L.x - px) ** 2 + (L.y - py) ** 2 > reach * reach) {
             at.x = sh.x;
             at.y = sh.y;
@@ -6330,29 +7190,86 @@ export class World {
         }
       }
     }
-    if (!w.follow) return w.at;
     const o = sh.order,
-      base = o.kind === 'attack' && sh.slotAt && o.offset ? sh.slotAt : (o.kind === 'move' || o.kind === 'attackmove') && o.x !== undefined ? o : sh;
-    const mates = w.squads.filter(q => !q.dead && q.order.wing === w);
-    if (!mates.length) return base;
-    const k = mates.indexOf(s),
-      side = (Math.max(0, k) - (mates.length - 1) / 2) * ESCORT_SPACING,
-      back = -(sh.radius || 0) * 0.5,
-      c = Math.cos(sh.heading),
-      n = Math.sin(sh.heading),
+      base = !w.follow
+        ? w.at
+        : o.kind === 'attack' && sh.slotAt && o.offset
+          ? sh.slotAt
+          : (o.kind === 'move' || o.kind === 'attackmove') && o.x !== undefined
+            ? o
+            : sh,
+      place = this.escortOffset(s, w, sh),
       at = (s.escortAt ||= { x: 0, y: 0, z: 0 });
-    at.x = base.x + c * back - n * side;
-    at.y = base.y + n * back + c * side;
+    at.x = base.x + place.x;
+    at.y = base.y + place.y;
     at.z = base.z ?? sh.z;
     return at;
+  }
+
+  // Where a squadron keeps itself beside the ship its wing escorts. A squadron moved together with the ship keeps
+  // the place it had next to the ship when the order was given and closes in on its own group-move spot only as
+  // the ship nears its spot, the way the ships of the fleet close up, so a fleet's squadrons hold their place in
+  // the fleet instead of gathering on one ship. Squadrons without a spot of their own line up beside and behind the ship.
+  escortOffset(s, w, sh) {
+    const place = (s.escortPlace ||= {
+      wing: null,
+      ship: null,
+      fixed: false,
+      x: 0,
+      y: 0,
+      startX: 0,
+      startY: 0,
+      endX: 0,
+      endY: 0,
+      goal: null,
+      span: 0
+    });
+    if (place.wing !== w || place.ship !== sh) {
+      const own = s.order,
+        theirs = sh.order,
+        lead = s.fighters[0];
+      place.wing = w;
+      place.ship = sh;
+      place.fixed = !!lead && own.x !== undefined && (theirs.kind === 'move' || theirs.kind === 'attackmove') && theirs.x !== undefined;
+      if (place.fixed) {
+        place.startX = lead.x - sh.x;
+        place.startY = lead.y - sh.y;
+        place.endX = own.x - theirs.x;
+        place.endY = own.y - theirs.y;
+        place.goal = theirs;
+        place.span = Math.hypot(theirs.x - sh.x, theirs.y - sh.y);
+      }
+    }
+    if (place.fixed) {
+      const left = place.span > 1 ? Math.hypot(place.goal.x - sh.x, place.goal.y - sh.y) / place.span : 0,
+        done = clamp(1 - left, 0, 1);
+      place.x = place.startX + (place.endX - place.startX) * done;
+      place.y = place.startY + (place.endY - place.startY) * done;
+      return place;
+    }
+    let index = 0,
+      count = 0;
+    for (const q of w.squads)
+      if (!q.dead && q.order.wing === w) {
+        if (q === s) index = count;
+        count++;
+      }
+    const side = (index - (count - 1) / 2) * ESCORT_SPACING,
+      back = -(sh.radius || 0) * 0.5,
+      cos = Math.cos(sh.heading),
+      sin = Math.sin(sh.heading);
+    place.x = cos * back - sin * side;
+    place.y = sin * back + cos * side;
+    return place;
   }
 
   escortSpeed(s, w, lead) {
     const group = wingSpeed(w, this.time);
     if (!w.follow) return group;
     const sh = w.escort,
+      place = this.escortOffset(s, w, sh),
       v = sh.cruise || sh.maxSpeed || 0,
-      ahead = (lead.x - sh.x) * Math.cos(sh.heading) + (lead.y - sh.y) * Math.sin(sh.heading) + (sh.radius || 0) * 0.5;
+      ahead = (lead.x - sh.x - place.x) * Math.cos(sh.heading) + (lead.y - sh.y - place.y) * Math.sin(sh.heading);
     return Math.min(group, v * clamp(1 - ahead / ESCORT_EASE, 0.5, 2));
   }
 
@@ -6455,50 +7372,6 @@ export class World {
         follow: t.num('Minimum_Follow_Distance', 0)
       })
     );
-  }
-
-  fly(u, tx, ty, tz, want, dt, k = 1, over = true) {
-    const F = this.flight(u),
-      st = u.fstate;
-    u.roll ||= 0;
-    tx = clamp(tx, this.min.x, this.max.x);
-    ty = clamp(ty, this.min.y, this.max.y);
-    let err = wrapAngle(Math.atan2(ty - u.y, tx - u.x) - u.heading);
-    if (st.loop && Math.abs(err) < LOOP_KEEP) st.loop = undefined;
-    if (!st.loop && over && F.lift > 0 && Math.abs(err) > LOOP_OVER) {
-      st.loop = Math.atan2(tz - u.z, Math.hypot(tx - u.x, ty - u.y)) - (u.pitch || 0) > 0 ? 1 : -1;
-    }
-    if (st.loop) {
-      u.pitch = (u.pitch || 0) + st.loop * F.lift * dt * k;
-      u.roll += clamp(-u.roll, -F.roll * dt, F.roll * dt);
-      if (Math.abs(u.pitch) >= Math.PI / 2) {
-        u.pitch = (Math.PI - Math.abs(u.pitch) - F.lift / LOGIC_FPS) * Math.sign(u.pitch);
-        u.heading = wrapAngle(u.heading + Math.PI);
-        u.roll = wrapAngle(u.roll + Math.PI);
-        st.loop = undefined;
-        u.flip = true;
-      }
-    } else {
-      if (Math.abs(err - (u.turnRate * wrapAngle(u.roll)) / F.roll) > Math.PI) err -= Math.sign(err) * 2 * Math.PI;
-      const bank = clamp(err, -F.bank, F.bank);
-      u.roll += clamp(bank - u.roll, -F.roll * dt, F.roll * dt);
-      if (!(u.roll * bank < 0) || Math.abs(u.roll) < 0.02)
-        u.heading = wrapAngle(u.heading + clamp(err, -u.turnRate * dt * k, u.turnRate * dt * k));
-    }
-    const a = (F.thrust || u.accel) * dt * k;
-    u.speed += clamp(want - u.speed, -a, a);
-    if (!st.loop && F.lift > 0) {
-      const h = Math.max(Math.hypot(tx - u.x, ty - u.y), u.speed / Math.max(0.1, u.turnRate)),
-        p = u.pitch || 0;
-      const level = (Math.abs(p) / F.lift) * u.speed;
-      const dz = (tz - u.z) * (h < level ? h / level : 1);
-      u.pitch = p + clamp(Math.atan2(dz, h) - p, -F.lift * dt * k, F.lift * dt * k);
-    }
-    const flat = Math.cos(u.pitch || 0);
-    u.x = clamp(u.x + Math.cos(u.heading) * u.speed * flat * dt, this.min.x, this.max.x);
-    u.y = clamp(u.y + Math.sin(u.heading) * u.speed * flat * dt, this.min.y, this.max.y);
-    if (st.loop || F.lift > 0) u.z += Math.sin(u.pitch || 0) * u.speed * dt;
-    else u.z += (tz - u.z) * Math.min(1, dt * 0.8);
   }
 
   dogfight(u, s, t, lead, top, low, st) {
@@ -6648,20 +7521,23 @@ export class World {
         gx = lead.x + ch * ahead + 0.75 * (ch * ox - sh * oy);
         gy = lead.y + sh * ahead + 0.75 * (sh * ox + ch * oy);
       }
-      if (m < 90) {
+      // Idle squadrons circle their spot at their minimum speed on the tightest circle they can turn (ours: they
+      // used to drift at half a unit a frame and looked parked in space).
+      const orbit = low > 0 ? Math.max(60, (1.2 * low) / Math.max(0.1, u.turnRate)) : 60;
+      if (m < orbit + 30) {
         form = false;
         let dx = u.x - c.x,
           dy = u.y - c.y;
         if (!dx && !dy) dx = 1;
         const nd = Math.hypot(dx, dy);
         if (lead === u) {
-          const a = 10 / nd,
+          const a = Math.max(10 / nd, 0.5),
             ux = dx / nd,
             uy = dy / nd;
-          gx = c.x + 60 * (Math.cos(a) * ux - Math.sin(a) * uy);
-          gy = c.y + 60 * (Math.sin(a) * ux + Math.cos(a) * uy);
+          gx = c.x + orbit * (Math.cos(a) * ux - Math.sin(a) * uy);
+          gy = c.y + orbit * (Math.sin(a) * ux + Math.cos(a) * uy);
         }
-        want = (nd / m) * 0.5 * LOGIC_FPS;
+        want = low > 0 ? low : (nd / m) * 0.5 * LOGIC_FPS;
       } else if (lead !== u) want = low > 0 ? low : top;
       else {
         gx = c.x;
@@ -6708,21 +7584,39 @@ export class World {
     } else if (!fireAt && s && s.fireTarget && !s.fireTarget.dead) {
       if (s.mode !== 'idle' || s.order.kind !== 'idle' || (u.fireIdle ??= u.type.bool('Can_Fighter_Fire_When_Idle'))) fireAt = s.fireTarget;
     }
+    // Fighters never fly slower than their minimum speed (ours): escorting a slow ship or closing on a target they
+    // weave and make passes instead of hanging still.
+    if (low > 0 && want < low) want = low;
     st.mode = tgt ? 'attack' : 'form';
-    const away = this.probe(u, st, lead === u, dt);
-    if (gz !== gz) gz = u.type.num('Layer_Z_Adjust', 0) + 35 + (u.squad && u.squad.stacked && u.slot ? u.slot.z : (u.id * 37) % 50);
-    if (away) {
-      gx = away.x;
-      gy = away.y;
-      gz = away.z;
-      if (away.hit && low > 0) {
-        const o = s && s.order;
-        want = o && o.kind === 'guard' && o.target ? Math.min(low, top * 0.5) : low;
-      }
+    const gzDefault = gz !== gz ? u.type.num('Layer_Z_Adjust', 0) + 35 + (u.squad && u.squad.stacked && u.slot ? u.slot.z : (u.id * 37) % 50) : gz;
+    let wantIfHit = NaN;
+    if (low > 0) {
+      const o = s && s.order;
+      wantIfHit = o && o.kind === 'guard' && o.target ? Math.min(low, top * 0.5) : low;
     }
-    this.fly(u, gx, gy, gz, want, dt, k, !(mode === 'idle' && !tgt));
-    u.syncObj();
+    st.fireAt = fireAt;
+    this.fighterMoves.request(u, gx, gy, gz, gzDefault, want, wantIfHit, k, !(mode === 'idle' && !tgt), lead === u);
+  }
 
+  // Every fighter that decided where to go this step moves together (on the job threads when there are any),
+  // then fires in unit order from where it ended up.
+  moveFighters(dt) {
+    const from = performance.now();
+    this.fighterDecisions.run(dt);
+    const moveFrom = performance.now();
+    this.stepTimes.decide += moveFrom - from;
+    for (const u of this.units) if (u.isFighter && !u.dead && !u.hyper && u.l1x !== undefined) shiftHistory(u);
+    const moved = this.fighterMoves.run(dt);
+    const fireFrom = performance.now();
+    for (const u of moved) if (!u.dead && !u.suspended) this.fireFighterWeapons(u, dt);
+    this.stepTimes.move += fireFrom - moveFrom;
+    this.stepTimes.fire += performance.now() - fireFrom;
+  }
+
+  fireFighterWeapons(u, dt) {
+    const st = u.fstate,
+      fireAt = st.fireAt;
+    st.fireAt = null;
     const w = u.weapon;
     if (u.cloaked) return;
     if (!w) {
@@ -6859,47 +7753,4 @@ export class World {
     return true;
   }
 
-  probe(u, st, leader, dt) {
-    const p = u.pitch || 0,
-      flat = Math.cos(p),
-      ex = Math.cos(u.heading) * flat,
-      ey = Math.sin(u.heading) * flat,
-      ez = Math.sin(p);
-    const v = u.speed * (2 / Math.max(0.05, u.turnRate)) * (leader ? 2 : 1),
-      G = this.obstacleGrid;
-    let hit = null;
-    if (v >= 1 && G) {
-      const near = G.get(Math.floor(u.x / PROBE_CELL) * 65536 + Math.floor(u.y / PROBE_CELL));
-      if (near) {
-        const d = u.speed / LOGIC_FPS,
-          x1 = u.x + ex * v,
-          y1 = u.y + ey * v,
-          z1 = u.z + ez * v;
-        for (const o of near) {
-          if (o === u) continue;
-          const c = o.cull;
-          if (!c || Math.abs(u.x - c[0]) > c[3] + d || Math.abs(u.y - c[1]) > c[4] + d || Math.abs(u.z - c[2]) > c[5] + d) continue;
-          const t = this.lookStep(o, u.x, u.y, u.z, x1, y1, z1);
-          if (t === -2) break;
-          if (t >= 0) {
-            hit = o;
-            break;
-          }
-        }
-      }
-    }
-    if (hit) {
-      st.avoid = 15 / LOGIC_FPS;
-      const ax = u.x - hit.x,
-        ay = u.y - hit.y,
-        az = u.z - hit.z;
-      return ax || ay || az ? { x: u.x + ax, y: u.y + ay, z: u.z + az, hit: true } : { x: u.x + 1, y: u.y, z: u.z, hit: true };
-    }
-    if (st.avoid > 0) {
-      st.avoid -= dt;
-      const k = (u.speed * 10) / LOGIC_FPS;
-      return { x: u.x + ex * k, y: u.y + ey * k, z: u.z + ez * k, hit: false };
-    }
-    return null;
-  }
 }

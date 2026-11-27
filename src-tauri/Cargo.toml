@@ -1,15 +1,18 @@
 [package]
 name = "empire-at-war-browser-edition"
-version = "0.1.18"
+version = "0.1.21"
 edition = "2024"
 license = "GPL-3.0-or-later"
+
+[lib]
+name = "empire_at_war_browser_edition_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
-tauri-plugin-updater = "2"
 indexmap = "2"
 regex = "1"
 sha2 = "0.10"
@@ -18,13 +21,18 @@ base64 = "0.22"
 percent-encoding = "2"
 ureq = { version = "2", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
-rfd = "0.15"
 serde_json = { version = "1", features = ["preserve_order"] }
+
+# the desktop app's own: updates from the release feed, one running copy, folder dialogs, Discord
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"
+tauri-plugin-single-instance = "2"
+rfd = "0.15"
 discord-rich-presence = "1.1.0"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
-windows = { version = "0.62", features = ["Win32_Media_Audio", "Win32_System_Com", "Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_UI_Shell", "Win32_System_Power"] }
+windows = { version = "0.62", features = ["Win32_Media_Audio", "Win32_System_Com", "Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_UI_Shell", "Win32_System_Power", "Win32_UI_WindowsAndMessaging", "Win32_System_Performance", "Win32_System_Threading", "Win32_System_ProcessStatus", "Win32_Graphics_Gdi"] }
 webview2-com = "0.39"
 
 [profile.release]

@@ -1,6 +1,6 @@
 # Empire War Remastered
 
-Empire War Remastered is 0xHayd3n’s unofficial fork of RIRA’s [Empire at War: Browser Edition](https://github.com/Glenn332/Empire-At-War-Browser-Edition). It runs *Star Wars: Empire at War* and *Forces of Corruption* in a desktop browser using the files from your own Gold Pack installation. It is not a patch for the retail executable, and it does not include the game or any Workshop mod.
+Empire War Remastered is 0xHayd3n’s unofficial fork of Glenn332 (RIRA)’s [Empire at War: Browser Edition](https://github.com/Glenn332/Empire-At-War-Browser-Edition). It runs *Star Wars: Empire at War* and *Forces of Corruption* in a desktop browser using the files from your own Gold Pack installation. It is not a patch for the retail executable, and it does not include the game or any Workshop mod.
 
 **Nightly development build:** `nightly` follows the Universal checkout and includes the current Universal engine, remastered battlefields and unfinished experiments. To try it, fight on Endor with the forest overhaul, paint a fleet, or compare the same battle with its original scenery. Settings and save behavior can change between commits. The [earlier checkpoint](https://github.com/0xHayd3n/Empire-War-Remastered/tree/29a04135410f08a2b526346e132400f29d6f934d) predates the physics and map work.
 
@@ -84,7 +84,7 @@ npm run build:prod
 
 ## Credits and license
 
-Original browser engine: **RIRA and the Browser Edition contributors** (Copyright © 2026 RIRA). Remastered fork: **0xHayd3n**. The original game and expansion are by Petroglyph and LucasArts. The Workshop teams retain credit for their own overhauls; no subscription, mod payload or generated Universal library is redistributed here.
+Original browser engine: **Glenn332 (RIRA) and the Browser Edition contributors** (Copyright © 2026 Glenn332 (RIRA)). Remastered fork: **0xHayd3n**. The original game and expansion are by Petroglyph and LucasArts. The Workshop teams retain credit for their own overhauls; no subscription, mod payload or generated Universal library is redistributed here.
 
 The engine code is [GPL-3.0-or-later](LICENSE), without warranty. The remaster adds [Rapier 0.17.3](public/vendor/rapier/LICENSE) and [meshoptimizer](public/vendor/meshoptimizer/LICENSE.md). Redistributable landscape materials and vegetation are credited alongside their outputs in [`public/art/`](public/art/), including [Poly Haven scans and the Endor source notes](public/art/endor-terrain/SOURCES.md). Generated packs that depend on your retail or Workshop files stay private. Bundled dependencies retain their own notices: [three.js](public/vendor/three/LICENSE), [Fengari](public/vendor/fengari/LICENSE), [FFmpeg core and corresponding source](public/vendor/ffmpeg/SOURCE.md), [Oswald](public/fonts/oswald/OFL.txt) and [Aurebesh AF](public/fonts/aurebesh-af/NOTICE.txt).
 

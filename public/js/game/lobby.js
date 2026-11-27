@@ -13,6 +13,12 @@ export { SPECTATOR_TEAM };
 const T = (id, fallback) => db.t(id) || fallback;
 const POP_MAX = 10000,
   POP_STEP = 50;
+// the lobby service tells the host when its game could not go on the public list (or is back on it)
+export const listingNote = (ok, why) =>
+  ok
+    ? 'The game is on the game list again.'
+    : `The game could not be put on the game list${why ? ' (' + why.replace(/\.$/, '') + ')' : ''}. Players can still join with the invite link or the join code.`;
+
 const shooterPref = on => {
   globalThis.shooterMode = on;
   try {

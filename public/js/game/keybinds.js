@@ -38,41 +38,43 @@ export const ACTIONS = [
   { id: 'MISSION_HOLOCRON', page: 3, edit: 'IDC_EDIT_MISSION_HOLOCRON', label: 'TEXT_MISSION_HOLOCRON', keys: ['Tab'] },
   { id: 'BATTLE_CAM', page: 3, edit: 'IDC_EDIT_BATTLE_CAM', label: 'TEXT_MOVIE_MODE', keys: ['Space'] },
   { id: 'INITIATE_CHAT', page: 3, edit: 'IDC_EDIT_INITIATE_CHAT', label: 'TEXT_INITIATE_CHAT', keys: ['Enter', 'NumpadEnter'] },
-  { id: 'PAUSE', page: 5, extra: { col: 0, y: 65 }, label: 'Pause', keys: ['KeyP', 'Pause'] },
-  { id: 'SPEED_UP', page: 5, extra: { col: 0, y: 88 }, label: 'Increase Game Speed', keys: ['Equal', 'NumpadAdd'] },
-  { id: 'SPEED_DOWN', page: 5, extra: { col: 0, y: 112 }, label: 'Decrease Game Speed', keys: ['Minus', 'NumpadSubtract'] },
+  { id: 'PAUSE', page: 5, extra: { col: 0, row: 0 }, label: 'Pause', keys: ['KeyP', 'Pause'] },
+  { id: 'SPEED_UP', page: 5, extra: { col: 0, row: 1 }, label: 'Increase Game Speed', keys: ['Equal', 'NumpadAdd'] },
+  { id: 'SPEED_DOWN', page: 5, extra: { col: 0, row: 2 }, label: 'Decrease Game Speed', keys: ['Minus', 'NumpadSubtract'] },
   ...[1, 2, 3, 4, 5].map(n => ({
     id: 'ABILITY_' + n,
     page: 5,
-    extra: { col: 0, y: Math.round(112 + 23.4375 * n) },
+    extra: { col: 0, row: 2 + n },
     label: 'Use Ability ' + n,
     keys: n === 1 ? ['KeyR'] : []
   })),
-  { id: 'ROTATE_LEFT', page: 5, extra: { col: 1, y: 65 }, label: 'Rotate Camera Left', keys: ['KeyQ'] },
-  { id: 'ROTATE_RIGHT', page: 5, extra: { col: 1, y: 88 }, label: 'Rotate Camera Right', keys: ['KeyE'] },
-  { id: 'TILT_UP', page: 5, extra: { col: 1, y: 112 }, label: 'Tilt Camera Up', keys: [] },
-  { id: 'TILT_DOWN', page: 5, extra: { col: 1, y: 135 }, label: 'Tilt Camera Down', keys: [] },
-  { id: 'DIRECT_CONTROL', page: 5, extra: { col: 1, y: 159 }, label: 'Direct Control', keys: ['KeyV'] },
-  { id: 'TOGGLE_HUD', page: 5, extra: { col: 1, y: 182 }, label: 'Hide / Show HUD', keys: ['KeyH'] },
-  { id: 'DIRECT_VIEW', page: 5, extra: { col: 1, y: 206 }, label: 'Direct Control View', keys: ['KeyB'] },
-  { id: 'SQUAD_CAM', page: 5, extra: { col: 1, y: 229 }, label: 'Follow Whole Squad', keys: ['Alt+KeyC'] },
-  { id: 'REINFORCE', page: 5, extra: { col: 0, y: 252 }, label: 'Reinforcements', keys: ['KeyN'] },
-  { id: 'RETREAT', page: 5, extra: { col: 1, y: 252 }, label: 'Retreat', keys: ['KeyY'] },
-  { id: 'SHOOTER_ENTER', page: 5, extra: { col: 0, y: 276 }, label: 'Battlefront: Enter / Leave', keys: ['KeyE'] },
-  { id: 'SHOOTER_SPRINT', page: 5, extra: { col: 1, y: 276 }, label: 'Battlefront: Sprint', keys: ['ShiftLeft', 'ShiftRight'] },
-  { id: 'SHOOTER_CROUCH', page: 5, extra: { col: 0, y: 299 }, label: 'Battlefront: Crouch / Down', keys: ['KeyC'] },
-  { id: 'SHOOTER_JUMP', page: 5, extra: { col: 1, y: 299 }, label: 'Battlefront: Jump / Fly Up', keys: ['Space'] },
-  { id: 'SHOOTER_SCORES', page: 5, extra: { col: 0, y: 323 }, label: 'Battlefront: Scores', keys: ['Tab'] },
-  { id: 'SHOOTER_ABILITY_1', page: 5, extra: { col: 1, y: 323 }, label: 'Battlefront: Ability 1', keys: ['KeyQ'] },
-  { id: 'SHOOTER_ABILITY_2', page: 5, extra: { col: 0, y: 346 }, label: 'Battlefront: Ability 2', keys: ['KeyF'] },
-  { id: 'SHOOTER_ABILITY_3', page: 5, extra: { col: 1, y: 346 }, label: 'Battlefront: Ability 3', keys: ['KeyG'] },
-  { id: 'SHOOTER_DODGE', page: 5, extra: { col: 0, y: 370 }, label: 'Battlefront: Dodge', keys: ['KeyV'] },
-  { id: 'SHOOTER_MAP', page: 5, extra: { col: 1, y: 370 }, label: 'Battlefront: Map', keys: ['KeyM'] },
-  { id: 'SHOOTER_GRENADE', page: 5, extra: { col: 0, y: 393 }, label: 'Battlefront: Detonator', keys: ['KeyT'] },
-  { id: 'SHOOTER_SETTINGS', page: 5, extra: { col: 1, y: 393 }, label: 'Battlefront: Settings', keys: ['KeyO'] },
-  { id: 'SHOOTER_OVERLORD', page: 5, extra: { col: 0, y: 417 }, label: 'Battlefront: Tactical View', keys: ['KeyL'] },
-  { id: 'SHOOTER_RELOAD', page: 5, extra: { col: 1, y: 417 }, label: 'Battlefront: Reload', keys: ['KeyR'] },
-  { id: 'SHOOTER_CONTROLS', page: 5, extra: { col: 0, y: 440 }, label: 'Battlefront: Show Controls', keys: ['KeyI'] }
+  { id: 'ROTATE_LEFT', page: 5, extra: { col: 1, row: 0 }, label: 'Rotate Camera Left', keys: ['KeyQ'] },
+  { id: 'ROTATE_RIGHT', page: 5, extra: { col: 1, row: 1 }, label: 'Rotate Camera Right', keys: ['KeyE'] },
+  { id: 'TILT_UP', page: 5, extra: { col: 1, row: 2 }, label: 'Tilt Camera Up', keys: [] },
+  { id: 'TILT_DOWN', page: 5, extra: { col: 1, row: 3 }, label: 'Tilt Camera Down', keys: [] },
+  { id: 'DIRECT_CONTROL', page: 5, extra: { col: 1, row: 4 }, label: 'Direct Control', keys: ['KeyV'] },
+  { id: 'TOGGLE_HUD', page: 5, extra: { col: 1, row: 5 }, label: 'Hide / Show HUD', keys: ['KeyH'] },
+  { id: 'DIRECT_VIEW', page: 5, extra: { col: 1, row: 6 }, label: 'Direct Control View', keys: ['KeyB'] },
+  { id: 'SQUAD_CAM', page: 5, extra: { col: 1, row: 7 }, label: 'Follow Whole Squad', keys: ['Alt+KeyC'] },
+  { id: 'REINFORCE', page: 5, extra: { col: 0, row: 8 }, label: 'Reinforcements', keys: ['KeyN'] },
+  { id: 'RETREAT', page: 5, extra: { col: 1, row: 8 }, label: 'Retreat', keys: ['KeyY'] },
+  { id: 'SHOOTER_ENTER', page: 5, extra: { col: 0, row: 9 }, label: 'Battlefront: Enter / Leave', keys: ['KeyE'] },
+  { id: 'SHOOTER_SPRINT', page: 5, extra: { col: 1, row: 9 }, label: 'Battlefront: Sprint', keys: ['ShiftLeft', 'ShiftRight'] },
+  { id: 'SHOOTER_CROUCH', page: 5, extra: { col: 0, row: 10 }, label: 'Battlefront: Crouch / Down', keys: ['KeyC'] },
+  { id: 'SHOOTER_JUMP', page: 5, extra: { col: 1, row: 10 }, label: 'Battlefront: Jump / Fly Up', keys: ['Space'] },
+  { id: 'SHOOTER_SCORES', page: 5, extra: { col: 0, row: 11 }, label: 'Battlefront: Scores', keys: ['Tab'] },
+  { id: 'SHOOTER_ABILITY_1', page: 5, extra: { col: 1, row: 11 }, label: 'Battlefront: Ability 1', keys: ['KeyQ'] },
+  { id: 'SHOOTER_ABILITY_2', page: 5, extra: { col: 0, row: 12 }, label: 'Battlefront: Ability 2', keys: ['KeyF'] },
+  { id: 'SHOOTER_ABILITY_3', page: 5, extra: { col: 1, row: 12 }, label: 'Battlefront: Ability 3', keys: ['KeyG'] },
+  { id: 'SHOOTER_DODGE', page: 5, extra: { col: 0, row: 13 }, label: 'Battlefront: Dodge', keys: ['KeyV'] },
+  { id: 'SHOOTER_MAP', page: 5, extra: { col: 1, row: 13 }, label: 'Battlefront: Map', keys: ['KeyM'] },
+  { id: 'SHOOTER_GRENADE', page: 5, extra: { col: 0, row: 14 }, label: 'Battlefront: Detonator', keys: ['KeyT'] },
+  { id: 'SHOOTER_SETTINGS', page: 5, extra: { col: 1, row: 14 }, label: 'Battlefront: Settings', keys: ['KeyO'] },
+  { id: 'SHOOTER_OVERLORD', page: 5, extra: { col: 0, row: 15 }, label: 'Battlefront: Tactical View', keys: ['KeyL'] },
+  { id: 'SHOOTER_RELOAD', page: 5, extra: { col: 1, row: 15 }, label: 'Battlefront: Reload', keys: ['KeyR'] },
+  { id: 'SHOOTER_CONTROLS', page: 5, extra: { col: 1, row: 16 }, label: 'Battlefront: Show Controls', keys: ['KeyI'] },
+  // Held while dragging the mouse: sideways turns the camera, up and down tilts it.
+  { id: 'CAMERA_ORBIT', page: 5, extra: { col: 0, row: 16 }, label: 'Turn / Tilt Camera (drag)', keys: ['Ctrl+MouseMiddle'], mouse: true }
 ];
 const byId = new Map(ACTIONS.map(a => [a.id, a]));
 
@@ -175,6 +177,28 @@ export function held(keys, id) {
   return false;
 }
 
+// Mouse buttons a binding can name, by MouseEvent.button, and their MouseEvent.buttons bits.
+const MOUSE_CODES = ['MouseLeft', 'MouseMiddle', 'MouseRight', 'Mouse4', 'Mouse5'];
+const MOUSE_BITS = [1, 4, 2, 8, 16];
+export function mouseCode(button) {
+  return MOUSE_CODES[button] || null;
+}
+export function isMouseAction(id) {
+  return !!byId.get(id)?.mouse;
+}
+
+// The mouse press starts this action's drag: its button and modifiers match one of the bindings.
+// Gives the press's MouseEvent.buttons bit, so a move can tell whether that button is still held, or 0.
+export function mouseBind(e, id) {
+  const code = mouseCode(e.button);
+  if (!code || e.metaKey) return 0;
+  for (const k of keysOf(id)) {
+    const [mods, codes] = split(k);
+    if (codes.length === 1 && codes[0] === code && MODS.every(([m, prop]) => !!e[prop] === mods.includes(m))) return MOUSE_BITS[e.button];
+  }
+  return 0;
+}
+
 export function groupKey(e) {
   for (let n = 0; n <= 9; n++) {
     if (pressed(e, 'GROUP_' + n)) return { n, assign: false };
@@ -238,7 +262,12 @@ const FALLBACK = {
   Period: '.',
   Slash: '/',
   Backquote: '`',
-  IntlBackslash: '\\'
+  IntlBackslash: '\\',
+  MouseLeft: 'Left Mouse',
+  MouseMiddle: 'Middle Mouse',
+  MouseRight: 'Right Mouse',
+  Mouse4: 'Mouse 4',
+  Mouse5: 'Mouse 5'
 };
 function codeName(code) {
   let m;
@@ -297,9 +326,53 @@ export function edgePan() {
   }
   return edgeScroll;
 }
+// the options' scroll speed slider, 0 to 1; the middle is the pace panning had before the slider worked
+let scrollSlider = null;
+export function scrollSpeed() {
+  if (scrollSlider === null) {
+    let v = NaN;
+    try {
+      v = parseFloat(localStorage.getItem('swr-scroll-speed'));
+    } catch {}
+    scrollSlider = v >= 0 && v <= 1 ? v : 0.5;
+  }
+  return scrollSlider;
+}
+export function setScrollSpeed(v) {
+  scrollSlider = Math.max(0, Math.min(1, +v || 0));
+  try {
+    localStorage.setItem('swr-scroll-speed', String(scrollSlider));
+  } catch {}
+}
+const SCROLL_RANGE = { Tactical: [1000, 4000], Strategic: [80, 400] };
+// the slider picks a point between the game constants' <mode>_Min_Scroll_Speed and _Max_Scroll_Speed
+export function scrollRate(mode) {
+  const c = db.constants,
+    [dlo, dhi] = SCROLL_RANGE[mode],
+    lo = c ? c.num(`${mode}_Min_Scroll_Speed`, dlo) : dlo,
+    hi = c ? c.num(`${mode}_Max_Scroll_Speed`, dhi) : dhi;
+  return { speed: lo + (hi - lo) * scrollSpeed(), mid: (lo + hi) / 2 };
+}
+// the factor on a battle camera's own pan pace: 1 at the slider's middle
+export function scrollScale(mode = 'Tactical') {
+  const { speed, mid } = scrollRate(mode);
+  return mid > 0 ? speed / mid : 1;
+}
+
+const edgeWatchers = new Set();
+export const onEdgePan = f => edgeWatchers.add(f);
+// options set in another frame (the multiplayer galaxy and its battles run in frames)
+if (typeof globalThis.window?.addEventListener === 'function')
+  window.addEventListener('storage', e => {
+    if (e.key === 'swr-scroll-speed') scrollSlider = null;
+    if (e.key !== 'swr-edge-pan') return;
+    edgeScroll = null;
+    for (const f of edgeWatchers) f(edgePan());
+  });
 export function setEdgePan(on) {
   edgeScroll = !!on;
   try {
     localStorage.setItem('swr-edge-pan', on ? '1' : '0');
   } catch {}
+  for (const f of edgeWatchers) f(edgeScroll);
 }

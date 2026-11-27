@@ -1,8 +1,9 @@
 import { fileURLToPath } from 'node:url';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { openGame } from './megfs.mjs';
+import { readBaseline, recordSample, sampleFile, updateBaseline } from './lockstep-baseline.mjs';
 
 const arg = (k, d = null) => {
   const i = process.argv.indexOf(k);
@@ -15,8 +16,16 @@ const mod = arg('--mod'),
   companies = +arg('--companies', 24),
   minTps = +arg('--min-tps', 20),
   slack = +arg('--slack', 0.25),
+  // most path searches one tick may run: planning a group attack once ran several thousand in a tick
+  maxSearches = +arg('--max-searches', 2500),
+  // --ai-army gives the spawned companies to the computer players and sends no orders for the human ones
+  aiArmy = flag('--ai-army'),
+  // --probe 12 lists the 12 slowest ticks with the methods that took the time (tools/landprobe.mjs)
+  probeTicks = flag('--probe') ? +arg('--probe') || 12 : 0,
   update = flag('--update'),
   verbose = flag('--verbose');
+
+if (update) updateBaseline('lockstep-land', fileURLToPath(import.meta.url));
 const HASH_EVERY = 30,
   ORDER_EVERY = 240;
 
@@ -61,25 +70,35 @@ if (!flag('--child')) {
   );
   console.log(`  step ${now.stepMs} ms (p99 ${now.p99}), worst second ${now.worst} ticks/s (second ${worstAt})`);
   if (arg('--report')) console.log(`  repeat: step ${peer.stepMs} ms (p99 ${peer.p99}), worst second ${peer.worst} ticks/s (second ${peer.worstAt})`);
+  let mostSearches = 0,
+    searchedAt = 0;
+  a.searches.forEach((n, i) => {
+    if (n > mostSearches) [mostSearches, searchedAt] = [n, i];
+  });
+  console.log(`  slowest step ${Math.max(...a.ms).toFixed(0)} ms, most path searches in one step ${mostSearches} (step ${searchedAt})`);
   if (verbose) console.log('  hashes', a.log.slice(0, 6).join(' '));
+  if (a.probe)
+    for (const [i, t] of a.probe
+      .map((t, i) => [i, t])
+      .sort((x, y) => y[1].ms - x[1].ms)
+      .slice(0, probeTicks)
+      .sort((x, y) => x[0] - y[0]))
+      console.log(`  step ${i}: ${t.ms.toFixed(0)} ms  ` + t.top.map(m => `${m[0]} ${m[1].toFixed(0)}/${m[2]}`).join(', '));
   const fails = [];
   if (diff >= 0) fails.push(`the same land battle ran differently twice: checkpoint ${diff} (step ${diff * HASH_EVERY}) differs`);
+  if (mostSearches > maxSearches)
+    fails.push(`step ${searchedAt} ran ${mostSearches} path searches (at most ${maxSearches}): a plan is trying every place again`);
   if (now.worst < minTps) fails.push(`the worst second falls to ${now.worst} ticks/s (second ${worstAt}, minimum ${minTps})`);
-  const file = fileURLToPath(new URL('./baselines/lockstep-land.json', import.meta.url));
-  const all = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
+  const sample = sampleFile();
   const key = `${hostname()}|${a.map}|${steps}|${companies}|${mod || ''}`;
-  const base = all[key];
-  if (base && !update) {
+  const base = sample ? null : readBaseline('lockstep-land', key);
+  if (base) {
     if (now.stepMs > base.stepMs * (1 + slack) && now.stepMs - base.stepMs > 0.2)
       fails.push(`a land step takes ${now.stepMs} ms, ${Math.round((now.stepMs / base.stepMs - 1) * 100)}% over the baseline ${base.stepMs} ms`);
     console.log(`  baseline ${base.stepMs} ms a step (p99 ${base.p99}, ${base.at})`);
-  } else if (!base && !update) console.log('  no baseline for this machine yet: run with --update to keep these numbers');
-  if (update) {
-    all[key] = { ...now, at: new Date().toISOString().slice(0, 10) };
-    mkdirSync(fileURLToPath(new URL('./baselines/', import.meta.url)), { recursive: true });
-    writeFileSync(file, JSON.stringify(all, null, 2) + '\n');
-    console.log('  baseline kept for ' + key);
-  }
+  } else if (!sample)
+    console.log('  no baseline for this machine yet: run with --update to keep the median of three runs');
+  if (sample) recordSample(sample, key, now);
   if (fails.length) {
     for (const f of fails) console.error('FAIL ' + f);
     process.exit(1);
@@ -214,7 +233,7 @@ for (const [side, f] of sides.entries()) {
       a = (i / companies) * Math.PI * 2,
       r = 250 + (i % 3) * 120,
       spot = w.nearestOpen ? w.nearestOpen(h.x + Math.cos(a) * r, h.y + Math.sin(a) * r) || { x: h.x, y: h.y } : { x: h.x, y: h.y };
-    await w.spawn(t.name, spot.x, spot.y, 0, side);
+    await w.spawn(t.name, spot.x, spot.y, 0, aiArmy ? side + 2 : side);
   }
 }
 const startUnits = w.units.filter(u => !u.dead).length;
@@ -232,8 +251,20 @@ if (flag('--with-rapier')) {
 const ports = () => process.getActiveResourcesInfo().filter(k=>k==='MessagePort').length;
 const startPorts = ports();
 const ms = [];
+const probe = probeTicks
+  ? (await import('./landprobe.mjs')).installProbe({ world: w, game: g, paths: w.paths, scripts: g.scripts, lock: L })
+  : null;
+const searches = [];
+let searched = 0;
+{
+  const search = w.paths.search;
+  w.paths.search = function (...args) {
+    searched++;
+    return search.apply(this, args);
+  };
+}
 for (let step = 0; step < steps; step++) {
-  if (step % ORDER_EVERY === 0)
+  if (step % ORDER_EVERY === 0 && !aiArmy)
     for (const pid of humans) {
       const side = setup.players[pid].team,
         foe = homes[1 - side],
@@ -253,6 +284,9 @@ for (let step = 0; step < steps; step++) {
   g.owed = 1 / 30;
   await g.pump();
   ms.push(performance.now() - t0);
+  searches.push(searched);
+  searched = 0;
+  if (probe) probe.end(ms[ms.length - 1]);
   if (L.tick === before) throw new Error('the land lockstep did not step at ' + step + ': ' + L.blocked);
 }
 // One turn for Node's close callbacks; this is outside every timed tick.
@@ -270,6 +304,8 @@ console.log(
       steps,
       log: L.log,
       ms,
+      searches,
+      probe: probe?.ticks,
       squads: w.squads.filter(q => !q.dead).length,
       units: w.units.filter(u => !u.dead).length,
       lost: startUnits - w.units.filter(u => !u.dead).length,

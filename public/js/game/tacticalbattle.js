@@ -4,7 +4,6 @@ import { db } from '../gamedata.js';
 import { TacticalCampaign } from './tacticalcampaign.js';
 import { TacticalSuperweapons } from './tacticalsuperweapon.js';
 import { TacticalVictory } from './tacticalvictory.js';
-import { superweaponShot } from './tacticalsuperweaponcamera.js';
 
 export async function installTacticalBattle(game) {
   const campaign = (game.tacticalCampaign = await TacticalCampaign.create(game));
@@ -19,7 +18,10 @@ export async function installTacticalBattle(game) {
       reportLinkedVictory(game, result.team.factionName);
       game.tacticalVictoryNotice(result.team, result.suppressNotice);
     },
-    { retry: team => !!game.useRetry && team !== game.human?.team, onRetry: () => openRetryDialog(game) }
+    {
+      retry: team => !!game.useRetry && team !== game.human?.team,
+      onRetry: () => (game.openRetryDialog ? game.openRetryDialog() : openRetryDialog(game))
+    }
   );
   const manager = (game.world.tacticalSuperweapons = new TacticalSuperweapons(game.world, {
     planet: campaign?.planet,
@@ -28,30 +30,28 @@ export async function installTacticalBattle(game) {
     replace: (type, transform) => game.tacticalReplacement(type, transform),
     requestVictory: (team, type, frames) => game.tacticalVictory.request(team, type, frames, game.world.tacticalSuperweapons.disableDepth),
     resetHUD: () => game.superweaponHUD?.reset(),
-    camera: (unit, target) => {
-      if (game.cine) {
-        game.cine.stop();
-        game.cine.start();
-        game.cine.sequence = superweaponShot(game, unit, target);
-      }
-    },
-    music: name => {
-      const event = db.music.get(name.toUpperCase());
-      if (event) game.audio.setPlaylist(event.list('Files'), true, true);
-      else if (!name) {
-        game.audio.stopMusic();
-        if (game.music) {
-          game.music.mode = '';
-          game.setMusic('ambient', true);
-        }
-      }
-    },
-    voice: (unit, threshold) => {
-      const enemy = game.human.faction.list('Enemies').some(n => n.toUpperCase() === unit.player.factionName.toUpperCase());
-      const suffix = threshold ? `Moving_Range_${String(threshold).padStart(2, '0')}_Seconds` : 'Moved_Into_Range';
-      const name = game.human.faction.str(`SpeechEvent_Super_Weapon_${enemy ? 'Enemy_' : ''}${suffix}`);
-      if (name) game.audio.speech.enqueue(name);
-    }
+    camera: (unit, target) => game.superweaponCamera?.(unit, target),
+    music: name => superweaponMusic(game, name),
+    voice: (unit, threshold) => superweaponVoice(game, unit, threshold)
   }));
   return manager;
+}
+
+export function superweaponMusic(game, name) {
+  const event = db.music.get(name.toUpperCase());
+  if (event) game.audio.setPlaylist(event.list('Files'), true, true);
+  else if (!name) {
+    game.audio.stopMusic();
+    if (game.music) {
+      game.music.mode = '';
+      game.setMusic('ambient', true);
+    }
+  }
+}
+
+export function superweaponVoice(game, unit, threshold) {
+  const enemy = game.human.faction.list('Enemies').some(n => n.toUpperCase() === unit.player.factionName.toUpperCase());
+  const suffix = threshold ? `Moving_Range_${String(threshold).padStart(2, '0')}_Seconds` : 'Moved_Into_Range';
+  const name = game.human.faction.str(`SpeechEvent_Super_Weapon_${enemy ? 'Enemy_' : ''}${suffix}`);
+  if (name) game.audio.speech.enqueue(name);
 }

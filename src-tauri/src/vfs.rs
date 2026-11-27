@@ -103,6 +103,12 @@ fn find_case_insensitive(root: &Path, rel: &str) -> Option<PathBuf> {
     Some(cur)
 }
 
+/// The game's GameData folder, found whatever its letter case (Linux and macOS file systems
+/// tell the cases apart, and a copied install keeps whatever case it was copied with).
+pub fn game_data(game_dir: &Path) -> PathBuf {
+    find_case_insensitive(game_dir, "GameData").unwrap_or_else(|| game_dir.join("GameData"))
+}
+
 fn mega_files(xml: &Path) -> Vec<String> {
     let text = latin1(&fs::read(xml).unwrap_or_default());
     let rx = regex::Regex::new(r"<File>\s*([^<]+?)\s*</File>").unwrap();
@@ -111,8 +117,62 @@ fn mega_files(xml: &Path) -> Vec<String> {
         .collect()
 }
 
+/// The game's own archives a folder is missing: each part of the game (GameData, and the
+/// expansion when its folder is there) lists them in Data/MegaFiles.xml. An install only has
+/// the speech and text of the languages it was installed in, so archives named for a
+/// language are left out. A complete install can still miss one or two listed archives (the
+/// Steam release has no expansion Cinematics.meg, and the engine skips listed archives that
+/// are not there), so this is a measure of how complete a copy is, not a verdict.
+pub fn missing_game_files(game_dir: &Path) -> Vec<String> {
+    let mut roots = vec![("GameData".to_string(), game_data(game_dir))];
+    for name in crate::setup::EXPANSION_DIRS {
+        if let Some(root) = find_case_insensitive(game_dir, name) {
+            let shown = root
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| name.to_string());
+            roots.push((shown, root));
+        }
+    }
+    let mut missing = vec![];
+    for (shown, root) in roots {
+        let Some(list) = find_case_insensitive(&root, "Data/megafiles.xml") else {
+            missing.push(format!("{shown}/Data/MegaFiles.xml"));
+            continue;
+        };
+        for archive in mega_files(&list) {
+            if !names_a_language(&archive) && find_case_insensitive(&root, &archive).is_none() {
+                missing.push(format!("{shown}/{archive}"));
+            }
+        }
+    }
+    missing
+}
+
+/// More missing archives than a complete install ever misses: the copy has lost files.
+pub const MISSING_IN_A_BROKEN_COPY: usize = 3;
+
+/// Of several copies of the game, the one missing the fewest archives (the first on a tie).
+pub fn most_complete<T>(copies: Vec<T>, path: impl Fn(&T) -> &Path) -> Option<T> {
+    let mut best: Option<(usize, T)> = None;
+    for copy in copies {
+        let missing = missing_game_files(path(&copy)).len();
+        if best.as_ref().is_none_or(|(fewest, _)| missing < *fewest) {
+            best = Some((missing, copy));
+        }
+    }
+    best.map(|(_, copy)| copy)
+}
+
+fn names_a_language(archive: &str) -> bool {
+    let name = archive.rsplit('/').next().unwrap_or(archive).to_uppercase();
+    LANGUAGES.iter().any(|language| name.contains(language))
+}
+
 fn meg_list(root: &Path, language: usize) -> Vec<String> {
-    let mut out = mega_files(&root.join("Data").join("megafiles.xml"));
+    let mut out = find_case_insensitive(root, "Data/megafiles.xml")
+        .map(|list| mega_files(&list))
+        .unwrap_or_default();
     out.extend(["Data/Patch.meg", "Data/Patch2.meg", "Data/64Patch.meg"].map(String::from));
     for f in [
         "sfx2d_non_localized".to_string(),
@@ -321,7 +381,7 @@ impl Game {
             apply(index, &entries);
             layers.push(Layer { root, entries });
         };
-        let mut roots = vec![game_dir.join("GameData")];
+        let mut roots = vec![game_data(game_dir)];
         if expansion {
             roots.extend(
                 crate::setup::EXPANSION_DIRS
@@ -330,9 +390,12 @@ impl Game {
             );
         }
         for root in roots {
-            if !root.join("Data").join("megafiles.xml").exists() {
+            let Some(data) = find_case_insensitive(&root, "Data")
+                .filter(|data| find_case_insensitive(data, "megafiles.xml").is_some())
+                .and_then(|data| data.file_name().map(|n| n.to_string_lossy().into_owned()))
+            else {
                 continue;
-            }
+            };
             let archives = meg_list(&root, language);
             for (position, rel) in archives.iter().enumerate() {
                 let f = find_case_insensitive(&root, rel);
@@ -345,7 +408,7 @@ impl Game {
                 }
             }
             let mut loose = Entries::new();
-            index_loose(&root, "Data", &mut loose);
+            index_loose(&root, &data, &mut loose);
             mount(&mut layers, &mut index, None, loose);
         }
         for root in mods {

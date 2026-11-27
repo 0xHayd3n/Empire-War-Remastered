@@ -9,3 +9,14 @@ dist-app/
 dist-release/
 
 tools/baselines/
+
+# Machine-local configuration, crash dumps and generated game-data libraries.
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+*.stackdump
+__pycache__/
+EaWBrowserUniversal/
+library-v1/

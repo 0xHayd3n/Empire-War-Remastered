@@ -1,6 +1,6 @@
 # Battlefront: coverage and review notes
 
-[See the five still comparisons and the firing and roll replays in the project README.](../../README.md#battlefront-land-battles-present-and-proposed) The deployment menu is [PR #6](https://github.com/Glenn332/Empire-At-War-Browser-Edition/pull/6)'s proposal. [PR #7](https://github.com/Glenn332/Empire-At-War-Browser-Edition/pull/7) integrates that menu with the field cameras and HUD. The comparisons use actual `main` (`d69de4b`) as the baseline, not the **Original** menu option in the patched build.
+[See the five still comparisons and the firing and roll replays.](comparisons.md) The deployment menu is [PR #6](https://github.com/Glenn332/Empire-At-War-Browser-Edition/pull/6)'s proposal. [PR #7](https://github.com/Glenn332/Empire-At-War-Browser-Edition/pull/7) integrates that menu with the field cameras and HUD. The comparisons use actual `main` (`d69de4b`) as the baseline, not the **Original** menu option in the patched build.
 
 | Area | What was checked with installed retail data |
 |---|---|
@@ -19,7 +19,7 @@ The **left** half is browser `main` (`d69de4b`); the **right** half is the PR bu
 - **Firing:** one focused trigger press on each side produced the stock `Proj_Hand_Blaster_Red` at 330 world units/second. The clip advances 5 ms of game time per 50 ms display frame. While the shot is live, the inset renders its batch instance with the same material, length and width from a fixed rear view, isolated from terrain and muzzle flashes. The blank rear view on `main` is the observed result, not a missing capture.
 - **Rolling:** both runs hold **D**, tap **V**, then release **D** on the same frame. The clip advances 20 ms per 50 ms display frame. Both troopers travel about 31 world units in this capture; only the PR trooper rotates upside down. A short hold at the end of each GIF separates loops.
 
-[Full player-facing change list, including defaults, replacements and the #6 menu.](../../README.md#player-facing-change-list)
+[Full player-facing change list, including defaults, replacements and the #6 menu.](comparisons.md#player-facing-change-list)
 
 ## Run the checks
 

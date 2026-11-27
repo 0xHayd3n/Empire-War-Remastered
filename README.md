@@ -1,280 +1,70 @@
 # Empire War Remastered
 
-0xHayd3n’s personal fork of RIRA’s [Empire at War: Browser Edition](https://github.com/Glenn332/Empire-At-War-Browser-Edition). This is the browser game, not a separate desktop reconstruction. [Playeaw.com](https://playeaw.com) runs the upstream edition, not this fork.
+Empire War Remastered is 0xHayd3n’s unofficial fork of RIRA’s [Empire at War: Browser Edition](https://github.com/Glenn332/Empire-At-War-Browser-Edition). It runs *Star Wars: Empire at War* and *Forces of Corruption* in a desktop browser using the files from your own Gold Pack installation. It is not a patch for the retail executable, and it does not include the game or any Workshop mod.
 
-**On the `universal` test branch:** [engine-wide remaster changes and comparison results](docs/universal.md). Texture mipmaps use less temporary memory. The [fleet render experiment](docs/fleet-render.md) measures distant hulls against weapons and offers an opt-in WebGL fighter mesh switch. Both work with just the stock game; no Workshop mod is required.
+**Why this fork?** You can choose a campaign across installed eras from one galaxy map, inspect a ship and save it to an Instant Battle fleet, or pick a command post and fight on foot with a redesigned Battlefront HUD. The browser engine, land and space battles, Galactic Conquest, multiplayer and mod loading are the work this fork builds on. [PlayEAW.com](https://playeaw.com) hosts **upstream Browser Edition**, not Remastered.
 
-## Play this fork
+## Play locally
 
-You need Node.js 22+ and your own copy of *Empire at War – Gold Pack*. No native build is required.
+You need your own installed **Empire at War – Gold Pack** (both the base game and expansion), [Node.js 22 or later](https://nodejs.org/) with npm, and a current desktop browser such as Chrome or Edge. No Workshop subscription, npm install or native build is required for stock play.
 
 ```sh
-git clone --branch universal https://github.com/0xHayd3n/Empire-War-Remastered.git
+git clone --branch remastered https://github.com/0xHayd3n/Empire-War-Remastered.git
 cd Empire-War-Remastered
-npm run workshop
+npm run universal
 ```
 
-- **With Steam mods:** choose a collection in the [local Workshop launcher](http://127.0.0.1:8490/) and select **Launch**. On Windows you can also double-click `Workshop Launcher.cmd`. Once a collection is running, **Model viewer** opens models from that same mounted stack.
-- **Without a collection:** run `npm start`, open [the start page](http://127.0.0.1:8377/), and choose the installed game folder or import its archive. Then select **Launch**. To try the new spawn menu and combat HUD, [start Battlefront on Endor](http://127.0.0.1:8377/play.html?autostart&mode=land&shooter&map=ENDOR&faction=Empire&enemy=Rebel&deployUI=2005).
+Open **[http://127.0.0.1:8590/](http://127.0.0.1:8590/)** and keep the terminal running. You should see **Home** with **Play**, **Workshop** and **Customize**. Try **Play → Single Player → Skirmish** for a battle, or **Galactic Conquest → Galactic Civil War** for a stock campaign. Close the server with `Ctrl+C`. On Windows, double-clicking `Universal Library.cmd` starts the same game.
 
-Included from upstream pull requests: [#5 – fork mod compatibility](https://github.com/Glenn332/Empire-At-War-Browser-Edition/pull/5), [#6 – deployment and spawn selection](https://github.com/Glenn332/Empire-At-War-Browser-Edition/pull/6), and [#7 – in-game HUD, infantry and vehicle views](https://github.com/Glenn332/Empire-At-War-Browser-Edition/pull/7). These changes are on this fork’s `main`; they don’t depend on upstream accepting those PRs.
+- **Game not found?** The launcher checks Steam libraries. For a different install, set `SWR_GAME` to the folder containing **both** `GameData` and `corruption`, then restart. For example, in PowerShell: `$env:SWR_GAME = 'D:\Games\Star Wars Empire at War'`. Set `STEAM_PATH` to your Steam client directory if Workshop discovery misses your library.
+- **Want to use overhauls?** Install a supported parent mod in Steam, stop the server, run `npm run universal:build`, then `npm run universal` again. The default build indexes installed parents; keep them installed and rebuild after updates. Stock needs no indexing step. See [supported profiles and storage](docs/universal-library.md#what-is-stripped).
+- **Want a saved mod collection instead?** Run `npm run workshop`, open [the local collection launcher](http://127.0.0.1:8490/), select the collection and choose **Launch**. For the standalone folder/archive importer, use `npm start` and [open the import page](http://127.0.0.1:8377/). These are alternatives to the Universal window, not extra setup steps.
+- **Port conflict or missing saves?** Universal uses `8590`–`8597` on loopback. Use the same browser profile, address and ports when returning: saves belong to the profile’s browser origin. `SWR_UNIVERSAL_PORT` moves the whole block; it does not migrate saves.
 
-## About the browser engine
+## What Remastered changes
 
-*Star Wars: Empire at War* came out in 2006, and *Forces of Corruption* followed it. Nearly twenty years on, people
-still play them, and the modding community keeps them alive with huge total-conversion mods. The original engine has
-not kept up. It is 32-bit and single-threaded, and it was built for the hardware of its day. Large mod battles can
-bring a modern PC to its knees.
+| Area | What you can do in this fork |
+| --- | --- |
+| Campaign library | Instead of restarting a collection to see its campaigns, compare maps by era, starting period, faction and planet count on one galaxy chart. Launch the chosen campaign under its own rules, scripts and save origin. [Universal campaign guide](docs/universal-library.md) |
+| Campaign objectives | On supported starts, opt into missions such as escorting a Rebel freighter from Hoth to Bespin or recovering a derelict at Sullust. In the stock Rebel *Equal Footing* opening, you can commission an existing cruiser as a flagship whose damage persists between battles. These are specific options, not changes to every campaign. [Objectives and eligibility](docs/universal-library.md#start-a-campaign-and-choose-its-path) |
+| Workshop and load order | Browse installed items and collections, inspect their sources, and save named playsets. Reorder items to resolve conflicts (first wins), then launch the playset without replacing the running Universal session. Steam still manages subscriptions. [Workshop guide](docs/workshop-exchange.md) |
+| Home and fleet setup | **Continue Campaign** returns to an eligible conquest save. In **Customize**, rotate a ship’s mounted 3D model, save a lead ship and escorts as a *flight card*, or build a whole fleet preset for single-player Instant Battle. [Fleet registry](docs/unit-armory.md) |
+| Battlefront ground combat | Choose a class and a friendly spawn on a round command-post map. On the field, the shoulder sight stays on target through zoom, first-person blasters follow supported unit rigs, and vehicles get their own chase framing. The HUD shows the aimed unit’s health, local radar and capture progress. The original deployment layout is still selectable. [Side-by-side comparisons](docs/battlefront/comparisons.md) |
+| Multiplayer | Choose one of four land or space rulesets, match with a compatible opponent, and vote on the map before both players ready up. Optional friend codes, messages and invitations complement custom rooms. Ranked results stay on the device; there is no public ladder. [Rulesets](docs/play-operations.md) · [Commander network](docs/commander-network.md) |
+| Texture memory | When a compressed texture lacks smaller detail levels, the engine generates them a strip at a time. On a 2048×2048 DXT5 test texture, the two temporary pixel buffers fell from **20 MiB to 4.125 MiB**, with identical output. That is a memory measurement, not an FPS claim. [Texture comparisons](docs/universal.md) · [Opt-in fleet rendering experiments](docs/fleet-render.md) |
 
-This project brings the game back on a new engine that runs in your browser. It reads your own copy of the game, so
-you get the same units, maps, models, sounds, scripts and AI, and it is built to keep big battles running smoothly.
+[![Same Stormtrooper on Endor: Browser Edition’s deployment dialog on the left and Remastered’s class portrait and command-post map on the right](docs/battlefront/deploy.png)](docs/battlefront/comparisons.md)
 
-You need your own copy of *Star Wars: Empire at War - Gold Pack* (the base game and *Forces of Corruption*), for
-example from Steam. Nothing of the game is hosted or shipped here. On first start, you point the game at your
-installed game folder. You can also import the folder once as a single archive, which works in every browser and
-lets you play offline afterwards. The start page walks you through both options.
+*Deployment on Endor, captured in the same scenario. [See the cameras, HUD and moving comparisons](docs/battlefront/comparisons.md).*
 
-## What you can play
+## Compatibility and multiplayer
 
-- **Space skirmish:** the original maps, factions, units, heroes, abilities and HUD, against the computer or
-  friends.
-- **Land skirmish:** ground battles with reinforcement points, buildings, garrisons and turrets.
-- **Galactic conquest:** the campaigns and the galaxy map, with invasions that lead into real space and land
-  battles. This mode is still in progress.
-- **Multiplayer:** internet and LAN games through the original lobby screens, including saving a multiplayer game.
-- **Mods:** Steam Workshop and local mods load the way the original loads them, and you can stack several in your
-  own order. Fixes are made in the engine, never for one particular mod.
+The Universal library recognizes **Thrawn’s Revenge**, **Fall of the Republic**, **Revan’s Revenge**, **Awakening of the Rebellion**, **Awakening of the Clone Wars** and **Empire at War: Remake** as separate profiles. Only the profiles you install and build can launch. Reading several profiles does not merge their factions or campaigns, and support for a parent mod does not guarantee every submod combination works. Galactic Conquest and script parity are still in progress; the [engine progress log](progression.md) records known gaps.
 
-### Title menu
+To test multiplayer on **one computer**, run `npm ci --prefix lobby` once, then `npm run relay:local` in a second terminal and select the local relay in the game. Use separate browser profiles for the two players. **Across computers**, both players need a matching build, edition and mod order, and the same reachable compatible relay. The loopback command does not deploy an internet service.
 
-Normal startup opens **Home**. The gold **Play** button sits at the top center with notifications attached on its left and settings on its right. Both drawers slide in from the right. Use **Close sidebar** or Escape before opening the other drawer; reduced motion skips the slide. There is no Home button. The illustrated **Workshop** and **Customize** tiles sit beside **Continue Campaign** (below it on small screens). Inside a section the dock disappears. The Back arrow sits at the left edge of the section, separate from the centered title; Escape does the same. **Play** opens with Single Player selected. Switch between the two tabs by click, tap, or left/right arrow to see that side’s modes in place. Either tab backs directly to Home. Matchmaking keeps its own bottom Back control. **Continue Campaign** shows your latest Galactic Conquest checkpoint. **Choose campaign…** lists the current profile’s Galactic Conquest saves by name and time. Use its **Game profile** selector for an older Universal campaign; changing profiles reads the actual saves in that era. This does not change which save one-click Continue uses. With no checkpoint, choose **Explore modes** instead. The Home bell opens the [commander network](docs/commander-network.md) for friend requests, messages and lobby invitations; the cog opens **Settings**, **Credits** and **Exit Game**. A mod with unfamiliar dialog controls keeps its native layout.
+## Development and reporting
 
-**Single Player** has cards for Galactic Conquest, story campaigns, skirmish and Instant Battle, alongside Tutorial and Load Game. Use **Load** on a mode tile to see matching saves, or **Load Game** for the full single-player archive. New conquests write an opening checkpoint when the campaign can safely be saved; Continue uses the newest available conquest checkpoint or manual save, not a new game or an unrelated battle. It is not a continuous autosave. In Universal the host remembers the save's era without copying the save. Pre-update saves in another era are indexed when you browse that era's saves; old instant battles without a mode marker remain accessible from the full archive. The original Internet and LAN lobbies and their multiplayer saves remain under **Multiplayer → Custom games**.
+The browser code is in [`public/js/`](public/js/), the simulation and UI in [`public/js/game/`](public/js/game/), the local launchers and tests in [`tools/`](tools/), and the optional relay in [`lobby/`](lobby/). To check a checkout **without retail files**:
 
-**Workshop** opens the [HoloNet Exchange](docs/workshop-exchange.md): browse illustrated tiles and inspect a mod’s source, availability and collection membership without changing the running game. **Base** means the original mod. An alternative **Native** edition appears only for a separately identified, author-verified stripped release; none was verified in the current library. Universal compression is not a Native edition. Browse by category, create personal categories, or search by name or Workshop ID. The dossier separates the source, local installation and playset membership. It links Mod DB when the publisher confirms the mirror. Steam handles subscription and unsubscription; the menu opens the exact item or shows a manual item-specific download command for eligible items. Watch observed installation and app-wide transfer status, then **Refresh**. Alternatively, import an authorized `.tar` into browser storage with measured progress, or remove that browser copy without touching Steam or saves. For unnamed items, **Look up titles** asks before sending those item IDs to Steam. Add installed items to **My playset** (or use a collection’s enabled order), then move items up or down: the first item wins conflicts. Name and save different playsets, then recall one with **Use saved**. **Prepare playset → Open playset game** starts a separate local game without replacing Universal. The same ordered IDs reuse the same local save origin. A playset can have at most one known primary overhaul; compatibility and dependencies of arbitrary submods are not guaranteed. Up to three distinct playsets can be prepared per Universal session. Non-Universal sessions show mounted content and link back to their import page.
-
-**Customize** opens the [fleet registry](docs/unit-armory.md). Select a profile and faction, then turn, zoom or reset a unit’s actual mounted 3D model. A horizontal unit selector preserves the camera and fleet draft. Supported models have their native idle clip; a low-power portrait mode and text record keep deployment usable without 3D. Save a **flight card** for that unit: a lead count and optional companion. In single-player Instant Battle, **Add flight card** appends those units to a matching fleet. For a complete fleet, **Fleet preset → Apply preset** replaces the roster with a saved blueprint. Existing blueprints remain usable; missing units, duplicate heroes and over-budget orders are rejected without changing the fleet. These are deployment choices, not changes to unit stats, cosmetics, campaign or multiplayer rules.
-
-**Play → Multiplayer → Matchmaking:** in the [matchmaking lobby](docs/play-operations.md), choose **Playlist → Social or Ranked → ruleset → Use playlist**. The lobby has its own clear orbital backdrop, a commander roster and a bottom **Back** control (Backspace or Escape). **Connection** configures only this queue. **Start matchmaking** gives you five seconds to cancel before searching for another compatible commander. Paired commanders have 15 seconds to vote on up to three maps from their ruleset’s mounted pool. The selected map opens in native staging; both players still ready before battle. Ranked tracks completed outcomes on this device, not on a public ladder. **Custom games** bypasses the countdown and queues entirely: Internet, LAN, hosting, invitations and join-by-code still work separately.
-
-**Local multiplayer relay:** from the checkout run `npm ci --prefix lobby` once, then `npm run relay:local`. Keep that terminal open while using multiplayer from Universal. The command runs the existing lobby worker on loopback port 8787; it does not publish a service. Two independent browser profiles on this computer can use that relay. Across computers, both games need the same reachable relay, not each computer's own `localhost`.
-
-Tile screenshots are private local derivatives, not distributed assets. To prepare the curated thumbnails on another PC, run `python tools/import-title-art.py "path/to/The Folder of screenshots"` with Pillow installed. This leaves the originals untouched. The local server reads only the named thumbnails from `%LOCALAPPDATA%/EaWBrowserWorkshop/title-art` (or `SWR_TITLE_ART`); the bundled briefing illustrations cover missing photos and hosted play.
-
-The background is a still, not a running battle. A local game server can show the same verified Coruscant orbit photograph used for campaign loading; installations without that photo use the bundled orbital illustration. Neither backdrop delays navigation. The data-import page, Workshop launcher and in-game HUD are separate from this menu.
-
-### Universal library: one game, separate overhauls
-
-On `universal`, run `npm run universal:build` once with your Steam parents installed, then `npm run universal` or double-click **Universal Library.cmd**. The [Universal game](http://127.0.0.1:8590/) opens directly to the title menu. Windows users can also [register a one-click launch URL](docs/universal-library.md#click-a-url-to-start-universal-windows) to start it even when the server is closed. Choose **Play → Single Player → Galactic Conquest** for one setup board. Choose an era card at the top of the setup panel. Choose **Time-based** for a supported starting period or **Scenario-based** to browse without a calendar. The map list shows each map’s mod and color-coded planet count. Scenario tabs filter by type; unavailable mods have grayed-out entries with a link to local submod details. Below it, **Faction** shows the eligible factions’ hero cards; **Settings** holds difficulty and campaign rules. A gold outline marks your selection. The preview frames the selected map’s sector of one shared galaxy, drawing its planets and routes without starting a simulation. The faction key is always visible. Difficulty, [campaign rules](docs/universal-library.md#start-a-campaign-and-choose-its-path) and applicable starting conditions share the same screen. **Start campaign** launches the displayed setup; there is no separate era or rules page. Skirmish and Instant Battle also offer the era choice inside the game. It doesn't merge campaigns or modify Workshop installs. See [build, disk usage and switching profiles](docs/universal-library.md).
-
-### Play an installed Steam Workshop stack
-
-**On your PC:** install mods through Steam, then double-click **Workshop Launcher.cmd** in the checkout (Node.js required). The local
-launcher opens in your browser. It finds the game and Workshop items in Steam's libraries, reads any saved Mod Collection Launcher v1
-FoC profiles from `%LOCALAPPDATA%/ModCollectionLauncher/profiles`, and displays collection cards using artwork from the installed mods.
-The local selector at `http://127.0.0.1:8490/` fills the viewport, cropping scene edges when the screen and image differ in shape. Hover or focus a logo tile to highlight it; select a tile or use the carousel arrows to switch collections. **Launch** is a separate action. **Enabled mods** shows launch priority. Music requests audible playback on arrival. If the browser blocks first-visit autoplay, a click, tap, or keypress starts it. It follows the selected collection, pauses in a hidden tab, and can be muted from the browser tab. Reduced motion leaves the art still. Collection artwork is read from `%LOCALAPPDATA%/EaWBrowserWorkshop/collection-art` (or set `SWR_COLLECTION_ART` to your desktop launcher's Assets directory); `<Workshop ID>.png` overrides a scene and `<Workshop ID>-wordmark.png` overrides a transparent logo. A collection without a logo shows its name. Preview tracks come from `%LOCALAPPDATA%/ModCollectionLauncher/music`, including `<Workshop ID>.mp3` overrides. If a desktop theme is missing, the selector uses available installed media; it does not download songs or bundle the artwork. Browser UI text uses [Oswald](https://open-foundry.com/fonts/oswald), served locally with its [SIL Open Font License](public/fonts/oswald/OFL.txt); original game-rendered text is preserved. **Launch** and the outline play triangle in **Library tools** start the same browser game. **All installed mods** shows the full searchable inventory, including members of saved collections. **Refresh** rescans Steam and the saved profiles while no session is running. If names are missing, **Look up Steam titles**
-requests them from Steam only when clicked. In a battle or on the galaxy map, press **F2** to view frame times.
-The library stays available while playing. Save and leave the game, then use **End session** in the library before switching collections.
-To browse the loading artwork without leaving your game, open `briefings.html` on the **game** server in another tab (normally `http://127.0.0.1:8478/briefings.html` during a Workshop session). The gallery shows transition contexts, not a catalog of map photographs. Local Workshop tactical battles can show reviewed 1920×1080-or-better photographs of the exact installed land or space map. Space and land battles share a briefing: the location, battle type, and one authored world description on the left in white Oswald, with live loading progress below. Above the readable title, the same place name appears in [Aurebesh AF Canon](https://www.fontspace.com/aurebesh-af-font-f49637) by AurekFonts (public domain, served locally). If the mounted data has no world description, the paragraph is omitted rather than filled with tactical advice or another planet's history. Without a verified photograph the briefing is text-only. It never guesses from shared loading screens, filenames, planet icons, galleries or minimaps. The battle opens automatically at simulation readiness, without waiting for art or input. Multiplayer uses the same briefing, with player loading progress shown separately; peer readiness still controls entry. No mod artwork is bundled.
-Neither Steam nor the old launcher's profiles are modified. Close the local server to stop the launcher.
-Alternatively run `node server.mjs --workshop` and open the printed address. For a nonstandard Steam installation set `STEAM_PATH` to the
-Steam client folder containing `steamapps/libraryfolders.vdf`. This local mode does not need an npm install or a native build.
-
-**On the hosted website:** a website cannot inspect your Steam libraries automatically. On the start page, open **Mods → Use Steam Workshop launch options** and paste the author's
-`STEAMMOD=…` entries, submod first if that's the published order. **Use this order** enables just those items from the mod list. The first
-entry has the highest priority; the list shows overlays from bottom to top. You can save the selection as a mod profile or start a game.
-
-The Windows app discovers installed items. In a browser with directory-picker support, **Choose 32470 folder and apply…** lets you select
-`steamapps/workshop/content/32470` in your Steam library and read just the missing numbered folders. In other browsers add each numbered
-item folder first. If an item is missing or appears twice, the existing selection is left alone. The page does not subscribe, download,
-execute a Steam command or change the installed files.
-
-[progression.md](progression.md) shows exactly what is finished, what is partial and what is still missing.
-
-**For fork maintainers:** use the [proposed fork mod compatibility standard](docs/fork-mod-compatibility.md) to check
-that unchanged mods work on your build as they do on a named main web build. Every fork, including a fork of a fork,
-tests its own release directly against main; mod authors do not need to port or repackage anything.
-
-## Built for big battles
-
-The point is to play battles the original engine struggles with:
-
-- Hundreds of ships and fighters at once. The built-in benchmark starts at 100 against 100 and goes up to 400 ships
-  per side.
-- Hot paths such as route planning and the soldiers' animation run in WebAssembly. The space battle can step on a
-  thread of its own, apart from the drawing.
-- Rendering uses WebGL or WebGPU, with instancing and batching, so dense mod battles stay fluid.
-- Press **F2** in any battle or on the galaxy map to see frame times live.
-
-## Faithful to the original
-
-The engine is new code, not a port of the original executable. It behaves like the original because it reads the
-same files and follows the same rules: the XML unit database, the `.meg` archives, the models and animations,
-particles, maps, the Lua story and AI scripts, the audio events and the game's own dialogs. Where the original's
-behaviour is not obvious from its data, it is worked out from how the original engine does it. Where something is
-still our own approximation, the progress list says so.
-
-## Controls
-
-The controls are the same as the original:
-
-| | |
-|---|---|
-| Left click / drag | select, box-select (Shift adds, double click selects the same type) |
-| Right click | move, or attack what is under the cursor |
-| Ctrl + right click | attack-move |
-| M / T / F / G / X | move, attack, attack-move, guard, stop |
-| WASD / arrows / screen edge / middle-drag | pan |
-| Wheel / Q, E | zoom / rotate |
-| Ctrl+1…9, 1…9 | set / recall a control group |
-| P, + / - | pause, game speed |
-| Esc | cancel, deselect, menu |
-
-In land and space strategy views or on the galaxy map, park the mouse at an edge of the battlefield to scroll; move inward to stop. Edge scrolling is on by default and can be disabled with **Pan the camera at the screen edges** in Game Options. It does not steer a possessed soldier or vehicle.
-
-## Battlefront land battles: present and proposed
-
-Each pair shows the **present** browser edition ([`main` at `d69de4b`](https://github.com/Glenn332/Empire-At-War-Browser-Edition/commit/d69de4b)) on the left and the **proposed** [PR #7](https://github.com/Glenn332/Empire-At-War-Browser-Edition/pull/7) on the right. The gameplay stills use *Forces of Corruption*, Endor, the same units and a 1200 × 780 viewport. The two slow-motion GIFs use matched input and simulation time on the same map. These are separate local runs, not mockups. Click a comparison to enlarge it, or jump to the [player-facing change list](#player-facing-change-list).
-
-**1. Choose where to spawn — menu proposed in [PR #6](https://github.com/Glenn332/Empire-At-War-Browser-Edition/pull/6), shown integrated in #7.** The present screen puts a rectangular map and class statistics in a modal. The [deployment-only PR](https://github.com/Glenn332/Empire-At-War-Browser-Edition/pull/6) keeps the battlefield visible: choose a class on the left, a friendly spawn on the command-post disc, then **Spawn** beneath the selected unit. The original layout is still available under **O → Deployment screen**.
-
-[![Same Stormtrooper on Endor: present map-and-stats dialog versus proposed class portrait above Spawn with a round deployment map](docs/battlefront/deploy.png)](docs/battlefront/deploy.png)
-
-**2. Aim at a trooper.** The proposed right-shoulder view keeps one faint dot just above and left of center. Press and release focus without moving the mouse: the same point on the target stays under the dot. Faction emblems flank the ticket counts; the center meter shows **only the unit you aim at**. Hits briefly mark only the health just lost. Look away and both name and meter clear. The upper-right radar shows local contacts and pins distant command posts by bearing.
-
-[![Stormtrooper aiming at a Rebel: present boxed readouts and lower-right map versus proposed shoulder sight, target health and upper-right radar](docs/battlefront/shoulder.png)](docs/battlefront/shoulder.png)
-
-**3. Look down the blaster.** In the proposed first-person view the carried weapon is visible at the lower right, stays attached through turns, and swings across the bottom when sprinting. The 20%-opacity sight is grey over terrain, blue over allies and red over enemies (orange with colourblind-safe markers). Outside dot-only focus, blaster heat grows outward along the lower arc. Ammo weapons retain their count and reload indicator.
-
-[![Stormtrooper first person: present weapon below the frame versus proposed hands and blaster visible at the lower right](docs/battlefront/first.png)](docs/battlefront/first.png)
-
-**Watch the third-person dodge.** Hold right and tap **V**. On `main`, the trooper dashes sideways with their torso upright. In #7 the trooper tucks, turns all the way over, and lands upright after travelling the same distance in this run. Both halves play at 0.4× speed.
-
-[![Synchronized third-person gameplay: the present trooper stays upright during the rightward dash; the proposed trooper rolls over and recovers](docs/battlefront/infantry-roll.gif)](docs/battlefront/infantry-roll.gif)
-
-**4. Drive onto a command post.** The proposed chase camera frames the T4-B’s hull below the sight. The same lower-left equipment panel used on foot now shows vehicle name, weapon, hull and remaining shields without a speedometer or ammo count. The capture ring around the emblem drains to neutral white, then fills blue for allies or red for enemies.
-
-[![T4-B at a command post: present distant tank and separate status boxes versus proposed centered tank, shared equipment panel and capture ring](docs/battlefront/vehicle.png)](docs/battlefront/vehicle.png)
-
-**5. Follow a bolt.** These are renderer captures of the same stock red blaster shot at the same scale, isolated from the muzzle flash. On `main` the strip disappears when viewed exactly from the rear or front. In the proposal both ends remain visibly circular. Local focused shots leave the animated barrel and converge on the sight; recoil still applies. Ordinary RTS and space projectiles keep their original presentation.
-
-[![Red blaster rendered from four angles on each branch: the present rear and front panels are black; the proposed ones show two round red ends](docs/battlefront/bolt.png)](docs/battlefront/bolt.png)
-
-**Watch a shot leave the rifle.** Both Stormtroopers fire one focused red blaster shot, played at 0.1× speed. Follow it from the barrel into the clearing. Each inset isolates its build’s live bolt at a fixed distance from directly behind: the strip disappears from that angle on `main`, while #7 shows a glowing tail.
-
-[![Matched Stormtrooper shots on Endor: the present shot is thin and its rear inset stays dark; the proposed shot leaves the barrel with a visible round tail](docs/battlefront/blaster-firing.gif)](docs/battlefront/blaster-firing.gif)
-
-| In a Battlefront land battle | Control |
-|---|---|
-| Switch infantry first/third person **or** vehicle chase/driver/gunner | **B / Y / Triangle**. Infantry and vehicle choices are saved separately; **E** exits without changing the on-foot view. |
-| Focus | **Right mouse / left trigger**. Choose hold or toggle in **O → Zoom input**. |
-| Roll | **V / RB** with a movement direction, including diagonals; stationary rolls go forward. Disable **Head bob** to remove the first-person camera bank. |
-| Open the full map / show combat stats | **M** / hold **Tab** |
-
-The views use each unit’s own model, weapon and hull rather than an Endor-specific list. Melee heroes keep third person, deployed artillery keeps its overhead sight, and missiles and model/particle weapons keep their own effects. Modded rigs, textures and loadouts can differ; see [coverage and how to test](docs/battlefront/README.md).
-
-### Player-facing change list
-
-Baseline: **the browser edition’s `main` at `d69de4b`**, not the 2005 Battlefront game or the original EaW executable. The existing view key, dodge, zoom, capture system, radar, full map and scoreboard are not new game modes or controls.
-
-<details>
-<summary><strong>Deployment and defense maps — proposed in #6, integrated in #7</strong></summary>
-
-- **Layout and choice:** the default changes from the framed map-and-stats dialog to class cards, a live battlefield backdrop, a centered unit above **Spawn**, a circular map, objective text and a live unit count. Switch between **Battlefront 2005** and **Browser original** in **O** without restarting the battle; `deployUI=2005` or `original` also selects the layout in a link.
-- **Class selection:** duplicate infantry, hero and vehicle choices are grouped by kind and displayed name. A card still selects a real eligible seat or reserve, preferring an existing hero or cheaper source. If that source vanishes, Spawn rechecks eligibility instead of silently deploying a different class. Cards show the loadout, numerical health, primary DPS, range and speed, with labels, costs or hero requirements where relevant. A locked hero can show starting stats without being spawned.
-- **Portrait:** a team-coloured model sized to its visible silhouette replaces the static icon in the 2005 layout. Infantry and vehicles stay framed across screen sizes. The preview uses available idle clips, breathing and small gestures; reduced-motion users get a still pose. Missing model art or an unavailable preview renderer falls back to the unit icon where available.
-- **Spawn map and spectating:** a north-up floor plan drawn from the actual terrain shows obstacles, contours, numbered command posts, squad spawns and selection rings. It fits live markers and their labels. Click a friendly unit to follow it without replacing the selected class; spectating does not make an ineligible squad a spawn point. Select a friendly post, or cycle positions with the post button or left/right arrows. The UI distinguishes watching, locked, waiting and ready states.
-- **Input and sound:** choose classes/posts with the mouse or controller; focused buttons support keyboard activation. Spawn ignores repeated submissions. Class selection, post selection and spawning have distinct mechanical click sounds that respect the existing volume settings.
-- **Defense markers:** deployment, radar and battlefield maps distinguish actual guns and garrison firing ports from scenery. A filled gun is ready; an outlined gun is inactive or vacant. Ownership changes its colour. A firing gun pulses, and mobile unit arrows briefly flash white. Hover a defense on the deployment disc for owner, type and state. These markers report existing weapons; they do not place new turrets.
-
-</details>
-
-<details>
-<summary><strong>Infantry, vehicles, aiming and blasters — #7</strong></summary>
-
-- **View controls:** **B / Y / Triangle** already switched perspective. It now saves **Infantry view** (third by default) and **Vehicle view** (chase by default) independently. Entering, switching seats, leaving with **E**, and reloading no longer overwrite the other preference. Controls help and prompts name the applicable view. Fixed garrisons keep their external view; melee heroes keep third person; deployed artillery keeps its overhead sight.
-- **Vehicle camera:** chase distance and height fit the oriented hull rather than a fixed offset from its pivot. Walkers, tanks, bikes and banking aircraft stay below the aiming line. Driver view follows the chassis near its front roof; gunner view uses an available barrel/muzzle with a chassis fallback. No cockpit artwork was added. The deployment spectator uses the relevant infantry or vehicle perspective.
-- **Infantry aim:** hip view centers the trooper with the sight above the helmet. Focus shifts to the right shoulder; the dot moves from 50% to 47% of screen width and stays at 34% height. Changing zoom without new aim input preserves the world point, not just the HUD position; intervening cover still blocks the shot. The chase camera retracts at terrain and eases back out. Scout magnification keeps its scope in first person rather than forcing it over the third-person shoulder view.
-- **Zoom input:** right mouse / left trigger previously required holding. Hold remains the default; **O → Zoom input** adds a saved toggle option.
-- **First person:** a filtered copy of the unit’s own hands, sleeves and weapon replaces rendering the camera inside the avatar. The ready weapon sits lower right, stays attached through turns and steep looks, sways with walking, recoils, and moves across the bottom when sprinting forward rather than while aiming, firing or crouched. A recognizable rigid weapon can supply a muzzle fallback; an unsupported rig does not put its whole body in front of the camera.
-- **Dodge → roll:** the old dodge already supported directional input. The new roll latches the keyboard or stick direction when pressed, including diagonals; no input now means **forward**, not right. Its duration changes from **0.32 to 0.50 seconds**, with comparable travel and the same **1.4-second cooldown**. Third person shows a tucked full turn; first person dips, banks and tucks the weapon without inverting the horizon. **Head bob** off removes the bank. Aircraft retain their separate barrel roll.
-- **Muzzle and aim:** first-person and focused shoulder shots and their muzzle effects start at the visible firing barrel on the first drawn frame. Once launched, moving the camera cannot drag them. Focused straight blaster shots converge on the actual aim point; local focused heat blasters no longer add invisible hip-fire spread over the dot. Recoil remains. Rockets and arcing projectiles are not straightened.
-- **Bolt shape and scale:** pill blasters and particle-atlas lasers (including ion blasters) gain a luminous core with round front and rear ends on WebGL and WebGPU. The colour still comes from the authored atlas or weapon tint. Focused local bolts are drawn **1.7× longer and 1.8× wider**; near-camera first-person shots scale to the carried weapon. This includes other units’ blaster shapes in the same shooter battle, not their aim. Missiles using the particle atlas keep their effect; ordinary RTS and space bolts keep their prior rendering. The new geometry is not a larger hitbox.
-
-</details>
-
-<details>
-<summary><strong>Combat HUD, radar and strategy controls — #7</strong></summary>
-
-- **Sight:** the default ring is now three pairs of tapered blades with a center pip at **20% opacity**. Dot and cross remain selectable. The sight and target readout share one classification: grey over empty ground, blue for allies, red for enemies (orange with colourblind-safe markers). Focus shows only the dot. Heat fills nine lower-arc segments from the center outward, empties while cooling and signals venting when overheated.
-- **Tickets and targets:** ticket counts sit on either side of the center, with faction-coloured crests instead of faction names. Base EaW, FoC and available mod art are supported, with a glyph fallback. There is no score-split bar. The center slot shows only the aimed unit’s name and remaining health. Each friendly or enemy hit highlights just its own lost portion, fading independently. Healing, changing targets or looking away clears stale marks.
-- **Equipment:** one borderless, gradient-backed lower-left panel replaces separate weapon and personal status boxes. Infantry see health, weapon silhouette, grenade count where equipped, and either heat status, ammo/reload progress or melee readiness. Credit games still show credits. Vehicles use the same panel: name/seat, cannon or missile icon, hull fill and a shrinking cyan shield outline that disappears at zero. Lock-on/incoming warnings remain; separate vehicle ammo/readiness pips, speed, altitude and boost text are removed.
-- **Field information:** the compass moves to the bottom, the kill feed to the upper left, the controls hint below the radar, and interaction prompts nearer the bottom. Nearby ally indicators remain, but ordinary friendly names need an aimed target and squad badges appear when aimed at or zoomed. Personal kill/death counters leave the live panel; **Tab** still shows kills, deaths, headshots, vehicle kills and score. The layout adjusts on narrow screens.
-- **Capture:** a faction emblem inside a ring replaces the boxed progress bar. The ring drains the current side toward neutral white, then fills toward friendly blue or enemy red (orange with safe markers). The label identifies the action and post; the meter reverses during defense and briefly shows completed friendly control before clearing. Ownership, capture speed and scoring rules are unchanged.
-- **Radar and map:** the radar moves from lower right to upper right; its drawing surface increases from 170 to 200 pixels and its local world radius narrows from 900 to 580 units. The heading-up display adds a facing cone that tracks field of view, larger directional people/player arrows and readable post labels. Only distant command posts pin to the rim: close bearings are spaced apart with pointers to the true direction. Distant troops, defenses and build pads do not pin. **M** remains the full battlefield map, with clearer unit arrows and the integrated defense markers.
-- **Strategy edge scrolling:** previously opt-in on space/galaxy views, now on by default there **and** supported in land RTS and the shooter’s command view. Move the mouse to a battlefield edge to pan and inward to stop. Matching keyboard input does not double speed; opposite inputs cancel. Dragging, menus, loss of focus or direct unit control do not pan the free camera. The existing Game Options opt-out is preserved; **Restore defaults** turns edge scrolling back on.
-
-</details>
-
-## For developers
-
-It is plain JavaScript modules on three.js, with no build step needed to run it.
-
-```bash
-npm install
-npm start
+```sh
+npm ci
+npm run test:universal
+npm run test:workshop
+npm run test:submods
+npm run test:deploy
+npm run test:battlefront
+npm run build:prod
 ```
 
-This starts a development server on http://localhost:8377/. It serves the game data straight out of an install next
-to this folder (`../Star Wars Empire at War`) or from `SWR_GAME=<path>`. Add `--mod <path>` to lay a mod over it.
+`build:prod` checks the module graph and writes a static site to `dist/`; it does not package retail assets or replace the Universal server. For mounted checks, install Chrome and run `npm install --no-save --package-lock=false playwright-core`, then `npm run test:title-menu` with your local Gold Pack available.
 
-Some useful addresses:
+[Player guide and controls](docs/player-guide.md) · [Battlefront test coverage](docs/battlefront/README.md) · [Fork compatibility standard](docs/fork-mod-compatibility.md) · [Report a bug](https://github.com/0xHayd3n/Empire-War-Remastered/issues) · [Report a security concern privately](SECURITY.md)
 
-- `play.html?autostart&faction=Empire&enemy=Rebel&map=KUAT` skips the setup screen.
-- `play.html?mode=land` starts a land battle.
-- [Start Battlefront on Endor locally](http://localhost:8377/play.html?autostart&mode=land&shooter&map=ENDOR&faction=Empire&enemy=Rebel&deployUI=2005). Use `deployUI=original` to compare deployment layouts in the same build.
-- `play.html?benchmark=100` starts the space benchmark, and `play.html?mode=land&benchmark=30` the land one.
-- `viewer.html?model=EV_STARDESTROYER.ALO` opens the model viewer.
+## Credits and license
 
-Other commands:
+Original browser engine: **RIRA and the Browser Edition contributors** (Copyright © 2026 RIRA). Remastered fork: **0xHayd3n**. The original game and expansion are by Petroglyph and LucasArts. The Workshop teams retain credit for their own overhauls; no subscription, mod payload or generated Universal library is redistributed here.
 
-| Command | What it does |
-|---|---|
-| `npm run wasm` | rebuild the WebAssembly modules from `wasm/` |
-| `npm run build:prod` | build the site into `dist/` |
-| `npm run workshop` | start the local browser launcher and discover installed Steam collections |
-| `npm run test:workshop` / `npm run test:submods` | check Workshop behavior and loose mod precedence |
-| `npm run test:deploy` / `npm run test:battlefront` | check spawn selection, HUD, controls and cameras |
+The engine code is [GPL-3.0-or-later](LICENSE), without warranty. Bundled dependencies retain their own notices: [three.js](public/vendor/three/LICENSE), [Fengari](public/vendor/fengari/LICENSE), [FFmpeg core and corresponding source](public/vendor/ffmpeg/SOURCE.md), [Oswald](public/fonts/oswald/OFL.txt) and [Aurebesh AF](public/fonts/aurebesh-af/NOTICE.txt).
 
-`npm run test:deploy` checks deployment logic without retail data. With `SWR_GAME` set, run
-`node tools/test-deploy-disc-catalog.mjs` (add `--base` for the original game) to check the stock skirmish maps.
-With the local server running, Chrome and optional `playwright-core` installed, `node tools/test-deploy-framing-browser.cjs`
-checks the rendered vehicle silhouettes; run again with `--base` to check the other edition. No retail files are bundled.
-
-The code lives in a few places:
-
-- `public/` is the whole site.
-- `public/js/` holds the file formats, rendering and audio.
-- `public/js/game/` holds the simulation, AI, HUD, land battles and galactic conquest.
-- `tools/` has Node helpers and tests.
-
-## License
-
-Copyright (C) 2026 RIRA
-
-The engine's code is free software: you can redistribute it and/or modify it under the terms of the GNU General
-Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option)
-any later version. It is distributed in the hope that it will be useful, but without any warranty. See
-[LICENSE](LICENSE) for the full text.
-
-Bundled libraries keep their own licenses: three.js and Fengari are MIT (`public/vendor/three/LICENSE`,
-`public/vendor/fengari/LICENSE`), and the FFmpeg core is GPL-2.0-or-later (`public/vendor/ffmpeg/COPYING.GPLv2`,
-source in `public/vendor/ffmpeg/SOURCE.md`).
-
-## Legal
-
-This is a non-commercial fan project. It is not affiliated with or endorsed by Lucasfilm, Disney, Petroglyph or
-Electronic Arts. *Star Wars*, *Star Wars: Empire at War* and its game data are © and ™ Lucasfilm Ltd. / Petroglyph.
-The license above covers only this project's own code. It grants no rights to the game, its data, or the Star Wars
-names and trademarks. The engine contains none of the original game's code or data; you need your own copy of the
-game to play.
+This is a non-commercial fan project, not an official remaster or an endorsement by Lucasfilm, Disney, Petroglyph or Electronic Arts. The code license grants no rights to *Star Wars*, the retail game data, Workshop content, or the game imagery shown in the comparisons.

@@ -1,7 +1,7 @@
 {
   "name": "empire-war-remastered",
   "version": "1.0.0",
-  "description": "Empire War Remastered, a personal fork of the Empire at War browser game with a Workshop launcher and Battlefront-style deployment and HUD.",
+  "description": "A fork of Empire at War: Browser Edition with a Universal campaign library, ordered Workshop playsets and Battlefront-style ground combat. Bring your own Gold Pack.",
   "scripts": {
     "start": "node server.mjs",
     "workshop": "node server.mjs --workshop --open",

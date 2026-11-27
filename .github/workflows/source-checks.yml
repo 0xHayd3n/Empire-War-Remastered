@@ -1,0 +1,31 @@
+name: Source checks
+
+on:
+  push:
+    branches: [remastered]
+  pull_request:
+    branches: [remastered]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Test without retail data
+        run: |
+          npm run test:universal
+          npm run test:workshop
+          npm run test:submods
+          npm run test:deploy
+          npm run test:battlefront
+      - run: npm run build:prod

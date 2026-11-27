@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { tacticalSpeed, saveTacticalSpeed, FAST_FORWARD } from '../public/js/game/galacticspeed.js';
 import { applyPreferences, preferenceChanges, preferenceSnapshot } from '../public/js/playerprefs.js';
 function store(seed) {
   const data = new Map(Object.entries(seed));
@@ -18,4 +19,12 @@ assert.deepEqual(JSON.parse(to.getItem('swr-gfx')),{shadows:false,bloom:false,ba
 assert.deepEqual(JSON.parse(to.getItem('swr-instant-setup')),{players:['mod'],budget:3000});
 assert.deepEqual(JSON.parse(to.getItem('swr-keys')),{MOVE:['KeyV']});
 assert.equal(to.getItem('swr-subtitles'),'0'); assert.equal(to.getItem('swr.mpname'),'profile B');
+const local = store({});
+Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: local });
+assert.equal(tacticalSpeed(), 1);
+saveTacticalSpeed(1.25);
+assert.equal(tacticalSpeed(), 1.25);
+saveTacticalSpeed(9);
+assert.equal(tacticalSpeed(), 1.25);
+assert.equal(FAST_FORWARD, 2);
 console.log('Portable preferences: field-level merge, false, reset binding, untouched settings, local-only records passed');

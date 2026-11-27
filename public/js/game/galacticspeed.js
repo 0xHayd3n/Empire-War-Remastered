@@ -14,14 +14,19 @@ export function saveStrategicIndex(index) {
     localStorage.setItem(KEY, String(index));
   } catch {}
 }
-// Battles always start at normal speed (ours): the options slider for it is gone and fast forward is the one way to
-// change it. A speed saved by older builds is cleared.
+// Keep the HUD fast-forward shortcut independent of Universal's saved solo battle speed.
 export const FAST_FORWARD = 2;
+const TACTICAL_KEY = 'swr-tactical-game-speed';
 export function tacticalSpeed() {
   try {
-    localStorage.removeItem('swr-tactical-game-speed');
+    const speed = Number.parseFloat(localStorage.getItem(TACTICAL_KEY));
+    if (speed >= 0.5 && speed <= 2) return speed;
   } catch {}
   return 1;
+}
+export function saveTacticalSpeed(speed) {
+  if (!Number.isFinite(speed) || speed < 0.5 || speed > 2) return;
+  try { localStorage.setItem(TACTICAL_KEY, String(speed)); } catch {}
 }
 export const strategicMultiplier =index => STRATEGIC_FRAMES[index] / 30;
 export const strategicIndexOf = speed => {

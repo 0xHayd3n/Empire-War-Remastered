@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 
+import { viewOptions as prefs } from './viewpreferences.js';
+
 const MAX = 12000;
 const STEP = 0.06;
 
@@ -35,7 +37,10 @@ export class ArcView {
   }
 
   update(arcs, zOf = null) {
-    if (!arcs.length && !this.fillMesh.visible) return;
+    if (!arcs.length || prefs.fireArcs === 'off') {
+      this.fillMesh.visible = this.edgeMesh.visible = false;
+      return;
+    }
     let f = 0,
       e = 0;
     const F = this.fill,
@@ -87,6 +92,7 @@ export class ArcView {
     eg.setDrawRange(0, e / 3);
     fg.attributes.position.needsUpdate = true;
     eg.attributes.position.needsUpdate = true;
-    this.fillMesh.visible = this.edgeMesh.visible = f > 0;
+    this.edgeMesh.visible = f > 0;
+    this.fillMesh.visible = this.edgeMesh.visible && prefs.fireArcs === 'filled';
   }
 }

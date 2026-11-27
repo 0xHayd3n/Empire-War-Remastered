@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { db } from '../gamedata.js';
 import { loadTexture } from '../dds.js';
+import { viewOptions } from './viewpreferences.js';
 import { visibleTransit } from './galacticfog.js';
 import { routeAxes } from './galacticroutes.js';
 
@@ -60,7 +61,10 @@ export class FleetLines {
   update(galaxy, viewer, colorOf) {
     const shown = this.shown || (this.shown = []);
     shown.length = 0;
-    for (const f of galaxy.fleets) if (f.leg && f.units.length && visibleTransit(galaxy, f, viewer)) shown.push(f);
+    const mode = viewOptions.fleetTracks;
+    if (mode !== 'off')
+      for (const f of galaxy.fleets)
+        if (f.leg && f.units.length && (mode !== 'mine' || f.owner?.toUpperCase() === viewer?.toUpperCase()) && visibleTransit(galaxy, f, viewer)) shown.push(f);
     const n = shown.length;
     if (n > this.capacity || !this.mesh) this.grow(n);
     let q = 0;

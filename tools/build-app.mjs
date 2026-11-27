@@ -21,6 +21,7 @@ writeFileSync(
   path.join(dist, 'js', 'deploy.js'),
   `export const LOBBY = ${JSON.stringify(LOBBY)};\nexport const FFMPEG = new URL('../vendor/ffmpeg/ffmpeg-core.js', import.meta.url).href;\n`
 );
+execFileSync(process.execPath, [path.join(web, 'tools', 'test-rapier-runtime.mjs'), dist], { stdio: 'inherit' });
 console.log(`staged dist-app/ (${build})`);
 
 if (!process.argv.includes('--stage')) run('npx', ['tauri', 'build'], { stdio: 'inherit', encoding: undefined });

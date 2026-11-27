@@ -1,5 +1,6 @@
 import * as THREE from '../../vendor/three/build/three.module.js';
 import { db } from '../gamedata.js';
+import { rosterColor } from './commandgroups.js';
 
 const cache = new Map();
 
@@ -26,6 +27,14 @@ export function uncolorized(type, faction) {
 }
 
 export function unitTeamColor(colorize, type, faction, playerColor) {
-  if (colorize && !db.faction(faction || '')?.bool('Is_Neutral')) return playerColor || null;
+  if (!db.faction(faction || '')?.bool('Is_Neutral')) {
+    if (colorize) return playerColor || null;
+    // Campaign uses fixed unit markings first. For a reviewed Universal side,
+    // replace only the old faction-wide fallback, not a unit's own paint.
+    if (playerColor && db.universalProfile && rosterColor(db.universalProfile, faction)) {
+      const fixed = vec(type?.str('No_Colorization_Color'));
+      return fixed ? shared(fixed) : playerColor;
+    }
+  }
   return uncolorized(type, faction) || playerColor || null;
 }

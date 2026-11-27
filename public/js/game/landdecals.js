@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { db } from '../gamedata.js';
 import { loadTexture } from '../dds.js';
 import { lighting } from '../model.js';
+import { MovementDust } from '../groundrain.js';
 import { heightAt, CELL } from './terrain.js';
 
 const MAX = 2400,
@@ -108,22 +109,23 @@ export class Decals {
     this.next = (this.next + 1) % MAX;
     this.mesh.count = Math.max(this.mesh.count, i + 1);
     const d = Math.max(4, Math.min(w, h) * 0.35);
-    const gx = (heightAt(T, x + d, y) - heightAt(T, x - d, y)) / (2 * d),
-      gy = (heightAt(T, x, y + d) - heightAt(T, x, y - d)) / (2 * d);
+    const sample = this.heightAt || ((px,py)=>heightAt(T,px,py));
+    const gx = (sample(x + d, y) - sample(x - d, y)) / (2 * d),
+      gy = (sample(x, y + d) - sample(x, y - d)) / (2 * d);
     this.up.set(-gx, -gy, 1).normalize();
     this.q.setFromUnitVectors(this.Z, this.up).multiply(this.qz.setFromAxisAngle(this.Z, angle));
-    this.mesh.setMatrixAt(i, this.m.compose(this.p.set(x, y, heightAt(T, x, y) + 0.35), this.q, this.s.set(w, h, 1)));
+    this.mesh.setMatrixAt(i, this.m.compose(this.p.set(x, y, sample(x,y) + 0.35), this.q, this.s.set(w, h, 1)));
     this.uvRect.setXYZW(i, uv[0], uv[1], uv[2], uv[3]);
     this.look.setXYZ(i, strength, bump ? 1 : 0, tex);
     this.marks[i] = { strength, ...fade };
     this.mesh.instanceMatrix.needsUpdate = this.uvRect.needsUpdate = this.look.needsUpdate = true;
   }
 
-  stamp(name, x, y, heading = 0) {
+  stamp(name, x, y, heading = 0, maxSpan = Infinity) {
     const d = this.world.tables && this.world.tables.decals.get(String(name || '').toUpperCase());
     if (!d || d.additive) return;
     const [c, r] = d.slots[Math.floor(Math.random() * d.slots.length)],
-      k = 1 + (Math.random() * 2 - 1) * d.vary,
+      k = Math.min(1 + (Math.random() * 2 - 1) * d.vary, maxSpan / Math.max(1,d.w,d.h)),
       e = d.span / SHEET;
     this.put(
       x,
@@ -136,11 +138,11 @@ export class Decals {
     );
   }
 
-  surface(group, x, y, heading = 0) {
+  surface(group, x, y, heading = 0, maxSpan = Infinity) {
     const g = this.world.tables && this.world.tables.surface.get(String(group || '').toUpperCase());
     if (!g) return null;
     const e = g.get(groundKind(this.world, x, y)) || g.get('default');
-    if (e && e.decal) this.stamp(e.decal, x, y, heading);
+    if (e && e.decal) this.stamp(e.decal, x, y, heading, maxSpan);
     return e || null;
   }
 
@@ -274,7 +276,10 @@ export class Decals {
       const e = this.surface(ev.surface, x, y, u.heading);
       if (!e) continue;
       if (e.sound && audio && (!u.foot || (this.stepAt = this.stepAt + 1) % 5 === 0)) audio.play(e.sound, x, y);
-      if (e.particle && fx && !u.foot) fx(e.particle, x, y);
+      if (e.particle && fx && !u.foot) {
+        const show = !this.groundWet || (this.dust ||= new MovementDust()).emit(u, e.particle, this.groundWet);
+        fx(e.particle, x, y, show); // A modded particle type can carry a separate authored scorch mark.
+      }
     }
   }
 }
@@ -282,5 +287,7 @@ export class Decals {
 export function scorch(decals, particleType, x, y) {
   const t = db.type(particleType),
     mark = t && t.str('Explosion_Scorch_Mark');
-  if (mark) decals.surface(mark, x, y);
+  // An FX-only script may provide a painted mark but no damage footprint.
+  // Keep its material and aspect ratio, without drawing a building-sized hole.
+  if (mark) decals.surface(mark, x, y, 0, 32);
 }

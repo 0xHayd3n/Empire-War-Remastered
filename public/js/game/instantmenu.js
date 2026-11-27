@@ -1,4 +1,5 @@
 import { db, factionColor } from '../gamedata.js';
+import { alternateShade } from './commandgroups.js';
 import { iconUrl } from '../icons.js';
 import { loadMap, mapTitle, mapHeader, loadMapPreview } from '../ted.js';
 import { PALETTE } from './slotrows.js';
@@ -15,13 +16,23 @@ import {
   randomArmy,
   entryPoints
 } from './instantbattle.js';
-import { SPECTATOR_TEAM } from './lobby.js';
+import { SPECTATOR_TEAM } from './skirmishsetup.js';
+import { operationSetup, field, action } from './operationsetup.js';
+import { sidebarTabs } from './universalsidebartabs.js';
+import { battlefieldAtlas } from './operationatlas.js';
+import { groundForces } from './planetbattle.js';
+import { soloLibrary } from './solooperationlibrary.js';
+import { instantForces, packArmy, unpackArmy } from './instantforces.js';
+import { guestRefs } from './tacticalroster.js';
 import { paintCrest } from './spectator.js';
+import { activeLivery } from './liveries.js';
+import { readyPaint, launchPaint } from './liverytransport.js';
+import { showPainter } from './painter-entry.js';
 import { presetKey, readPresets, readCards, planCard, checkFleet } from './fleetpresets.js';
 import { armoryStyle } from './armorystyle.js';
 import { stagingInvite } from './staginginvite.js';
 
-const KEY = 'swr-instant-setup';
+import {INSTANT_DRAFT, readBattleDraft, saveBattleDraft} from './battledrafts.js';
 const AI_KINDS = [
   ['easy', 'Easy AI'],
   ['medium', 'Medium AI'],
@@ -43,26 +54,21 @@ const isAI = k => AI_KINDS.some(a => a[0] === k);
 const watching = p => p.team === SPECTATOR_TEAM;
 const SPECTATOR_COLOR = '#c3ab02';
 
-const load = () => {
-  try {
-    return JSON.parse(localStorage.getItem(KEY) || 'null');
-  } catch {
-    return null;
-  }
-};
-const store = v => {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(v));
-  } catch {}
-};
 
-export async function openInstantBattle({ maps, factions, audio, cancel, start, mp = null }) {
+export async function openInstantBattle({ maps, landMaps = [], factions, audio, cancel, start, profiles, mp = null }) {
   if (!maps.length || !factions.length) return false;
   const net = mp?.session || null,
     host = !mp || mp.host,
     myId = () => (net ? net.id : null);
-  const fLabel = f => db.t(db.faction(f)?.str('Text_ID')) || f;
-  const saved = load() || {};
+  let editing = false, atlas, battle;
+  const backToMap = () => editing ? setEditor(false) : close(false);
+  const board = !mp && profiles && operationSetup({ title: 'Instant Battle', library: 'Planets', back: backToMap, launch, profiles });
+  const sources = board && instantForces((await soloLibrary()).profiles,board.operation.current,factions);
+  const nativeLabel = f => db.t(db.faction(f)?.str('Text_ID')) || f;
+  const fLabel = (f, domain='space') => sources?.get?.(domain,f)?.label || nativeLabel(f);
+  const options = d => sources ? sources.options(d) : factions.map(f=>[f,nativeLabel(f)]);
+  const transferred=board?.operation?.selection?.draft;
+  const saved = transferred?.kind==='instant' ? transferred : readBattleDraft(INSTANT_DRAFT);
   const key = mp ? null : await presetKey();
   let libraryWarning = '';
   const warn = message => {
@@ -86,7 +92,7 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
     color: null,
     ...extra
   });
-  const rosterOf = p => instantRoster(p.faction);
+  const rosterOf = p => sources && p.faction.startsWith('UXF_') ? sources.roster(p.faction) : instantRoster(p.faction);
   const mine = p => (net ? p.kind === 'human' && p.peer === myId() : p.kind === 'you');
   const canEdit = p => (!net ? true : host ? mine(p) || p.kind !== 'human' : mine(p));
   const prune = p => {
@@ -126,9 +132,10 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
       players = saved.players.map((p, i) => ({
         kind: i === 0 ? 'you' : isAI(p.kind) ? p.kind : 'medium',
         team: i === 0 && p.team === SPECTATOR_TEAM ? SPECTATOR_TEAM : Math.max(0, Math.min(INSTANT_MAX_TEAMS - 1, p.team | 0)),
-        faction: factions.includes(p.faction) ? p.faction : factions[0],
+        faction: sources && p.source ? sources.resolve('space',p.source) || 'Unavailable' : factions.includes(p.faction) ? p.faction : factions[0],
+        ...(sources && p.source ? {source:p.source} : {}),
         budget: clampBudget(p.budget ?? st.budget),
-        army: Array.isArray(p.army) ? p.army.filter(n => typeof n === 'string') : [],
+        army: transferred?.kind==='instant' && p.counts ? unpackArmy(p.counts) : Array.isArray(p.army) ? p.army.filter(n => typeof n === 'string') : [],
         color: typeof p.color === 'string' ? p.color : null
       }));
     if (players.length < 2) {
@@ -137,12 +144,19 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
       for (const p of players) p.army = randomArmy(instantRoster(p.faction), p.budget);
     }
   }
+  // Resolve only the selected immutable kits. Do not install definitions while editing.
+  if (sources) await Promise.all(players.filter(p=>p.source).map(async p=>{
+    try {await sources.load('space',p.faction); if (p.army.some(n=>!rosterOf(p).some(r=>r.name===n))) {p.army=[];p.notice='This field uses different products. Outfit this fleet again.';}}
+    catch(e){p.problem=e.message;}
+  }));
+  const mixed=()=>!!sources && players.some(p=>sources.guest('space',p.faction));
   const setTeam = (p, team) => {
     p.team = team;
-    if (watching(p)) return;
+    if (watching(p) || mixed()) return;
     const mate = players.find(q => q !== p && q.team === p.team);
     if (mate && mate.faction !== p.faction) {
       p.faction = mate.faction;
+      p.source = mate.source;
       prune(p);
     }
   };
@@ -150,15 +164,16 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
     for (const p of players)
       if (!watching(from) && p.team === from.team && p.faction !== faction) {
         p.faction = faction;
+        p.source = from.source;
         prune(p);
       }
     from.faction = faction;
     prune(from);
   };
-  if (host)
+  if (host && !mixed())
     for (const p of players) {
       const mate = players.find(q => q.team === p.team);
-      if (mate !== p && !watching(p)) p.faction = mate.faction;
+      if (mate !== p && !watching(p) && !p.problem && !mate.problem) {p.faction = mate.faction; p.source = mate.source;}
       prune(p);
     }
   view.sel = Math.max(0, players.findIndex(mine));
@@ -176,22 +191,28 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
       if (watching(p)) return SPECTATOR_COLOR;
       if (p.color) return p.color;
       const own = factionColor(p.faction);
-      const c = (own && free(own) ? own : PALETTE.find(free) || PALETTE.find(x => !used.includes(x)) || PALETTE[0]).toLowerCase();
+      // Similar shades can be intentional for different Universal rosters.
+      // Keep each exact base unless another participant already has it.
+      const available = db.universalProfile ? c => !used.includes(c) : free;
+      const c = (
+        (own && available(own) && own) || (db.universalProfile && alternateShade(own, available)) ||
+        PALETTE.find(free) || PALETTE.find(x => !used.includes(x)) || PALETTE[0]
+      ).toLowerCase();
       used.push(c);
       return c;
     });
   };
   const colorOf = (p, i) => colors()[i];
-  const remember = () => {
-    if (mp) return;
-    store({
+  const draft = (travel=false) => ({
       mapFile: st.mapFile,
       fog: st.fog,
       budget: st.budget,
       turn: st.turn,
-      players: players.map(({ kind, team, faction, budget, army, color }) => ({ kind, team, faction, budget, army, color }))
+      groundSources: groundPicks.map(p=>p.source||(travel?sources?.get('land',p.faction)?.ref:null)),
+      groundCompanies: groundPicks.map(p=>p.company || null),
+      players: players.map(({ kind, team, faction, budget, army, color, source }) => ({ kind, team, faction, budget, color, source:source||(travel?sources?.get('space',faction)?.ref:undefined), ...(travel?{counts:packArmy(army)}:{army}) }))
     });
-  };
+  const remember = () => { if (!mp) saveBattleDraft(INSTANT_DRAFT,draft()); };
 
   const humans = () => players.filter(p => p.kind === 'human');
   const listing = () => {
@@ -228,7 +249,41 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
     draw();
   };
 
-  const root = el('div');
+  const groundPicks = foes().map((f,i)=>{const source=sources&&saved.groundSources?.[i];return source?{faction:sources.resolve('land',source)||'Unavailable',source,company:typeof saved.groundCompanies?.[i]==='string'?saved.groundCompanies[i]:''}:{faction:f};});
+  if(sources)await Promise.all(groundPicks.filter(p=>p.source).map(async p=>{try{await sources.load('land',p.faction)}catch(e){p.problem=e.message;}}));
+  const groundArmy = p => sources?.guest?.('land',p.faction) ? sources.ground(p.faction,p.company) : groundForces(p.faction);
+  const blocked = list => list.find(p=>p.pending || p.problem);
+  async function choose(p,domain,value) {
+    const c=sources.get(domain,value); if(!c)return;
+    const token={};Object.assign(p,{pending:token,source:c.ref,faction:value,problem:'',notice:''});
+    // Native-only editing keeps the existing prune-on-change behavior.
+    const startingKit = domain === 'space' && !c.home;
+    if(startingKit)p.army=[];
+    if(domain==='land')p.company='';
+    draw();
+    try {await sources.load(domain,value); if(p.pending!==token||ended)return;
+      if(domain==='space'){
+        if(!mixed())unify(p,value);
+        if(startingKit){
+          let left=p.budget;
+          p.army=[];
+          for(const r of [...rosterOf(p)].sort((a,b)=>a.cost-b.cost)){
+            if(r.cost>left || p.army.length===2)break;
+            p.army.push(r.name);left-=r.cost;
+          }
+        } else {
+          prune(p);
+          // Switching suppliers can invalidate every old product. Start the
+          // newly chosen native fleet within budget, just like a fresh seat.
+          if (!p.army.length) p.army = randomArmy(rosterOf(p), p.budget);
+        }
+      }
+    }catch(e){if(p.pending===token)p.problem=e.message;}
+    finally{if(p.pending===token&&!ended){p.pending=null;changed(p);}}
+  }
+  if(board){board.operation.travel=()=>({...draft(true),kind:'instant'});
+    board.operation.beforeTravel=()=>![...players,...groundPicks].some(p=>p.pending);}
+  const root = board ? board.root : el('div');
   root.id = 'instantBattle';
   const panel = el('div', 'ib-panel');
   root.appendChild(panel);
@@ -264,7 +319,7 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
   const head = el('div', 'ib-head');
   const titleBox = el('div', 'ib-title');
   titleBox.append(
-    el('h1', '', net ? 'Instant Battle · Multiplayer' : 'Instant Battle'),
+    el('h1', '', net ? 'Instant Battle · Multiplayer' : board ? 'Fleet outfitting' : 'Instant Battle'),
     el(
       'p',
       '',
@@ -307,7 +362,8 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
 
   const foot = el('div', 'ib-foot');
   const error = el('div', 'ib-error');
-  const back = button('Back', () => close(false), 'ib-wide');
+  error.setAttribute('role', 'status');
+  const back = button(board ? 'Battlefield' : 'Back', backToMap, 'ib-wide');
   const go = button(host ? 'Start Battle' : 'Ready', () => (host ? launch() : toggleReady()), 'ib-wide ib-go');
   foot.append(back, error, go);
   panel.append(head, body, foot);
@@ -331,7 +387,13 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
     for (const p of players) if (canEdit(p) && p.kind !== 'open' && !watching(p)) p.army = randomArmy(rosterOf(p), p.budget);
     changed(null, false);
   });
-  fleetTools.append(addBtn, rollAll);
+  const painter = button('Army Painter', async () => {
+    const me = players.find(mine);
+    if (!me) return;
+    if (net && !host && me.ready) toggleReady();
+    await showPainter(root, me.faction);
+  });
+  fleetTools.append(addBtn, rollAll, painter);
   fleetsHead.append(fleetTools);
   const fleetList = el('div', 'ib-list ib-fleetlist');
   const teamNote = el('div', 'ib-note');
@@ -445,7 +507,40 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
   });
   dynOpts.append(...sizeBtns);
   const mapList = el('div', 'ib-list ib-maplist');
+  let editFleets, summary, ground, battlefield, tabs;
+  const companyFields=[];
   mapCol.append(mapHead, preview, mapName, mapOpts, dynOpts, seeds.el, mapList);
+  if (board) {
+    panel.classList.add('ib-editor');
+    panel.hidden = true;
+    tabs=sidebarTabs('instant','Instant Battle setup',['Battlefield','Forces'],i=>tabs.select(i));
+    tabs.panels[0].classList.add('op-battlefields');
+    tabs.panels[0].append(board.list.parentElement);
+    tabs.panels[1].append(board.detail);
+    board.body.append(tabs.bar,...tabs.panels);
+    battlefield = el('strong', 'op-instant-field');
+    board.foot.prepend(battlefield);
+    ground = el('div', 'op-fields');
+    for (const [i,p] of groundPicks.entries()) {
+      ground.append(field(i ? 'Opponent' : 'Your faction', options('land'), p.faction, v=>choose(p,'land',v)));
+      const label=i ? 'Opponent company' : 'Your company';
+      const wrap=field(label, [], '', v=>{p.company=v;changed();});
+      wrap.querySelector('select').setAttribute('aria-label',label);
+      companyFields.push(wrap);ground.append(wrap);
+    }
+    summary = el('p', 'op-description');
+    editFleets = action('Edit fleets', () => setEditor(true));
+    board.detail.append(ground, summary, editFleets);
+  }
+  function setEditor(open) {
+    if (!board) return;
+    editing = open;
+    panel.hidden = !open;
+    board.panel.hidden = open;
+    if (open) draw();
+    if (!open) atlas?.refresh();
+    (open ? back : editFleets).focus({ preventScroll: true });
+  }
   const drawOpts = () => {
     fogBtn.textContent = st.fog ? 'Fog of War: On' : 'Fog of War: Off';
     fogBtn.classList.toggle('on', st.fog);
@@ -513,10 +608,11 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
       });
     else who = el('div', 'ib-who other', p.kind === 'open' ? 'Open' : AI_KINDS.find(k => k[0] === p.kind)[1]);
     const fac = select(
-      factions.map(f => [f, fLabel(f)]),
+      options('space'),
       p.faction,
       v => {
         const q = P();
+        if(sources){choose(q,'space',v);return;}
         unify(q, v);
         changed(
           q,
@@ -538,6 +634,7 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
       },
       'ib-team'
     );
+    fac.setAttribute('aria-label',`Fleet ${i+1} faction`);
     fac.disabled = team.disabled = !edit;
     const color = el('input', 'ib-color');
     color.type = 'color';
@@ -664,7 +761,7 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
     teamNote.textContent =
       (used.length < 2
         ? 'Put at least two teams on the field.'
-        : `${filled().length} ${filled().length === 1 ? 'fleet' : 'fleets'} on ${used.length} teams · players on one team share a faction`) +
+        : `${filled().length} ${filled().length === 1 ? 'fleet' : 'fleets'} on ${used.length} teams · ${mixed()?'each fleet keeps its faction':'players on one team share a faction'}`) +
       (watchers ? ` · ${watchers} ${watchers === 1 ? 'spectator' : 'spectators'}` : '');
     teamNote.classList.toggle('bad', used.length < 2);
   };
@@ -891,6 +988,9 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
       key = viewKey();
     shownMap = key;
     mapName.textContent = mapTitle(m);
+    previewImg.style.backgroundImage = '';
+    previewImg.classList.add('none');
+    previewMarks.replaceChildren();
     const n = mapHeader(m)?.players;
     if (isDynamic(m)) mapName.appendChild(el('span', '', ' · generated for every fleet'));
     else if (n) mapName.appendChild(el('span', '', ` · ${n} player map`));
@@ -909,7 +1009,8 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
   };
   const drawMaps = () => {
     mapList.replaceChildren();
-    const rows = maps
+    const available = battle?.domain === 'space' && battle.authored && battle.file && !maps.includes(battle.file) ? [...maps,battle.file] : maps;
+    const rows = available
       .filter(m => !isDynamic(m))
       .map(m => ({ m, name: mapTitle(m) }))
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -924,7 +1025,9 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
         if (!host || st.mapFile === next) return;
         st.mapFile = next;
         sound('GUI_Button_Press_2_SFX');
-        for (const x of mapList.children) x.classList.toggle('sel', x === r);
+        for (const x of mapList.children) {
+          x.classList.toggle('sel', x === r);
+        }
         drawOpts();
         drawPreview();
         changed(null, true);
@@ -951,10 +1054,38 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
   const draw = () => {
     invite?.update();
     error.textContent = '';
-    drawOpts();
-    drawHost();
-    drawFleets();
-    drawArmy();
+    if (!board || editing) { drawOpts(); drawHost(); drawFleets(); drawArmy(); }
+    if (board) {
+      const me = players.find(mine);
+      summary.textContent = `${filled().length} fleets · ${teamsUsed().length} teams · ${filled().reduce((n,p) => n + p.army.length, 0)} units`;
+      const land = battle?.domain === 'land';
+      const armies = land && groundPicks.map(groundArmy);
+      ground.hidden = !land;
+      for (const [i,p] of groundPicks.entries()) {
+        const wrap=companyFields[i], sel=wrap.querySelector('select');
+        const roster=land && !p.pending && sources?.groundRoster(p.faction);
+        wrap.hidden=!roster?.length;
+        if(!wrap.hidden && wrap.dataset.faction!==p.faction){
+          sel.replaceChildren(new Option('Default companies',''),...roster.map(r=>new Option(r.label,r.name)));
+          wrap.dataset.faction=p.faction;
+        }
+        if(!wrap.hidden)sel.value=p.company || '';
+      }
+      editFleets.hidden = land;
+      if (land) summary.textContent = armies.map((a,i)=>`${fLabel(groundPicks[i].faction,'land')}: ${a.length} ${a.length===1?'company':'companies'}`).join(' · ') + '. Eliminate the opposing force.';
+      battlefield.textContent = battle?.file ? `${battle.world.name} · ${land ? 'Land' : 'Space'} · ${battle.title}` : '';
+      battlefield.title=battle?.file ? `${battle.mod} · ${battle.file}` : '';
+      battlefield.hidden=!battle?.file;
+      board.go.disabled = !battle?.file || (land && armies.some(a=>!a.length));
+      board.status.textContent = battle?.loading ? 'Reading battlefield…' : !battle?.file ? (battle?.world ? 'This battlefield is unavailable.' : 'Choose a battlefield to start.') : board.go.disabled ? 'No ground companies for this faction.' : land || !me ? '' : watching(me) ? 'Spectating' : `${fLabel(me.faction)} · Team ${me.team + 1}`;
+    }
+    if(board){
+      const list=battle?.domain==='land'?groundPicks:filled(),stop=blocked(list),msg=stop?.problem || (stop?.pending?'Reading selected faction…':'');
+      if(msg){board.go.disabled=true;board.status.textContent=error.textContent=msg;}
+      else if(editing){error.textContent=players[view.sel]?.notice||'';}
+      go.disabled=!!msg;
+    }
+    if (board && !editing) { remember(); return; }
     if (shownMap !== viewKey()) {
       if (!shownMap || shownMap.split('|')[0] !== st.mapFile) drawMaps();
       drawPreview();
@@ -968,6 +1099,7 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
   const offs = [];
   const finished = new Promise(r => (done = r));
   const onKey = e => {
+    if (e.target.closest?.('#armyPainter')) return;
     if (e.code === 'Escape' && document.activeElement !== chatIn && !document.activeElement?.classList.contains('dyn-seed-input')) {
       e.stopPropagation();
       close(false);
@@ -976,6 +1108,7 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
   function close(started, why = null) {
     if (ended) return;
     ended = true;
+    atlas?.close();
     invite?.close();
     removeEventListener('keydown', onKey, true);
     clearInterval(beat);
@@ -998,12 +1131,24 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
       return;
     }
     me.ready = !me.ready;
-    net.send(0, { k: 'ready', on: me.ready });
+    net.send(0, { k: 'ready', on: me.ready, faction: me.faction, livery: me.ready && !watching(me) ? activeLivery(me.faction) : null });
     draw();
   }
   function launch() {
+    if (board && !editing && (!battle?.file || board.go.disabled || (battle.domain==='space' && st.mapFile!==battle.file))) return;
+    if(board && blocked(battle?.domain==='land'?groundPicks:filled()))return;
+    const refsFor=(domain,list)=>guestRefs(list.map(p=>sources && sources.guest(domain,p.faction) ? sources.get(domain,p.faction).ref : null));
+    if (board && !editing && battle.domain === 'land') {
+      const groundSides=groundPicks.map(p=>p.faction),refs=refsFor('land',groundPicks);
+      const setup = {mode:'land', type:'instant', mapFile:battle.file, planetBattle:{id:battle.world.id,authored:battle.authored},
+        credits:0,popCap:0,fog:false,preBuilt:false, teamFactions:groundSides.slice(),
+        players:[{human:true,team:0,auto:true,color:PALETTE[0],livery:activeLivery(groundSides[0])},{human:false,team:1,auto:true,difficulty:'medium',color:PALETTE[1]}],
+        ...(refs.length?{skirmishRosters:refs}:{}),instant:{domain:'land',groundArmies:groundPicks.map(groundArmy)}};
+      close(true);audio?.unlock?.();start(setup);return;
+    }
     const used = teamsUsed();
     if (used.length < 2) {
+      setEditor(true);
       error.textContent = 'At least two teams are needed for a battle.';
       return;
     }
@@ -1011,6 +1156,7 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
     if (empty >= 0) {
       view.sel = empty;
       draw();
+      setEditor(true);
       error.textContent = `${nameOf(players[empty], empty)} has no ships yet — add some or press Random.`;
       return;
     }
@@ -1023,21 +1169,25 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
     const all = colors();
     const fleets = players.map((p, i) => ({ p, color: all[i] })).filter(({ p }) => p.kind !== 'open' && !watching(p));
     const watchers = players.filter(p => p.kind === 'human' && watching(p));
+    const refs=refsFor('space',fleets.map(f=>f.p));
     const setup = {
+      ...(refs.length?{skirmishRosters:refs}:{}),
       mode: 'space',
       type: 'instant',
       mapFile: st.mapFile,
+      ...(battle?.domain === 'space' && battle.file === st.mapFile ? {planetBattle:{id:battle.world.id,authored:battle.authored}} : {}),
       credits: 0,
       popCap: 0,
       fog: st.fog,
       teamFactions,
-      players: fleets.map(({ p, color }) =>
-        p.kind === 'you'
-          ? { human: true, team: index.get(p.team), color, auto: false }
+      players: fleets.map(({ p, color }) => ({
+        ...(p.faction!==teamFactions[index.get(p.team)]?{skirmishFaction:p.faction}:{}),
+        ...(p.kind === 'you'
+          ? { human: true, team: index.get(p.team), color, auto: false, livery: activeLivery(p.faction) }
           : p.kind === 'human'
-            ? { human: true, peer: p.peer, name: p.name, team: index.get(p.team), color, auto: false }
-            : { human: false, team: index.get(p.team), difficulty: p.kind, color, auto: false }
-      ),
+            ? { human: true, peer: p.peer, name: p.name, team: index.get(p.team), color, auto: false, livery: launchPaint(p, p.faction, mine(p)) }
+            : { human: false, team: index.get(p.team), difficulty: p.kind, color, auto: false })
+      })),
       instant: { turn: entryTurn(), armies: fleets.map(({ p }) => p.army.slice()) },
       ...(players.some(p => p.kind === 'you' && watching(p)) ? { spectate: true } : {}),
       ...(watchers.length ? { spectators: watchers.map(p => p.peer), spectatorNames: watchers.map(p => p.name) } : {})
@@ -1099,7 +1249,8 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
           publish();
           draw();
         } else if (m.k === 'ready') {
-          s.ready = !!m.on && (s.army.length > 0 || watching(s));
+          s.ready = !!m.on && (s.army.length > 0 || watching(s)) && (m.faction === undefined || m.faction === s.faction);
+          readyPaint(s, m, s.faction);
           publish();
           draw();
         } else if (m.k === 'chat') {
@@ -1144,9 +1295,15 @@ export async function openInstantBattle({ maps, factions, audio, cancel, start, 
     );
   }
 
-  addEventListener('keydown', onKey, true);
+  if (!board) addEventListener('keydown', onKey, true);
   document.body.appendChild(root);
+  if (board) atlas = battlefieldAtlas(board,{files:{space:maps.filter(m=>!isDynamic(m)),land:landMaps},onPlanet:()=>tabs.select(0),change:info=>{
+    battle=info;
+    if(info.domain==='space' && info.file) st.mapFile=info.file;
+    draw();
+  }});
   draw();
+  if (board) board.focus();
   if (net && host) {
     publish();
     for (const line of mp.invites || []) say('', line.text, line.copy);

@@ -1,0 +1,272 @@
+{
+  "meta": {
+    "chrome": "158.0.8127.38",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700KF",
+    "cpuRate": 4
+  },
+  "result": {
+    "suite": "controlled",
+    "units": {
+      "Stormtrooper": 12,
+      "Rebel_Trooper": 12
+    },
+    "host": 90,
+    "map": "_MP_LAND_TATOOINE.TED",
+    "gpu": "ampere",
+    "backend": "webgpu",
+    "maxStartError": 0,
+    "legs": [
+      {
+        "engine": "jolt",
+        "n": 24,
+        "start": {
+          "bodies": 264,
+          "colliders": 264,
+          "joints": 216
+        },
+        "spawnMs": {
+          "n": 24,
+          "median": 6.34,
+          "p95": 10.065
+        },
+        "afterBlastJoints": 192,
+        "detached": 24,
+        "peakSocketGap": 0.0066,
+        "peakNeckDeg": 11.8227,
+        "peakTorsoRise": 0,
+        "maxTriangle": 4.932,
+        "lowestSampledSkin": -0.4618,
+        "minPostFallClearance": -0.4618,
+        "maxPostFallClearance": 0.07,
+        "minStartingClearance": 0.0692,
+        "parkedSkinRange": [
+          -0.4618,
+          0.07
+        ],
+        "parkedBelowTolerance": [
+          {
+            "i": 5,
+            "type": "Rebel_Trooper",
+            "z": -0.4618
+          }
+        ],
+        "minFall": null,
+        "maxDetachedTravel": 12.1565,
+        "parked": 24,
+        "afterParking": {
+          "bodies": 0,
+          "colliders": 0,
+          "joints": 0
+        },
+        "timing": {
+          "frameMs": {
+            "n": 120,
+            "median": 38.895,
+            "p95": 49.985
+          },
+          "ragdollMs": {
+            "n": 120,
+            "median": 27.005,
+            "p95": 32.06
+          },
+          "solverMs": {
+            "n": 120,
+            "median": 23.7,
+            "p95": 27.4
+          },
+          "submitted": 120,
+          "gameSeconds": 0,
+          "units": 66
+        },
+        "failures": [
+          "Post-fall skin rests on terrain (−0.2 .. 0.7)",
+          "Parked skins grounded"
+        ]
+      },
+      {
+        "engine": "rapier",
+        "n": 24,
+        "start": {
+          "bodies": 240,
+          "colliders": 264,
+          "joints": 216
+        },
+        "spawnMs": {
+          "n": 24,
+          "median": 3.075,
+          "p95": 6.085
+        },
+        "afterBlastJoints": 192,
+        "detached": 24,
+        "peakSocketGap": 0.0045,
+        "peakNeckDeg": 14.4346,
+        "peakTorsoRise": 0,
+        "maxTriangle": 4.932,
+        "lowestSampledSkin": 0.07,
+        "minPostFallClearance": 0.07,
+        "maxPostFallClearance": 0.07,
+        "minStartingClearance": 0.0692,
+        "parkedSkinRange": [
+          0.0453,
+          0.07
+        ],
+        "parkedBelowTolerance": [],
+        "minFall": null,
+        "maxDetachedTravel": 16.4167,
+        "parked": 24,
+        "afterParking": {
+          "bodies": 0,
+          "colliders": 0,
+          "joints": 0
+        },
+        "timing": {
+          "frameMs": {
+            "n": 120,
+            "median": 27.795,
+            "p95": 38.885
+          },
+          "ragdollMs": {
+            "n": 120,
+            "median": 19.965,
+            "p95": 23.055
+          },
+          "solverMs": {
+            "n": 120,
+            "median": 17.195,
+            "p95": 19.755
+          },
+          "submitted": 120,
+          "gameSeconds": 0,
+          "units": 66
+        },
+        "failures": []
+      },
+      {
+        "engine": "rapier",
+        "n": 24,
+        "start": {
+          "bodies": 240,
+          "colliders": 264,
+          "joints": 216
+        },
+        "spawnMs": {
+          "n": 24,
+          "median": 2.86,
+          "p95": 6.515
+        },
+        "afterBlastJoints": 192,
+        "detached": 24,
+        "peakSocketGap": 0.0093,
+        "peakNeckDeg": 14.3852,
+        "peakTorsoRise": 0,
+        "maxTriangle": 4.932,
+        "lowestSampledSkin": 0.07,
+        "minPostFallClearance": 0.07,
+        "maxPostFallClearance": 0.07,
+        "minStartingClearance": 0.0692,
+        "parkedSkinRange": [
+          0.07,
+          0.07
+        ],
+        "parkedBelowTolerance": [],
+        "minFall": null,
+        "maxDetachedTravel": 16.4209,
+        "parked": 24,
+        "afterParking": {
+          "bodies": 0,
+          "colliders": 0,
+          "joints": 0
+        },
+        "timing": {
+          "frameMs": {
+            "n": 120,
+            "median": 27.775,
+            "p95": 33.415
+          },
+          "ragdollMs": {
+            "n": 120,
+            "median": 19.275,
+            "p95": 22.71
+          },
+          "solverMs": {
+            "n": 120,
+            "median": 16.615,
+            "p95": 19.73
+          },
+          "submitted": 120,
+          "gameSeconds": 0,
+          "units": 66
+        },
+        "failures": []
+      },
+      {
+        "engine": "jolt",
+        "n": 24,
+        "start": {
+          "bodies": 264,
+          "colliders": 264,
+          "joints": 216
+        },
+        "spawnMs": {
+          "n": 24,
+          "median": 6.475,
+          "p95": 9.7
+        },
+        "afterBlastJoints": 192,
+        "detached": 24,
+        "peakSocketGap": 0.0066,
+        "peakNeckDeg": 11.8227,
+        "peakTorsoRise": 0,
+        "maxTriangle": 4.932,
+        "lowestSampledSkin": -0.4618,
+        "minPostFallClearance": -0.4618,
+        "maxPostFallClearance": 0.07,
+        "minStartingClearance": 0.0692,
+        "parkedSkinRange": [
+          -0.4618,
+          0.07
+        ],
+        "parkedBelowTolerance": [
+          {
+            "i": 5,
+            "type": "Rebel_Trooper",
+            "z": -0.4618
+          }
+        ],
+        "minFall": null,
+        "maxDetachedTravel": 12.1565,
+        "parked": 24,
+        "afterParking": {
+          "bodies": 0,
+          "colliders": 0,
+          "joints": 0
+        },
+        "timing": {
+          "frameMs": {
+            "n": 120,
+            "median": 38.86,
+            "p95": 44.465
+          },
+          "ragdollMs": {
+            "n": 120,
+            "median": 25.955,
+            "p95": 31.37
+          },
+          "solverMs": {
+            "n": 120,
+            "median": 22.735,
+            "p95": 27.575
+          },
+          "submitted": 120,
+          "gameSeconds": 0,
+          "units": 66
+        },
+        "failures": [
+          "Post-fall skin rests on terrain (−0.2 .. 0.7)",
+          "Parked skins grounded"
+        ]
+      }
+    ]
+  },
+  "errors": []
+}

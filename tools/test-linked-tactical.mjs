@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { openGame } from './megfs.mjs';
 const mod = process.argv.indexOf('--mod'),
-  archive = openGame(fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)), mod < 0 ? [] : [process.argv[mod + 1]]),
+  archive = openGame(process.env.SWR_GAME || fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)), mod < 0 ? [] : [process.argv[mod + 1]]),
   overlay = new Map();
 globalThis.fetch = async input => {
   const path = String(input);

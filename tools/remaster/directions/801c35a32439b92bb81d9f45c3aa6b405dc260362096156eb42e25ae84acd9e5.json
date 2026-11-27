@@ -1,0 +1,327 @@
+{
+  "job": "801c35a32439b92bb81d9f45c3aa6b405dc260362096156eb42e25ae84acd9e5",
+  "planet": "Tatooine",
+  "views": [
+    {
+      "page": "https://www.starwars.com/news/fully-operational-fandom-tatooine-looks-awfully-bright-to-me",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/image_90d89fd5.jpeg",
+      "sha256": "6e58cb1273817f2e8883d8194cdbf6382c89ea77f32bc054b0bd9c83073dd2a1",
+      "visible": "Pale dunes rise from a flat sprinkled with separate dark shrubs.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Filming-location photograph: low scrub gives way to broad open sand and a distant blue ridge."
+    },
+    {
+      "page": "https://www.starwars.com/databank/jundland-wastes",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/jundland-wastes_1c1c9f8c.jpeg",
+      "sha256": "78bea418d6e1ae12dac0bf18652d243636727d6b0a080cbb22fb08fb08de77f4",
+      "visible": "Broken red-brown rock and gravel surround a narrow winding wash.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "The Jundland overlook separates fan gravel, rock faces and a distant valley floor."
+    },
+    {
+      "page": "https://www.starwars.com/databank/beggar-s-canyon",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/beggar-s-canyon-main_482c4741.jpeg",
+      "sha256": "68329eb16e49bff2bc983fe398e5d5dbbd9a14e836b85595bd5ef95070c48e64",
+      "visible": "Sheer, layered walls throw shade across a sandy channel.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Beggar’s Canyon gives the actual transition between vertical stone and wind-swept sand."
+    },
+    {
+      "page": "https://www.starwars.com/news/fully-operational-fandom-tatooine-looks-awfully-bright-to-me",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/image_7b8b0705.jpeg?region=0%2C53%2C1024%2C576",
+      "sha256": "867c74613f30466852df6a4ecbd7b2986f58680cda944e3e43f7a4666bacdd8b",
+      "visible": "A road passes between a pale badland flank and dark gravel shoulders.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Location photograph: reserve the smoothest substrate for travelled ground."
+    },
+    {
+      "page": "https://www.nps.gov/deva/planyourvisit/golden-canyon.htm",
+      "image": "https://www.nps.gov/deva/planyourvisit/images/IMG_1111_2.JPG?maxwidth=650&autorotate=false",
+      "sha256": "2b2f4d504b443dac53c6865dac6d175d2a38cff0c68d81a9723dff6b5579849b",
+      "visible": "Near eroded ridges overlap distant mountains and pale alluvial fans.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "NPS Golden Canyon terrain analogue: shallow passes interrupt the skyline."
+    },
+    {
+      "page": "https://www.nps.gov/deva/planyourvisit/golden-canyon.htm",
+      "image": "https://www.nps.gov/deva/planyourvisit/images/IMG_1031.JPG?maxwidth=650&autorotate=false",
+      "sha256": "a5eba9e9ebc862cd0f5cf43689ad7eaa3d88dbcd36d339bf7971cb88e2b8f6e8",
+      "visible": "A narrow wash has rough, steep walls and a fine granular bed.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "NPS Golden Canyon terrain analogue: shade is a lighting cue, not black sediment."
+    },
+    {
+      "page": "https://www.starwars.com/databank/jabba-the-hutts-palace",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/jabba-the-hutt-s-palace-main_3b79a010.jpeg",
+      "sha256": "5da2d9becdf2a197ee4ca4fb2d7b8b5e3c7652529ae5d12ade10c4ad08900841",
+      "visible": "Rounded towers stand on broken rock beside a bare, unpaved approach.",
+      "subject": "settlement-edge",
+      "people": "none",
+      "settingCue": "The palace is elevated above the approach; masonry does not extend across the basin."
+    },
+    {
+      "page": "https://www.starwars.com/databank/jabba-the-hutts-palace",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/databank_jabbathehuttspalace_01_169_f7f5feb6.jpeg",
+      "sha256": "5bd1340079aa7fc1af5a3192582834943dc8d6c10241630f229d70aab9d97245",
+      "visible": "Layered circular towers, low walls and a rim-lit rock base at sunset.",
+      "subject": "building",
+      "people": "none",
+      "settingCue": "The exterior massing reads against open sky instead of against a belt of new trees."
+    },
+    {
+      "page": "https://www.starwars.com/databank/mos-espa",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/mos-espa-main_9702f604.jpeg?region=164%2C0%2C953%2C536",
+      "sha256": "1997650f280c472dcb4a476598db5368030f17dc89f23526d5ce2c427aa53c9f",
+      "visible": "A settlement follows both the rim and the bottom of a broad escarpment.",
+      "subject": "settlement-edge",
+      "people": "none",
+      "settingCue": "The Mos Espa panorama shows that building density and exposed geology can change sharply."
+    },
+    {
+      "page": "https://www.starwars.com/databank/mos-espa",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/databank_monespagrandarena_01_169_ed7e9c8e.jpeg",
+      "sha256": "7430c78fea928360455629e65e7c798bfb9abfae6b3a9c7216cc99de4f0b9929",
+      "visible": "Stepped arena terraces and rounded structures meet open sandy working ground.",
+      "subject": "building",
+      "people": "none",
+      "settingCue": "The grandstand has hard built edges but its apron is not a continuous slab."
+    },
+    {
+      "page": "https://www.starwars.com/databank/the-lars-homestead",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/the-lars-homestead-main_97f14169.jpeg?region=164%2C0%2C953%2C536",
+      "sha256": "7416ed4e15c781d611af9a2d58251b04cbb04bec2b8e16f46bf31ab59370822c",
+      "visible": "A low dome and isolated vaporators interrupt an otherwise level horizon.",
+      "subject": "settlement-edge",
+      "people": "none",
+      "settingCue": "Lars homestead gives a control for keeping the skyline low and approaches clear."
+    },
+    {
+      "page": "https://www.starwars.com/databank/lars-moisture-farm",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/databank_larsmoisturefarm_01_169_ac15d1cd.jpeg?region=0%2C0%2C1560%2C878",
+      "sha256": "6fe38e3036e082d35bd052c0478add58d6a8430d2d9f09c3090b71df6e2c24bc",
+      "visible": "An open, sunken equipment court has distinct door sills and a compact ground finish.",
+      "subject": "building",
+      "people": "none",
+      "settingCue": "The courtyard shows the difference between a constructed wall/threshold and a traffic-worn floor."
+    }
+  ],
+  "ground": {
+    "decision": "Keep a continuous pale mineral sand mantle across flats, gravel fans and the bases of the shelves. Ripples, coarser grit and angled exposed bedrock remain distinct under the actual mounted desert sky.",
+    "reject": "Do not cover the combat floor with a uniform red gravel bed, imported forest soil, or repeated square wind ripples.",
+    "evidence": [
+      "6e58cb1273817f2e8883d8194cdbf6382c89ea77f32bc054b0bd9c83073dd2a1",
+      "78bea418d6e1ae12dac0bf18652d243636727d6b0a080cbb22fb08fb08de77f4",
+      "68329eb16e49bff2bc983fe398e5d5dbbd9a14e836b85595bd5ef95070c48e64",
+      "867c74613f30466852df6a4ecbd7b2986f58680cda944e3e43f7a4666bacdd8b",
+      "2b2f4d504b443dac53c6865dac6d175d2a38cff0c68d81a9723dff6b5579849b",
+      "a5eba9e9ebc862cd0f5cf43689ad7eaa3d88dbcd36d339bf7971cb88e2b8f6e8"
+    ]
+  },
+  "foliage": {
+    "decision": "Retain the scattered authored bushes and isolated desert-tree silhouettes. Do not create tree belts, grass carpets or new outskirts plants.",
+    "reject": "The isolated shrubs in location photographs are not evidence for continuous thickets.",
+    "evidence": [
+      "6e58cb1273817f2e8883d8194cdbf6382c89ea77f32bc054b0bd9c83073dd2a1",
+      "78bea418d6e1ae12dac0bf18652d243636727d6b0a080cbb22fb08fb08de77f4",
+      "5da2d9becdf2a197ee4ca4fb2d7b8b5e3c7652529ae5d12ade10c4ad08900841",
+      "7416ed4e15c781d611af9a2d58251b04cbb04bec2b8e16f46bf31ab59370822c"
+    ],
+    "review": {
+      "disposition": "retain",
+      "basis": "The dune photograph supports isolated low shrubs with long open gaps. Taller forms are retained authored map art, not a claim that this location photograph identifies a desert-tree species.",
+      "forms": [
+        {
+          "id": "scrub",
+          "form": "Low isolated bushes",
+          "silhouette": "Dark, irregular low mounds visibly separated by bare sand.",
+          "variation": "Keep the three existing authored bush silhouettes and their spacing.",
+          "disposition": "retain",
+          "reason": "Their low stature and large intervening gaps agree with the dunes; no added scattering is justified.",
+          "evidence": [
+            "6e58cb1273817f2e8883d8194cdbf6382c89ea77f32bc054b0bd9c83073dd2a1",
+            "78bea418d6e1ae12dac0bf18652d243636727d6b0a080cbb22fb08fb08de77f4"
+          ]
+        },
+        {
+          "id": "desert-tree",
+          "form": "Sparse woody uprights",
+          "silhouette": "An isolated branching outline rather than overlapping crowns.",
+          "variation": "Keep the existing individual and clumped woody props at authored sizes.",
+          "disposition": "retain",
+          "reason": "Sparse cover is consistent with the outskirts. No image identifies a replacement for these authored trees.",
+          "evidence": [
+            "6e58cb1273817f2e8883d8194cdbf6382c89ea77f32bc054b0bd9c83073dd2a1",
+            "5da2d9becdf2a197ee4ca4fb2d7b8b5e3c7652529ae5d12ade10c4ad08900841",
+            "7416ed4e15c781d611af9a2d58251b04cbb04bec2b8e16f46bf31ab59370822c"
+          ]
+        },
+        {
+          "id": "forest-canopy",
+          "form": "A continuous tree canopy",
+          "silhouette": "A closed horizon made of interlocking tall crowns.",
+          "variation": "No forest variants, scatter or distant tree cards are allocated.",
+          "disposition": "absent",
+          "reason": "The skyline reads as bare relief across multiple place-first views.",
+          "evidence": [
+            "6e58cb1273817f2e8883d8194cdbf6382c89ea77f32bc054b0bd9c83073dd2a1",
+            "78bea418d6e1ae12dac0bf18652d243636727d6b0a080cbb22fb08fb08de77f4",
+            "2b2f4d504b443dac53c6865dac6d175d2a38cff0c68d81a9723dff6b5579849b",
+            "7416ed4e15c781d611af9a2d58251b04cbb04bec2b8e16f46bf31ab59370822c"
+          ]
+        }
+      ],
+      "zones": {
+        "place": [
+          {
+            "where": "Existing isolated brush and tree placements around the playable desert basins.",
+            "forms": [
+              "scrub",
+              "desert-tree"
+            ],
+            "evidence": [
+              "6e58cb1273817f2e8883d8194cdbf6382c89ea77f32bc054b0bd9c83073dd2a1",
+              "78bea418d6e1ae12dac0bf18652d243636727d6b0a080cbb22fb08fb08de77f4"
+            ]
+          }
+        ],
+        "exclude": [
+          {
+            "where": "New growth on open approaches, the bone field, court ground and beyond the authored terrain.",
+            "reason": "The dunes, courts and exposed slopes read through the gaps between plants.",
+            "evidence": [
+              "6e58cb1273817f2e8883d8194cdbf6382c89ea77f32bc054b0bd9c83073dd2a1",
+              "2b2f4d504b443dac53c6865dac6d175d2a38cff0c68d81a9723dff6b5579849b",
+              "5da2d9becdf2a197ee4ca4fb2d7b8b5e3c7652529ae5d12ade10c4ad08900841",
+              "6fe38e3036e082d35bd052c0478add58d6a8430d2d9f09c3090b71df6e2c24bc"
+            ]
+          }
+        ]
+      },
+      "variation": {
+        "decision": "Use the observed spacing as the constraint; keep original woody forms and place no additional species.",
+        "limits": [
+          "Keep the broad open ground around the muster areas.",
+          "Do not turn hill silhouettes into a wall of vegetation."
+        ],
+        "evidence": [
+          "6e58cb1273817f2e8883d8194cdbf6382c89ea77f32bc054b0bd9c83073dd2a1",
+          "2b2f4d504b443dac53c6865dac6d175d2a38cff0c68d81a9723dff6b5579849b",
+          "5da2d9becdf2a197ee4ca4fb2d7b8b5e3c7652529ae5d12ade10c4ad08900841",
+          "7416ed4e15c781d611af9a2d58251b04cbb04bec2b8e16f46bf31ab59370822c"
+        ]
+      }
+    }
+  },
+  "landmark": {
+    "decision": "Preserve the native rock formations, krayt bones, Sarlacc bowl and existing working yards; preserve unobstructed sightlines through them.",
+    "reject": "Do not add a palace, farm or a replica of Mos Espa to a board that does not contain it.",
+    "evidence": [
+      "68329eb16e49bff2bc983fe398e5d5dbbd9a14e836b85595bd5ef95070c48e64",
+      "5da2d9becdf2a197ee4ca4fb2d7b8b5e3c7652529ae5d12ade10c4ad08900841",
+      "5bd1340079aa7fc1af5a3192582834943dc8d6c10241630f229d70aab9d97245",
+      "1997650f280c472dcb4a476598db5368030f17dc89f23526d5ce2c427aa53c9f",
+      "7416ed4e15c781d611af9a2d58251b04cbb04bec2b8e16f46bf31ab59370822c"
+    ]
+  },
+  "landUse": {
+    "natural": {
+      "decision": "Wind-scoured open sand, gravel fans, fractured rock and dry washes; never infer paving from warmth or color.",
+      "evidence": [
+        "6e58cb1273817f2e8883d8194cdbf6382c89ea77f32bc054b0bd9c83073dd2a1",
+        "78bea418d6e1ae12dac0bf18652d243636727d6b0a080cbb22fb08fb08de77f4",
+        "68329eb16e49bff2bc983fe398e5d5dbbd9a14e836b85595bd5ef95070c48e64",
+        "867c74613f30466852df6a4ecbd7b2986f58680cda944e3e43f7a4666bacdd8b",
+        "2b2f4d504b443dac53c6865dac6d175d2a38cff0c68d81a9723dff6b5579849b",
+        "a5eba9e9ebc862cd0f5cf43689ad7eaa3d88dbcd36d339bf7971cb88e2b8f6e8"
+      ]
+    },
+    "built": {
+      "decision": "The built cues are localized walls, thresholds, equipment bases and compact working surfaces. Actual construction receipts alone may authorize a manufactured footing on this board.",
+      "evidence": [
+        "5da2d9becdf2a197ee4ca4fb2d7b8b5e3c7652529ae5d12ade10c4ad08900841",
+        "5bd1340079aa7fc1af5a3192582834943dc8d6c10241630f229d70aab9d97245",
+        "1997650f280c472dcb4a476598db5368030f17dc89f23526d5ce2c427aa53c9f",
+        "7430c78fea928360455629e65e7c798bfb9abfae6b3a9c7216cc99de4f0b9929",
+        "7416ed4e15c781d611af9a2d58251b04cbb04bec2b8e16f46bf31ab59370822c",
+        "6fe38e3036e082d35bd052c0478add58d6a8430d2d9f09c3090b71df6e2c24bc"
+      ]
+    },
+    "transition": {
+      "decision": "At the edge of work yards let compact grit give way to sand. Geometry marks the hard edge of a building; a building on the reference does not authorize a paved desert.",
+      "evidence": [
+        "867c74613f30466852df6a4ecbd7b2986f58680cda944e3e43f7a4666bacdd8b",
+        "5da2d9becdf2a197ee4ca4fb2d7b8b5e3c7652529ae5d12ade10c4ad08900841",
+        "1997650f280c472dcb4a476598db5368030f17dc89f23526d5ce2c427aa53c9f",
+        "7430c78fea928360455629e65e7c798bfb9abfae6b3a9c7216cc99de4f0b9929",
+        "6fe38e3036e082d35bd052c0478add58d6a8430d2d9f09c3090b71df6e2c24bc"
+      ]
+    }
+  },
+  "outskirts": {
+    "treatment": "foothills",
+    "foliage": [],
+    "skyline": "Leave open, low desert approaches, distant eroded ridges and generous saddles. The broad terrain profile is inferred, not a reconstruction of any one filming site.",
+    "join": "Follow the surveyed terrain rim into windblown sand and rocky shoulders; mask neither the sky nor the edge with planted trees.",
+    "reject": "No continuous crater wall or alpine range. Keep the camera limits and original playable area.",
+    "evidence": [
+      "6e58cb1273817f2e8883d8194cdbf6382c89ea77f32bc054b0bd9c83073dd2a1",
+      "78bea418d6e1ae12dac0bf18652d243636727d6b0a080cbb22fb08fb08de77f4",
+      "2b2f4d504b443dac53c6865dac6d175d2a38cff0c68d81a9723dff6b5579849b",
+      "5da2d9becdf2a197ee4ca4fb2d7b8b5e3c7652529ae5d12ade10c4ad08900841",
+      "7416ed4e15c781d611af9a2d58251b04cbb04bec2b8e16f46bf31ab59370822c"
+    ]
+  },
+  "climate": {
+    "skies": [
+      "Sunrise_Sandstorm",
+      "Noon_Sandstorm"
+    ],
+    "substrate": "The same windblown mineral sand crosses adjacent flats and travels onto gravel. Fine grains and wave crests can differ in scale without becoming differently colored beds.",
+    "lighting": "Dune slopes change value with the sun and canyon walls cast real shade. Compare two parts of the same deposit within each authored dusty sky, never sample blue midday photography as a sunrise white balance.",
+    "exceptions": "Retain the darker actual ledges, fossil shadows, alternate ridge exposures and isolated compact yards. Sky, atmosphere, lighting of troops and visibility remain authored.",
+    "evidence": [
+      "6e58cb1273817f2e8883d8194cdbf6382c89ea77f32bc054b0bd9c83073dd2a1",
+      "68329eb16e49bff2bc983fe398e5d5dbbd9a14e836b85595bd5ef95070c48e64",
+      "a5eba9e9ebc862cd0f5cf43689ad7eaa3d88dbcd36d339bf7971cb88e2b8f6e8"
+    ],
+    "pairs": [
+      {
+        "view": "command",
+        "points": [
+          [
+            345,
+            400
+          ],
+          [
+            490,
+            400
+          ]
+        ],
+        "basis": "Exposed sand on the western shoulder and the adjacent western muster plain, clear of units, HUD and rock geometry.",
+        "limit": 0.09
+      },
+      {
+        "view": "bone-basin",
+        "points": [
+          [
+            920,
+            160
+          ],
+          [
+            1220,
+            160
+          ]
+        ],
+        "basis": "Loose grains across the top of the Krayt basin; different slopes and illumination must remain apparent in the fixed-albedo control.",
+        "limit": 0.1
+      }
+    ]
+  },
+  "uncertain": "The photographs do not establish the exact species of map vegetation, the reflectance of the sand under the mounted weather, or a canonical placement for the krayt skeleton. The NPS views and location photographs are terrain analogues."
+}

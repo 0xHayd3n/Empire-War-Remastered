@@ -1,0 +1,20 @@
+# Graphics resource intake: what to use in Universal
+
+**First implementation:** [Endor forest floor](endor-forest-floor.md). Authoring inputs, shader prototypes and dependencies are three different purchases of effort; don't treat a download directory as a rights grant or a finished graphics overhaul.
+
+| Source reviewed | Appropriate use |
+| --- | --- |
+| [Fasani/three-js-resources](https://github.com/Fasani/three-js-resources) | Discovery list of assets, shaders and tools. The repository's MIT licence covers the list, not what its links point to. Review each upstream asset, dependencies, supported Three revision and licence. |
+| [Poly Haven](https://polyhaven.com/license) | Its downloadable HDRIs, models and textures are CC0, including commercial use and redistribution. Not a licence to repackage the site's logos, screenshots or copy; live API usage has [separate guidance](https://polyhaven.com/our-api). Cook a small local asset instead of making players depend on a remote service. |
+| [ShaderFrog](https://shaderfrog.com/threejs-shaders) | Editable Three.js shader graphs and GLSL. The [editor licence](https://github.com/ShaderFrog/editor) is not a licence for community shader code, composed nodes or external textures. Check the actual shader/component rights and [current export options](https://shaderfrog.com/products); if unclear, use it as a visual reference only. |
+| [Three.js Resources: shaders](https://threejsresources.com/best/shaders) | Directory of tools, including shader viewers and learning resources. Useful to shortlist a specific technique, not to bulk-import materials. |
+| [GEXP: libraries](https://gexpsoftware.com/resources/best-libraries-for-threejs) | Shortlist for production tools. For instance, evaluate [gltfpack](https://github.com/zeux/meshoptimizer/tree/master/gltf) for offline mesh optimization, not a new physics system or React renderer for a visual-only prop. |
+| [three-custom-shader-material](https://www.npmjs.com/package/three-custom-shader-material) | npm's HTML page was inaccessible to the automated reader; [registry metadata](https://registry.npmjs.org/three-custom-shader-material/6.4.0) and the [maintainer's README](https://github.com/FarazzShaikh/THREE-CustomShaderMaterial) confirm MIT, a vanilla entry point and optional React peers. A useful prototype tool for standard Three materials. Its material hooks don't replace Universal's paired [custom WebGL](../public/js/game/terrain.js) and [WebGPU](../public/js/gpu/programs.js) battle programs. Not added as a dependency. |
+
+### Concrete candidates
+
+- [Forest Ground 04](https://polyhaven.com/a/forest_ground_04): approximately 3.2 m across, with separate diffuse, tangent normal and roughness in its [file listing](https://api.polyhaven.com/files/forest_ground_04). Use the scan’s own albedo, roughness, normals and height on positively identified bare earth. The Endor pilot binds independent 4K maps rather than tinting grass; [hashes, credit and rebuild](../public/art/forest-ground-04/README.md).
+- [Tree Stump 01](https://polyhaven.com/a/tree_stump_01): 1.6 m wide and listed at 41K triangles. Bake the high-resolution silhouette/detail to cheaper levels of detail, instance only where it fits existing scenery, and check occlusion, scale and readability before adding it. Not shipped.
+- [Studio Small 03](https://polyhaven.com/a/studio_small_03): a controlled lighting reference for comparing rough hull paint and fittings. Don't swap an outdoor or studio photograph into an authored space battle. Not shipped.
+
+For stock and mods, prefer shared renderer improvements for materials whose meaning is known. An artistic replacement instead needs an opt-in binding to the exact edition, map and effective source after load-order resolution. Unknown or changed assets keep their own art. No licensed Star Wars hero models can be assumed from a list of free resources.

@@ -1,0 +1,101 @@
+{
+  "before": {
+    "asset": "leafy_grass",
+    "page": "https://polyhaven.com/a/leafy_grass",
+    "srgb": [
+      151.02,
+      131.34,
+      89.17
+    ],
+    "linear": [
+      0.32538,
+      0.23897,
+      0.10852
+    ],
+    "greenDominantPct": 15.97,
+    "greenMinusRed": -19.68,
+    "greenOverRed": 0.8697
+  },
+  "after": {
+    "asset": "Ground037",
+    "page": "https://ambientcg.com/a/Ground037",
+    "srgb": [
+      152.44,
+      146.75,
+      87.57
+    ],
+    "linear": [
+      0.33817,
+      0.31527,
+      0.11757
+    ],
+    "greenDominantPct": 20.03,
+    "greenMinusRed": -5.69,
+    "greenOverRed": 0.9627
+  },
+  "delta": {
+    "greenOverRed": 0.093,
+    "greenMinusRed": 13.99,
+    "greenDominantPct": 4.06
+  },
+  "crop": {
+    "x": 512,
+    "y": 512,
+    "size": 512,
+    "note": "same pixel rect in both 2048 tiles; 0.50 m before vs 0.525 m after"
+  },
+  "cooked": {
+    "color": {
+      "file": "grass-color.dds",
+      "sha256": "d630b84ff834fb208d55949b92a60cbb92329c07f464b85007b1fbdaf880900a",
+      "top": [
+        {
+          "min": 19,
+          "max": 255,
+          "mean": 152.44
+        },
+        {
+          "min": 8,
+          "max": 255,
+          "mean": 146.75
+        },
+        {
+          "min": 0,
+          "max": 255,
+          "mean": 87.57
+        },
+        {
+          "min": 0,
+          "max": 255,
+          "mean": 93.24
+        }
+      ]
+    },
+    "surface": {
+      "file": "grass-surface.dds",
+      "sha256": "00875729ea0be94f728c0b76ada9085949dfe462f5c0ae3fea51ffd9c6e7dd51",
+      "top": [
+        {
+          "min": 1,
+          "max": 255,
+          "mean": 129.41
+        },
+        {
+          "min": 1,
+          "max": 253,
+          "mean": 127.51
+        },
+        {
+          "min": 129,
+          "max": 255,
+          "mean": 238.41
+        },
+        {
+          "min": 63,
+          "max": 210,
+          "mean": 118.01
+        }
+      ]
+    }
+  }
+}

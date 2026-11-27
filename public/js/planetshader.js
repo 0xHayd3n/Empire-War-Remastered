@@ -1,3 +1,5 @@
+import { airColumn } from './planetshine.js';
+
 export const planetVertex = `
 attribute vec3 tangent, binormal;
 uniform vec3 sunDir, sunColor, fillDir, fillColor, fillDir2, fillColor2, ambient;
@@ -8,7 +10,7 @@ uniform float atmospherePower, cloudScroll, time, opacity;
 varying vec2 vUv, vCloudUv;
 varying vec3 vLight, vHalf, vFill;
 varying vec3 vSpecular;
-varying float vRim, vNight;
+varying float vRim, vNight, vFacing;
 varying float vAlpha;
 vec3 fillLight(vec3 n, vec3 d, vec3 color) {
   float sh = .282095*.282095*3.141593
@@ -40,6 +42,7 @@ void main() {
   vHalf = normalize(vec3(dot(halfDirection,tangent),dot(halfDirection,binormal),dot(halfDirection,normal)));
   vFill = clamp(emissive+diffuse*lightScale.rgb*(ambient*(3.5449052*.282095)+fillLight(worldNormal,fillDir,fillColor)+fillLight(worldNormal,fillDir2,fillColor2)),0.0,1.0);
   vSpecular=clamp(specular*sunSpecular*pow(max(dot(worldNormal,normalize(eye+sunDir)),0.0),16.0),0.0,1.0);
+  vFacing = dot(worldNormal,eye);
   vRim = 2.0*atmosphere.a*pow(1.0-dot(worldNormal,eye),atmospherePower);
   vNight = clamp(dot(normal,-32.0*objectLight),0.0,1.0);
   vCloudUv=uv+vec2(time*cloudScroll,0.0);
@@ -53,11 +56,11 @@ export const planetFragment = `
 uniform sampler2D map, normalMap, cloudMap, cloudNormalMap;
 uniform vec3 sunColor, sunSpecular, diffuse, specular, cityColor;
 uniform vec4 atmosphere;
-uniform float opacity;
+uniform float opacity, orbitalAir, cloudLayer, planetColumn;
 varying vec2 vUv, vCloudUv;
 varying vec3 vLight, vHalf, vFill;
 varying vec3 vSpecular;
-varying float vRim, vNight;
+varying float vRim, vNight, vFacing;
 varying float vAlpha;
 void main() {
   vec4 base=texture2D(map,vUv);
@@ -67,19 +70,36 @@ void main() {
   #else
   vec4 normal=texture2D(normalMap,vUv);
   vec3 decodedNormal=normal.rgb*2.0-1.0;
+  float rim=vRim, sunVis=1.0;
+  vec3 air=vec3(0.0);
+  bool shell=planetColumn>0.0 && atmosphere.a>0.0 && max(atmosphere.r,max(atmosphere.g,atmosphere.b))>0.0;
+  if (orbitalAir>0.0 || shell) {
+    // A longer view through the sunlit limb; fade through twilight rather than outlining the night side.
+    float day=smoothstep(-0.18,0.32,vLight.z), edge=1.0-clamp(vFacing,0.0,1.0);
+    rim*=mix(1.0,0.18+0.42*day,orbitalAir);
+    air=orbitalAir*max(atmosphere.a,0.0)*atmosphere.rgb*sunColor*day*edge*edge*(0.55+2.35*edge*edge);
+    air/=1.0+0.65*max(air.r,max(air.g,air.b));
+    if (cloudLayer>0.0) {
+      vec2 offset=vec2(0.0025,0.005)*vLight.xy/max(vLight.z,0.24);
+      float blocker=texture2D(cloudMap,vCloudUv+offset).a;
+      sunVis-=max(orbitalAir,float(shell))*0.60*blocker*smoothstep(0.0,0.18,vLight.z);
+    }
+  }
+  if (shell) {rim=0.0;air=vec3(0.0);}
   #ifdef PLANET_DX8
-  vec3 light=sunColor*diffuse*clamp(dot(decodedNormal,vLight),0.0,1.0)+vFill;
-  vec3 rgb=2.0*light*(mix(base.rgb,cloud.rgb,cloud.a)+atmosphere.rgb*vRim)
+  vec3 light=sunColor*diffuse*clamp(dot(decodedNormal,vLight),0.0,1.0)*mix(sunVis,1.0,cloud.a)+vFill;
+  vec3 rgb=2.0*light*(mix(base.rgb,cloud.rgb,cloud.a)+atmosphere.rgb*rim)
     +cityColor*(cloud.a*base.a*vNight)+normal.a*vSpecular;
-  gl_FragColor=vec4(rgb,vAlpha);
   #else
   vec3 cloudNormal=texture2D(cloudNormalMap,vCloudUv).rgb*2.0-1.0;
-  vec3 surface=2.0*(sunColor*diffuse*clamp(dot(decodedNormal,vLight),0.0,1.0)+vFill)
-    *(base.rgb+atmosphere.rgb*vRim);
+  vec3 surface=2.0*(sunColor*diffuse*clamp(dot(decodedNormal,vLight),0.0,1.0)*sunVis+vFill)
+    *(base.rgb+atmosphere.rgb*rim);
   vec3 city=cityColor*base.a*vNight*(1.0-cloud.a);
   vec3 gloss=specular*sunSpecular*pow(clamp(dot(decodedNormal,vHalf),0.0,1.0),16.0)*normal.a;
   vec3 clouds=2.0*(cloud.rgb*clamp(dot(cloudNormal,vLight),0.0,1.0)*sunColor+vFill);
-  gl_FragColor=vec4(mix(surface+city+gloss,clouds,cloud.a),vAlpha);
+  vec3 rgb=mix(surface+city+gloss,clouds,cloud.a);
   #endif
+  if(shell) {${airColumn(false)}}
+  gl_FragColor=vec4(rgb+air,vAlpha);
   #endif
 }`;

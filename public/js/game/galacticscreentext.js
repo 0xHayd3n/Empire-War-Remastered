@@ -3,6 +3,7 @@ import { fontFamily } from '../fonts.js';
 import { componentFont, loadComponentFont, paintNativeText } from '../nativefont.js';
 import { iconUrl } from '../icons.js';
 import { dialogFontPixels, dialogStaticText, uiTextHeight } from './dialogtext.js';
+import { reading } from './readingpreferences.js';
 import { languageRevision } from '../language.js';
 const pair = s =>
   String(s || '')
@@ -153,7 +154,7 @@ export class GalacticScreenText {
       }
       return true;
     });
-    const rate = db.constants.num('Text_Reveal_Rate', 120);
+    const rate = reading.story * db.constants.num('Text_Reveal_Rate', 120);
     for (let i = 0; i < this.rows.length; i++) {
       const r = this.rows[i];
       if (!r.teletype || r.progress >= r.text.length) continue;

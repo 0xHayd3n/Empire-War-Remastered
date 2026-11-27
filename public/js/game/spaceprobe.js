@@ -1,3 +1,5 @@
+import { viewOptions } from './viewpreferences.js';
+import { db } from '../gamedata.js';
 import { activeLanguage } from '../language.js';
 import { snapshot, saveRefs } from './savegame.js';
 import { isPlainObject } from './plainobject.js';
@@ -54,6 +56,7 @@ export function battleSnapshot(game, save = null, refs = null) {
         }
       : null,
     language: activeLanguage,
+    universalProfile: db.universalProfile,
     autofire: !!w.autofire,
     fog: !!w.fog,
     skirmish: !!w.skirmish,
@@ -61,7 +64,7 @@ export function battleSnapshot(game, save = null, refs = null) {
     rules: w.tacticalRules || null,
     setup,
     net: net ? { seed: game.setup.seed >>> 0 } : null,
-    record: game.recording ? { seed: game.setup.seed >>> 0, replay: replay || null } : null,
+    record: game.recording ? { seed: game.setup.seed >>> 0, replay: replay || null, replayRate: viewOptions.replayRate } : null,
     teams: w.teams.map(t => ({
       faction: t.factionName,
       mapSide: t.mapSide,
@@ -73,6 +76,7 @@ export function battleSnapshot(game, save = null, refs = null) {
       .map(p => ({
         id: p.id,
         team: w.teams.indexOf(p.team),
+        faction: p.factionName,
         human: !!p.human,
         credits: p.credits,
         popCap: p.popCapFixed,

@@ -1,82 +1,172 @@
 import * as THREE from 'three';
+import {dayWater} from '../daywater.js';
+import {orbitShader} from '../orbitcolor.js';
+import { groundFillShader, nearGroundShader, terrainSurfaceShader } from '../landlight.js';
+import { airShader, footprintShader, lowland } from '../battlefield.js';
+import { wetSurface, wetLayerShader } from '../groundrain.js';
+import { waterShader } from '../fieldreceivers.js';
+import { soilColor, soilGrid } from './groundday.js';
+import { profile } from '../texture-showcase/store.js';
+import { forestAir, showerSky, ringShader } from '../endor-weather.js';
+import { woodFunctions, woodGround, woodMist } from '../woodland-light.js';
+import { forestSlot, forestShader, scanSamplers } from '../forestfloor.js';
+import { liquidGeometry, slideShader } from './liquid-sheet.js';
+import { BANK_HEIGHT } from './endor-habitat.js';
+import { landscapeBlend, applyLandscapeBlend } from './endor-blend.js';
+import { endorFloor } from './endorfloor.js';
+import { endorLandscape } from './endor-landscape.js';
+import { reviewedLandscape } from './reviewed-landscape.js';
+import { yavinRecipe } from '../yavin-recipe.js';
+import { tatooineRecipe } from '../tatooine-recipe.js';
+import { hothRecipe } from '../hoth-recipe.js';
+import { geonosisRecipe } from '../geonosis-recipe.js';
+import { nabooRecipe } from '../naboo-recipe.js';
+import { utapauRecipe } from '../utapau-recipe.js';
+import { edition } from '../edition.js';
 import { lighting } from '../model.js';
+import { gfx } from '../gfx.js';
+import { battlePrefs } from '../battlerealism.js';
+import { cubicShader } from '../imagesampling.js';
+import { strength } from '../battlelook.js';
 import { loadDDS, loadTexture } from '../dds.js';
 
-export const CELL = 20;
+import { compositionShader } from './ground-composition.js';
+import { CELL, reliefCutVertex, scorchedSoil } from './terrain-cell.js';
+import { enableTerrainCulling } from './terrain-visibility.js';
+export { CELL };
 const TILE = 512;
 const SLOTS = 64;
 
 const VERT = `
   in vec4 layers; in vec2 corner; in float shade;
+  uniform vec4 reliefPatch;
   out vec2 vCorner; out vec3 vNormal; out vec3 vWorld; out float vShade; flat out vec4 vLayers;
   void main() {
     vCorner = corner; vLayers = layers; vShade = shade;
     vNormal = normal; vWorld = position;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    ${reliefCutVertex(false)}
   }`;
 
-const FRAG = `
+const terrainFragment = mixed => `
   precision highp sampler2DArray;
   uniform sampler2DArray map, bump;
+  uniform ${mixed?'sampler2DArray':'sampler2D'} soilColor, soilSurface;
   uniform vec4 texU[${SLOTS}], texV[${SLOTS}];
   uniform vec3 matDiffuse[${SLOTS}], matSpecular[${SLOTS}];
-  uniform sampler2D fog, clouds; uniform float side, detail; uniform vec3 cloudAt;
+  uniform sampler2D fog, clouds; uniform float side, detail, terrainLayers, groundWet, waterLine; uniform vec3 cloudAt;
   uniform vec4 glowAt[8], glowTint[8], occAt[16];
   uniform vec3 sunDir, sunColor, fillDir, fillColor, fillDir2, fillColor2, ambient, fogTint; uniform vec2 fogRange;
   uniform highp sampler2DShadow shadowMap; uniform mat4 shadowMatrix; uniform float shadowOn, shadowTexel;
-  float sunlit(vec3 wp) {
+  uniform mat3 orbitPos,orbitNeg; uniform float landProbeOn; uniform vec3 wideShadow; uniform vec4 forestWeather;
+  uniform vec4 landGround,receiverMap; uniform mat4 hullShadowMatrix; uniform vec3 hullShadowParams; uniform highp sampler2DShadow hullShadowMap;
+  ${orbitShader('glsl')}
+  ${groundFillShader(false)}
+  uniform float forestSlot, fullTerrain, terrainContactMask;
+  bool remasteredReceiver(){ return ${mixed?'true':'fullTerrain>.5'}; }
+  float sunlit(vec3 wp,vec3 normal) {
     if (shadowOn < 0.5) return 1.0;
-    vec3 p = (shadowMatrix * vec4(wp + vec3(0.0, 0.0, 1.5), 1.0)).xyz;
+    vec3 p = (shadowMatrix * vec4(wp+(wideShadow.x>0.0?normal*.48*wideShadow.x:vec3(0.,0.,1.5)),1.0)).xyz;
     if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0 || p.z > 1.0) return 1.0;
-    float d = p.z - 0.0015, o = shadowTexel * 1.3, s = texture(shadowMap, vec3(p.xy, d));
+    float d = p.z - (wideShadow.x>0.0?.44*wideShadow.y:.0015), o = shadowTexel * 1.3, s = texture(shadowMap, vec3(p.xy, d));
     s += texture(shadowMap, vec3(p.xy + vec2(-o, -o), d)) + texture(shadowMap, vec3(p.xy + vec2(o, -o), d)) + texture(shadowMap, vec3(p.xy + vec2(-o, o), d)) + texture(shadowMap, vec3(p.xy + vec2(o, o), d));
     vec2 e = min(p.xy, 1.0 - p.xy);
-    return mix(1.0, mix(0.5, 1.0, s / 5.0), smoothstep(0.0, 0.05, min(e.x, e.y)));
+    return mix(1.0, (landGround.w>0.0 || remasteredReceiver()) ? s/5.0 : mix(0.5, 1.0, s / 5.0), smoothstep(0.0, 0.05, min(e.x, e.y)));
   }
+  ${nearGroundShader(false, true)}
   in vec2 vCorner; in vec3 vNormal; in vec3 vWorld; in float vShade; flat in vec4 vLayers;
   out vec4 outColor;
-  vec3 n, toEye, dPx, dPy, soft;
+  vec3 n, toEye, dPx, dPy, soft, direct, terrainSky;
+  ${terrainSurfaceShader(false)}
   float nearK;
+  uniform sampler2D canopyMap;
+  uniform vec4 landStyle;
+  ${woodFunctions(false)}
+  ${scanSamplers(false,mixed)}
+  ${landscapeBlend(false,mixed)}
+  uniform float textureCubic;
+  ${cubicShader('glsl', true)}
+  uniform vec4 fieldLook;
+  ${airShader(false)}
+  ${footprintShader(false)}
   vec3 layer(float slot) {
     int i = int(slot + 0.5);
     vec3 U = texU[i].xyz, V = texV[i].xyz;
     vec3 at = vec3(dot(U, vWorld), dot(V, vWorld), slot);
     vec2 gx = vec2(dot(U, dPx), dot(V, dPx)), gy = vec2(dot(U, dPy), dot(V, dPy));
+    ${forestShader(false,mixed)}
+    if(fieldLook.z>0.0){float k=detailWidth(gx,gy,vec2(textureSize(map,0).xy));gx*=k;gy*=k;}
     vec4 t = textureGrad(map, at, gx, gy);
+    if (textureCubic > 0.0) {
+      vec2 size = vec2(textureSize(map,0).xy);
+      float span = max(length(gx*size),length(gy*size));
+      if (span < 1.0) t.rgb=mix(t.rgb,cubicRGB(at.xy,size,slot),1.0-smoothstep(0.55,1.0,span));
+    }
     vec3 b = textureGrad(bump, at, gx, gy).xyz * 2.0 - 1.0;
+    const vec3 Y = vec3(0.299, 0.587, 0.114);
+    float mean = 0.0;
+    if (terrainLayers > 0.0 || nearK > 0.0) mean = dot(textureLod(map,at,9.0).rgb,Y);
+    if (terrainLayers > 0.0) {
+      // Broad variation from this layer's own atlas slice; keep paths, alpha and paint boundaries in place.
+      vec2 macro = at.xy * 0.29 + vec2(0.37,0.71);
+      float field = dot(textureGrad(map,vec3(macro,slot),gx*0.29,gy*0.29).rgb,Y);
+      t.rgb *= mix(1.0,clamp((field+0.06)/(mean+0.06),0.57,1.48),terrainLayers*0.77);
+    }
     if (nearK > 0.0) {
       vec3 fine = vec3(at.xy * 7.0, slot);
-      vec3 tf = textureGrad(map, fine, gx * 7.0, gy * 7.0).rgb, avg = textureLod(map, at, 9.0).rgb;
-      const vec3 Y = vec3(0.299, 0.587, 0.114);
-      t.rgb *= mix(1.0, clamp(dot(tf, Y) / max(dot(avg, Y), 0.04), 0.55, 1.6), nearK);
+      vec3 tf = textureGrad(map, fine, gx * 7.0, gy * 7.0).rgb;
+      t.rgb *= mix(1.0, clamp(dot(tf, Y) / max(mean, 0.04), 0.55, 1.6), nearK);
       vec3 bd = textureGrad(bump, fine, gx * 7.0, gy * 7.0).xyz * 2.0 - 1.0;
       b = normalize(b + vec3(bd.xy, 0.0) * nearK * 0.8);
     }
-    vec3 T = normalize(vec3(U.xy, -dot(U.xy, n.xy) / n.z)), B = normalize(vec3(V.xy, -dot(V.xy, n.xy) / n.z));
-    vec3 L = normalize(vec3(dot(sunDir, T), dot(sunDir, B), dot(sunDir, n)));
-    vec3 h = normalize(toEye + sunDir), H = normalize(vec3(dot(h, T), dot(h, B), dot(h, n)));
-    float shine = clamp(dot(b, H), 0.0, 1.0); shine *= shine; shine *= shine; shine *= shine; shine *= shine;
-    return t.rgb * (sunColor * clamp(dot(b, L), 0.0, 1.0) + soft) * matDiffuse[i] + t.a * shine * 0.5 * sunColor * matSpecular[i];
+    mat3 frame = terrainFrame(n,U,V);
+    vec3 sn = normalize(frame*vec3(b.xy,max(.01,b.z)));
+    float shine = clamp(dot(sn, normalize(toEye+sunDir)), 0.0, 1.0); shine *= shine; shine *= shine; shine *= shine; shine *= shine;
+    vec3 paint=landProbeOn>0.0?orbitDecode(t.rgb):t.rgb;
+    vec3 result=paint * (direct * clamp(dot(sn, sunDir), 0.0, 1.0) + terrainFill(sn)) * matDiffuse[i] + t.a * shine * 0.5 * direct * matSpecular[i];
+    ${wetLayerShader(false)}
+    return ${mixed?'landProbeOn>0.0?max(result,vec3(0.)):orbitDecode(max(result,vec3(0.)))':'landProbeOn>0.0?orbitEncode(max(result,vec3(0.0))):result'};
   }
+  ${mixed?'uniform vec4 groundMixA,groundMixB;'+compositionShader(false):''}
   void main() {
     n = normalize(vNormal); toEye = normalize(cameraPosition - vWorld);
     dPx = dFdx(vWorld); dPy = dFdy(vWorld);
-    nearK = detail * (1.0 - smoothstep(25.0, 260.0, distance(cameraPosition, vWorld)));
+    float dist = distance(cameraPosition,vWorld);
+    nearK = max(detail * (1.0 - smoothstep(25.0,260.0,dist)),terrainLayers * 0.85 * (1.0 - smoothstep(160.0,1200.0,dist)));
     soft = ambient + fillColor * max(dot(n, fillDir), 0.0) + fillColor2 * max(dot(n, fillDir2), 0.0);
+    float vis=groundSun(vWorld,n); vec3 cl=texture(clouds,(vWorld.xy+cloudAt.xy)/cloudAt.z).rgb;
+    direct=sunColor;
+    terrainSky=vec3(1.);
+    if(landGround.w>0.0 || remasteredReceiver()){direct*=cl*vis;}else if(receiverMap.z>0.0)direct*=cl;
+    ${woodGround(false)}
+    // Baked darkness is local sky shelter, not a black overlay on sun, fog, waterbed or emitters.
+    float shelter=fullTerrain>.5?1.:mix(.55,1.,clamp(vShade,0.,1.));terrainSky*=shelter;soft*=shelter;
+    ${mixed?'vec4 keep=1.-step(vec4(2.),vec4(texU[int(vLayers.x)].w,texU[int(vLayers.y)].w,texU[int(vLayers.z)].w,texU[int(vLayers.w)].w));':''}
     vec3 c;
-    if (vLayers.x == vLayers.y && vLayers.x == vLayers.z && vLayers.x == vLayers.w) c = layer(vLayers.x);
+    float bank=fullTerrain>.5 ? 1.-smoothstep(0.,${BANK_HEIGHT},vWorld.z-waterLine) : 0.;
+#ifdef GROUND_COMPOSITION
+    c=composed(vLayers,vCorner);
+#else
+    if(bank>=1.)c=layer(63.);
+    else if (vLayers.x == vLayers.y && vLayers.x == vLayers.z && vLayers.x == vLayers.w) c = layer(vLayers.x);
     else {
       vec4 w = vec4((1.0 - vCorner.x) * (1.0 - vCorner.y), vCorner.x * (1.0 - vCorner.y), (1.0 - vCorner.x) * vCorner.y, vCorner.x * vCorner.y);
+      ${mixed?'w=mix(w,forestWeights(vCorner),1.-dot(w,keep));':'if(fullTerrain>1.5) w=forestWeights(vCorner);'}
       if (vLayers.y == vLayers.x) { w.x += w.y; w.y = 0.0; }
       if (vLayers.z == vLayers.x) { w.x += w.z; w.z = 0.0; } else if (vLayers.z == vLayers.y) { w.y += w.z; w.z = 0.0; }
       if (vLayers.w == vLayers.x) { w.x += w.w; w.w = 0.0; } else if (vLayers.w == vLayers.y) { w.y += w.w; w.w = 0.0; } else if (vLayers.w == vLayers.z) { w.z += w.w; w.w = 0.0; }
+      ${applyLandscapeBlend(false,mixed)}
       c = vec3(0.0);
-      if (w.x > 0.004) c += layer(vLayers.x) * w.x;
-      if (w.y > 0.004) c += layer(vLayers.y) * w.y;
-      if (w.z > 0.004) c += layer(vLayers.z) * w.z;
-      if (w.w > 0.004) c += layer(vLayers.w) * w.w;
+      if (w.x > 0.) c += layer(vLayers.x) * w.x;
+      if (w.y > 0.) c += layer(vLayers.y) * w.y;
+      if (w.z > 0.) c += layer(vLayers.z) * w.z;
+      if (w.w > 0.) c += layer(vLayers.w) * w.w;
     }
-    c *= texture(clouds, (vWorld.xy + cloudAt.xy) / cloudAt.z).rgb * sunlit(vWorld);
+    if(bank>0. && bank<1.)c=mix(c,layer(63.),bank);
+#endif
+    ${mixed?'c=orbitEncode(c);':'if(fullTerrain>.5)c=orbitEncode(c);'}
+    if(landGround.w<0.5 && !remasteredReceiver()){if(receiverMap.z>0.0)c*=vis;else c*=cl*vis;}
+    ${scorchedSoil(false)}
     vec3 glow = vec3(0.0);
     for (int i = 0; i < 8; i++) {
       vec4 G = glowAt[i];
@@ -92,9 +182,11 @@ const FRAG = `
       if (d < 1.0) occ *= 1.0 - O.w * (1.0 - d) * (1.0 - d);
     }
     c = c * occ + glow * (vec3(0.35) + c);
+    if(fullTerrain>.5){${woodMist(false,'c','vWorld')}${forestAir(false,false,'vWorld','c')}}
+    if(fieldLook.x>0.0)c=mix(c,fogTint,airDepth(vWorld));
     float seen = texture(fog, vWorld.xy / side).r;
     float clear = fogRange.y > 0.0 ? clamp((fogRange.y - distance(cameraPosition, vWorld)) / max(1.0, fogRange.y - fogRange.x), 0.0, 1.0) : 1.0;
-    outColor = vec4(mix(fogTint, c * vShade * mix(0.3, 1.0, seen), clear), 1.0);
+    outColor = vec4(mix(fogTint, c * mix(0.3, 1.0, seen), clear), 1.0-terrainContactMask);
   }`;
 
 function texturePlanes(L) {
@@ -219,7 +311,7 @@ function arrayTexture(chains) {
   return tex;
 }
 
-export function heightAt(t, x, y) {
+export function heightAt(t, x, y, renderedTriangles = false, surface = t.craterSurface) {
   const n = t.size,
     gx = Math.min((t.width ?? n) - 1.001, Math.max(0, x / CELL)),
     gy = Math.min((t.height ?? n) - 1.001, Math.max(0, y / CELL));
@@ -232,7 +324,11 @@ export function heightAt(t, x, y) {
     b = h[iy * n + ix + 1],
     c = h[(iy + 1) * n + ix],
     d = h[(iy + 1) * n + ix + 1];
-  const v = (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy,
+  // Only new solo battles install a gameplay surface. Resolve building pads
+  // AFTER the soil so a hit below a raised platform never lowers its top.
+  const offset = surface?.offsetAt(x,y) || 0;
+  const v = (renderedTriangles || offset !== 0 ? (fx >= fy ? a + fx*(b-a) + fy*(d-b) : a + fy*(c-a) + fx*(d-c))
+    : (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy) + offset,
     L = t.padTop;
   if (L && x >= 0 && y >= 0) {
     const i = (x / L.cell) | 0,
@@ -290,10 +386,12 @@ export function paintFog(t, eyes, remember = true, dt = 0, regrow = 6) {
 
 function quadLayers(t, slot, quad) {
   const any = quad.find(i => slot.has(t.layerIndex[i]));
-  return quad.map(i => slot.get(t.layerIndex[slot.has(t.layerIndex[i]) ? i : any]) ?? 0);
+  return quad.map(i => {const j=slot.has(t.layerIndex[i])?i:any,raw=slot.get(t.layerIndex[j])??0;return t.paint?.floorLayout && j!==undefined?t.paint.floorLayout.slotAt(j,raw):raw;});
 }
 
-export async function buildTerrain(t) {
+// Shared by the renderer and the installed-map geometry qualification pass.
+// Keep the actual cell topology, including omitted TED holes, in one place.
+export function terrainGeometry(t) {
   const n = t.size, width = t.width ?? n, height = t.height ?? n,
     h = t.heights;
   const normals = new Float32Array(n * n * 3);
@@ -303,8 +401,9 @@ export async function buildTerrain(t) {
         r = h[y * n + Math.min(width - 1, x + 1)],
         d = h[Math.max(0, y - 1) * n + x],
         u = h[Math.min(height - 1, y + 1) * n + x];
-      const nx = (l - r) / (2 * CELL),
-        ny = (d - u) / (2 * CELL),
+      // On the perimeter the clamped samples are only one cell apart.
+      const nx = (l - r) / (CELL * (x > 0 && x < width - 1 ? 2 : 1)),
+        ny = (d - u) / (CELL * (y > 0 && y < height - 1 ? 2 : 1)),
         len = Math.hypot(nx, ny, 1),
         o = (y * n + x) * 3;
       normals[o] = nx / len;
@@ -366,7 +465,11 @@ export async function buildTerrain(t) {
   geo.setAttribute('corner', new THREE.BufferAttribute(cor, 2));
   geo.setAttribute('shade', new THREE.BufferAttribute(sh, 1));
   geo.computeBoundingSphere();
+  return {geo, triAt, slot, used};
+}
 
+export async function buildTerrain(t, map, render, signal) {
+  const {geo, triAt, slot, used} = terrainGeometry(t), n=t.size;
   const texU = [],
     texV = [],
     matDiffuse = [],
@@ -374,6 +477,8 @@ export async function buildTerrain(t) {
   for (let k = 0; k < SLOTS; k++) {
     const L = t.layers[used[k]] || {},
       [U, V] = texturePlanes(L);
+    // UV planes use xyz; pack absorption and film response in the available w lanes.
+    [U[3], V[3]] = wetSurface(L);
     texU.push(new THREE.Vector4(...U));
     texV.push(new THREE.Vector4(...V));
     matDiffuse.push(new THREE.Vector3(...(L.diffuse || [1, 1, 1])));
@@ -383,16 +488,22 @@ export async function buildTerrain(t) {
     used.map(i => Promise.all([loadDDS(t.layers[i].texture), t.layers[i].bump ? loadDDS(t.layers[i].bump) : null]))
   );
   const tex = arrayTexture(files.map(f => layerChain(f[0], [128, 128, 128, 0])));
-  const bump = arrayTexture(files.map(f => layerChain(f[1], [128, 128, 255, 255])));
+  const bumpLayers = files.map(f => layerChain(f[1], [128, 128, 255, 255]));
+  const soilSlot = forestSlot(profile, map?.file, used.map(i => t.layers[i]));
+  const bump = arrayTexture(bumpLayers);
+  const soil = { forestSlot: { value: 0 }, soilColor: { value: null }, soilSurface: { value: null } };
+  const updateForest = soilSlot >= 0 && endorFloor(map, t.layers[used[soilSlot]], soilSlot, soil, render, signal);
   const C = t.clouds || {},
     cloudAt = new THREE.Vector3(0, 0, C.tile > 0 ? C.tile : 500);
   const mat = new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
     vertexShader: VERT,
-    fragmentShader: FRAG,
+    fragmentShader: terrainFragment(false),
     uniforms: {
       map: { value: tex },
       bump: { value: bump },
+      ...soil,
+      fullTerrain: {value:0}, terrainContactMask: {value:0}, landStyle:lighting.landStyle, forestWeather:lighting.forestWeather, canopyMap:{value:null}, reliefPatch:{value:new THREE.Vector4()},
       texU: { value: texU },
       texV: { value: texV },
       matDiffuse: { value: matDiffuse },
@@ -402,6 +513,14 @@ export async function buildTerrain(t) {
       fog: { value: fogTexture(t) },
       side: { value: (n - 1) * CELL },
       detail: { value: 0 },
+      textureCubic: lighting.textureCubic,
+      groundWet: { value: 0 },
+      waterLine: { value: t.water?.mode ? t.water.level : -1e20 },
+      terrainLayers: {
+        get value() {
+          return strength(battlePrefs(gfx).terrainLayers);
+        }
+      },
       glowAt: { value: Array.from({ length: 8 }, () => new THREE.Vector4()) },
       glowTint: { value: Array.from({ length: 8 }, () => new THREE.Vector4()) },
       occAt: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) },
@@ -416,18 +535,38 @@ export async function buildTerrain(t) {
       fogRange: lighting.fogRange,
       shadowMap: lighting.shadowMap,
       shadowMatrix: lighting.shadowMatrix,
+      fieldLook: lighting.fieldLook,
+      landGround: lighting.landGround, receiverMap:lighting.receiverMap,
+      landProbeOn:lighting.landProbeOn, orbitPos:lighting.orbitPos, orbitNeg:lighting.orbitNeg, wideShadow:lighting.wideShadow,
+      hullShadowMatrix: lighting.hullShadowMatrix,
+      hullShadowParams: lighting.hullShadowParams,
+      hullShadowMap: lighting.hullShadowMap,
       shadowOn: lighting.shadowOn,
       shadowTexel: lighting.shadowTexel
     }
   });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.frustumCulled = false;
+  if (!render?.isMirror) enableTerrainCulling(mesh,t,triAt);
   const drift = C.drift || [0, 0, 0];
   mesh.userData.tick = dt => {
+    if (updateForest) updateForest(gfx.endorForestFloor === true && !gfx.endorLandscape);
     cloudAt.x += drift[0] * dt;
     cloudAt.y += drift[1] * dt;
   };
+  const palette=[];
+  mesh.userData.soil=soilColor(t,used,files,palette);
+  mesh.userData.makeSoilGrid=()=>soilGrid(t,palette,mesh.userData.soil,CELL);
+  mesh.userData.lowland=lowland(t);
+  mesh.userData.stockDaylight=profile==='stock';
   t.paint = { slot, triAt, geo };
+  if (profile==='stock' && map?.file?.toUpperCase()==='_MP_LAND_ENDOR.TED' && signal)
+    mesh.userData.landscape=endorLandscape(mesh,t,used,map,render,signal);
+  else if(signal && profile==='stock'){
+    const key=map?.sourcePath?.toUpperCase().replaceAll('\\','/');
+    const recipe=[yavinRecipe,tatooineRecipe,hothRecipe,geonosisRecipe,nabooRecipe,utapauRecipe].find(r=>edition()===r.edition&&key===r.path);
+    if(recipe){t.paint.trackConstruction=true;mesh.userData.landscape=reviewedLandscape(mesh,t,used,map,render,signal,recipe,palette,()=>terrainFragment(true));}
+  }
   return mesh;
 }
 
@@ -440,6 +579,8 @@ export function paveTerrain(t, cells, layer) {
   for (const i of cells) {
     if (!P.slot.has(t.layerIndex[i])) continue;
     t.layerIndex[i] = layer;
+    // Draw-only receipt for the cells the engine actually paved, not a proximity guess.
+    if (P.trackConstruction) (P.construction ||= new Uint8Array(t.layerIndex.length))[i]=layer+1;
     const x = i % n,
       y = (i / n) | 0;
     for (let dy = -1; dy <= 0; dy++)
@@ -456,6 +597,8 @@ export function paveTerrain(t, cells, layer) {
       if (v0 >= 0) for (let j = 0; j < 3; j++) lay.setXYZW(v0 + j, L[0], L[1], L[2], L[3]);
     }
   }
+  if(quads.size)P.paintRevision=(P.paintRevision||0)+1;
+  P.soilGrid?.pave(cells);
   lay.needsUpdate = true;
 }
 
@@ -465,29 +608,41 @@ const WATER_VERT = `
   varying vec3 vWorld; varying vec4 vMirror; varying float vDepth;
   void main() { vWorld = position; vDepth = depth; vMirror = mirror * vec4(position, 1.0); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 const HAZE = `
+  uniform vec4 fieldLook;
+  ${airShader(false)}
   uniform vec3 fogTint; uniform vec2 fogRange;
-  float haze(vec3 at) { return fogRange.y > 0.0 ? clamp((fogRange.y - distance(cameraPosition, at)) / max(1.0, fogRange.y - fogRange.x), 0.0, 1.0) : 1.0; }`;
+  float haze(vec3 at) { return (1.0-airDepth(at))*(fogRange.y > 0.0 ? clamp((fogRange.y - distance(cameraPosition, at)) / max(1.0, fogRange.y - fogRange.x), 0.0, 1.0) : 1.0); }`;
 const SHORE = `
   uniform vec2 shore;
   float shoreAlpha(float depth) { return clamp(shore.y + (1.0 - shore.y) * clamp(depth * shore.x, 0.0, 1.0), 0.0, 1.0); }`;
-const SLIDE = `
-  uniform float time;
-  vec2 slide(vec4 r, float aside) { return vec2((vWorld.x * cos(r.y) + vWorld.y * sin(r.y)) / r.x + r.z * cos(r.w + aside) * time, vWorld.y * cos(r.y) / r.x + r.z * sin(r.w + aside) * time); }`;
+const SLIDE = slideShader(false);
 
+const OPTICS=`uniform vec4 receiverMode,waterBase,forestWeather,landGround; uniform float landProbeOn; uniform mat3 orbitPos; uniform vec3 sunColor,sunDir; ${waterShader(false)} ${dayWater(false)}`;
 const WATER_UNDER = `
+  ${OPTICS}
   uniform vec3 under;
   varying float vDepth; varying vec3 vWorld;
   ${SHORE} ${HAZE}
-  void main() { float a = shoreAlpha(vDepth) * haze(vWorld); gl_FragColor = vec4(vec3(1.0 - a) + a * under, 1.0); }`;
+  void main() { float a=shoreAlpha(vDepth)*haze(vWorld);vec3 bed=under;
+    if(receiverMode.w>0.){bed=mix(under,bedLight(viewWater(vWorld,vDepth)),receiverMode.w);
+      if(landProbeOn>0.)bed=mix(under,pow(lakeT(vWorld,vDepth)*(1.-lakeF(vWorld)),vec3(1./2.2)),smoothstep(0.,.32,receiverMode.w));}
+    gl_FragColor=vec4(vec3(1.-a)+a*bed,1.); }`;
 const WATER_OVER = `
+  ${OPTICS}
+  ${ringShader(false)}
   uniform sampler2D bump, reflection, fog; uniform vec3 over; uniform vec4 ripple; uniform float bend, side;
   varying vec3 vWorld; varying vec4 vMirror; varying float vDepth;
   ${SHORE} ${SLIDE} ${HAZE}
   void main() {
     vec2 d = (texture2D(bump, slide(ripple, -0.7853982)).xy - 0.5) * 2.0 + (texture2D(bump, slide(ripple, 0.7853982)).xy - 0.5) * 2.0;
+    vec2 ring=vec2(0.);if(forestWeather.y>0.){ring=forestWeather.y*showerRing(vWorld.xy,time);d+=.6*ring;}
     vec3 r = texture2D(reflection, clamp((vMirror.xy + d * bend * 200.0) / vMirror.w, 0.002, 0.998)).rgb;
     float seen = mix(0.3, 1.0, texture2D(fog, vWorld.xy / side).r);
-    gl_FragColor = vec4(r * over * shoreAlpha(vDepth) * seen * haze(vWorld), 1.0);
+    vec3 surface=r*over;
+    if(receiverMode.w>0.0){vec2 opt=viewWater(vWorld,vDepth);surface=mix(surface,r*opt.x+waterBase.rgb*(1.0-exp(-opt.y))*0.10*(1.0-opt.x),receiverMode.w);}
+    if(landProbeOn>0. && receiverMode.w>0.)surface=mix(r*over,lakeLd(vWorld,vDepth,r),smoothstep(0.,.32,receiverMode.w));
+    surface+=vec3(.10,.13,.14)*max(0.,dot(ring,vec2(.62,.79)));
+    gl_FragColor = vec4(surface * shoreAlpha(vDepth) * seen * haze(vWorld), 1.0);
   }`;
 const LAVA_FRAG = `
   uniform sampler2D base, crust, bump, fog; uniform vec4 flow, lie; uniform vec3 sunDir, sunColor, ambient, glint; uniform float side;
@@ -524,9 +679,12 @@ export function drawSky(renderer, sky, eye) {
   keptInverse.copy(eye.projectionMatrixInverse);
   eye.projectionMatrix.copy(P);
   eye.projectionMatrixInverse.copy(P).invert();
-  renderer.render(sky, eye);
-  eye.projectionMatrix.copy(keptProjection);
-  eye.projectionMatrixInverse.copy(keptInverse);
+  try {
+    renderer.render(sky, eye);
+  } finally {
+    eye.projectionMatrix.copy(keptProjection);
+    eye.projectionMatrixInverse.copy(keptInverse);
+  }
 }
 
 function mirrorOf(level) {
@@ -551,7 +709,6 @@ function mirrorOf(level) {
     matrix,
     render(renderer, camera, draw) {
       camAt.setFromMatrixPosition(camera.matrixWorld);
-      if (camAt.z <= level) return false;
       renderer.getDrawingBufferSize(size);
       const w = Math.max(4, size.x >> 1),
         h = Math.max(4, size.y >> 1);
@@ -582,12 +739,14 @@ function mirrorOf(level) {
       p[14] = clip.w;
       eye.projectionMatrixInverse.copy(eye.projectionMatrix).invert();
       const was = renderer.getRenderTarget();
-      renderer.setRenderTarget(target);
-      renderer.state.buffers.depth.setMask(true);
-      renderer.clear();
-      draw(eye);
-      renderer.setRenderTarget(was);
-      return true;
+      try {
+        renderer.setRenderTarget(target);
+        renderer.state.buffers.depth.setMask(true);
+        renderer.clear();
+        draw(eye);
+      } finally {
+        renderer.setRenderTarget(was);
+      }
     }
   };
 }
@@ -595,28 +754,9 @@ function mirrorOf(level) {
 export function buildWater(t) {
   const w = t.water;
   if (!w || !w.mode) return null;
-  const n = t.size,
-    h = t.heights,
-    level = w.level,
-    side = (n - 1) * CELL;
-  const pos = [],
-    depth = [];
-  for (let y = 0; y < (t.height ?? n) - 1; y++)
-    for (let x = 0; x < (t.width ?? n) - 1; x++) {
-      const a = y * n + x,
-        ids = [a, a + 1, a + n + 1, a, a + n + 1, a + n];
-      if (!ids.some(i => h[i] < level)) continue;
-      for (const i of ids) {
-        pos.push((i % n) * CELL, ((i / n) | 0) * CELL, level);
-        depth.push(level - h[i]);
-      }
-    }
-  if (!pos.length) return null;
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setAttribute('depth', new THREE.Float32BufferAttribute(depth, 1));
-  geo.computeBoundingBox();
-  geo.computeBoundingSphere();
+  const level = w.level, side = (t.size - 1) * CELL;
+  const regions = w.mode === 2 ? null : [], geo = liquidGeometry(t, CELL, regions);
+  if (!geo) return null;
   const file = name => (name ? (/\.\w+$/.test(name) ? name : name + '.tga') : '');
   const layer = i => {
     const r = w.ripples[i] || { tile: 150, turn: 0, speed: 0.05, heading: 0 };
@@ -636,7 +776,7 @@ export function buildWater(t) {
       new THREE.ShaderMaterial({
         vertexShader: WATER_VERT,
         fragmentShader,
-        uniforms: { time, fog, side: sideU, shore, fogTint, fogRange, ...uniforms },
+        uniforms: { time, fog, side: sideU, shore, fogTint, fogRange, fieldLook:lighting.fieldLook, ...uniforms },
         ...more
       })
     );
@@ -648,15 +788,16 @@ export function buildWater(t) {
   if (w.mode === 1) {
     const k = Math.min(1, Math.max(0, w.reflect));
     glass = mirrorOf(level);
+    const optical={...light,landProbeOn:lighting.landProbeOn,orbitPos:lighting.orbitPos,forestWeather:lighting.forestWeather,landGround:lighting.landGround,waterBase:{value:new THREE.Vector4(...w.tint,k)},receiverMode:lighting.receiverMode};
     add(
       WATER_UNDER,
-      { under: { value: new THREE.Vector3(...w.tint).multiplyScalar(1 - k) } },
+      { ...optical, under: { value: new THREE.Vector3(...w.tint).multiplyScalar(1 - k) } },
       { transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendSrc: THREE.ZeroFactor, blendDst: THREE.SrcColorFactor }
     );
     add(
       WATER_OVER,
       {
-        over: { value: new THREE.Vector3(...w.tint).multiplyScalar(k) },
+        ...optical, forestWeather:lighting.forestWeather, over: { value: new THREE.Vector3(...w.tint).multiplyScalar(k) },
         bump: { value: loadTexture(file(w.textures[0])) },
         ripple: { value: layer(0) },
         bend: { value: w.bend * 0.02 },
@@ -692,21 +833,37 @@ export function buildWater(t) {
   }
   const frustum = new THREE.Frustum(),
     pv = new THREE.Matrix4();
-  let turn = 0;
+  // Usually the last visible region is still on screen. This is only a culling
+  // aid; both optical layers continue to share the original single sheet.
+  let lastRegion = 0;
+  function inView() {
+    if (!frustum.intersectsBox(geo.boundingBox)) return false;
+    if (regions.length === 1 || frustum.intersectsBox(regions[lastRegion])) return true;
+    for (let i = 0; i < regions.length; i++) {
+      if (i !== lastRegion && frustum.intersectsBox(regions[i])) { lastRegion = i; return true; }
+    }
+    return false;
+  }
+  let reusableBy = null;
   group.userData.tick = dt => {
     time.value += dt;
   };
   group.userData.mirror = (renderer, camera, draw) => {
     if (!glass) return;
     frustum.setFromProjectionMatrix(pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
-    if (!frustum.intersectsBox(geo.boundingBox)) {
-      turn = 0;
+    if (!group.visible || camera.matrixWorld.elements[14] <= level || !inView()) {
+      reusableBy = null;
       return;
     }
-    if (turn++ & 1) return;
+    if (reusableBy === renderer) { reusableBy = null; return; }
+    reusableBy = null;
     group.visible = false;
-    glass.render(renderer, camera, draw);
-    group.visible = true;
+    try {
+      glass.render(renderer, camera, draw);
+      reusableBy = renderer; // The target's pixels are local to the device that drew them.
+    } finally {
+      group.visible = true;
+    }
   };
   return group;
 }
@@ -715,12 +872,13 @@ const SKY_VERT = `
   varying vec2 vUv;
   void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 const SKY_FRAG = `
-  uniform sampler2D map, clouds; uniform float cloudScale, cloudRate, time;
+  uniform sampler2D map, clouds; uniform float cloudScale, cloudRate, time; uniform vec4 forestWeather;
   varying vec2 vUv;
   void main() {
     vec3 base = texture2D(map, vUv).rgb;
     vec4 c = texture2D(clouds, vUv * cloudScale + vec2(time * cloudRate, 0.0));
-    gl_FragColor = vec4(base + c.rgb * c.a * 0.35, 1.0);
+    vec3 sky=base+c.rgb*c.a*.35;
+    gl_FragColor = vec4(${showerSky(false)},1.0);
   }`;
 
 export function skyMaterial(params) {
@@ -732,6 +890,7 @@ export function skyMaterial(params) {
     depthWrite: false,
     side: THREE.DoubleSide,
     uniforms: {
+      forestWeather:lighting.forestWeather,
       map: { value: loadTexture(params.BaseTexture || '') },
       clouds: { value: loadTexture(params.CloudTexture || params.BaseTexture || '') },
       cloudScale: { value: params.CloudScale ?? 1 },

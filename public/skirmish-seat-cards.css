@@ -1,0 +1,253 @@
+/* Teams is a roster, not a data table. The right-hand bust sits in front of
+   the faction device. Only the narrow leading stripe is participant paint. */
+.op-team-list {
+  gap: 16px;
+}
+.op-team-list .op-team {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.op-team-list .op-team-title {
+  align-self: center;
+  font-size: 16px;
+}
+.op-team .op-team-add {
+  grid-area: 1/2;
+  justify-self: end;
+}
+.op-team .op-team-add,
+.op-team-list .op-team-create {
+  min-height: 30px;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #d2d9dd;
+}
+.op-team-add::before,
+.op-create-rest::before {
+  content: '+';
+  padding-right: 0.35em;
+  color: #e4c895;
+}
+.op-team-list .op-team-create {
+  border-top: 1px solid #ffffff24;
+  padding-top: 8px;
+}
+.op-seat-cards {
+  list-style: none;
+  grid-column: 1/-1;
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.op-seat-card {
+  --strip: 24px;
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  background: linear-gradient(
+    95deg,
+    color-mix(in srgb, var(--faction-ink) 18%, #091321) 6%,
+    color-mix(in srgb, var(--faction-ink) 34%, #0d1825) 58%,
+    color-mix(in srgb, var(--faction-ink) 65%, #121a23)
+  );
+  border: 1px solid color-mix(in srgb, var(--faction-ink) 52%, #48535e);
+  border-radius: 2px;
+}
+.op-seat-card:has([aria-expanded='true']),
+.op-seat-card.op-lifted {
+  outline: 2px solid #e4c58e;
+  outline-offset: -1px;
+}
+.op-team-list .op-card-choice {
+  position: relative;
+  isolation: isolate;
+  width: calc(100% - var(--strip));
+  margin-left: var(--strip);
+  display: flex;
+  flex-flow: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  overflow: hidden;
+  min-height: 96px;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  padding: 6px 36% 30px 4px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.op-team-list .op-card-choice:hover {
+  background: linear-gradient(90deg, #ffffff0a, transparent);
+}
+.op-card-seat {
+  font: 500 11px/1.1 var(--ui-font);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #d7e0e6;
+}
+.op-seat-card .op-player-name {
+  font: 500 clamp(17px, 1.35vw, 22px) / 1.1 var(--ui-font);
+  padding: 0;
+  color: #fffaf0;
+}
+.op-card-origin {
+  font: 400 12px/1.15 var(--ui-font);
+  color: #d8e2e6;
+}
+.op-card-art {
+  position: absolute;
+  inset: 0 0 0 57%;
+  pointer-events: none;
+  z-index: -1;
+  overflow: hidden;
+}
+.op-card-art .uc-crest {
+  position: absolute;
+  height: 86%;
+  width: 74%;
+  left: 0;
+  top: 7%;
+  object-fit: contain;
+  opacity: 0.83;
+}
+.op-card-art .op-card-still {
+  position: absolute;
+  inset: 0 0 0 auto;
+  height: 100%;
+  width: 80%;
+  object-fit: cover;
+  object-position: center;
+}
+.op-card-still:not([src]) {
+  visibility: hidden;
+}
+.op-card-strip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--strip);
+  height: 100%;
+  min-width: 0;
+  padding: 0 8px 0 4px;
+  appearance: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.op-card-strip::-webkit-color-swatch-wrapper {
+  padding: 4px 0;
+}
+.op-card-strip::-webkit-color-swatch {
+  border: 1px solid #ffffff57;
+  border-radius: 1px;
+}
+.op-card-strip::-moz-color-swatch {
+  border: 1px solid #ffffff57;
+}
+.op-card-controls {
+  position: absolute;
+  left: calc(var(--strip) + 2px);
+  bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 66%;
+  height: 27px;
+}
+.op-card-controls :is(.op-skill, .op-action) {
+  height: 26px;
+  min-height: 0;
+  width: auto;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: 2px;
+  color: #e3e8eb;
+  background: #1019228c;
+  font: 400 13px/1 var(--ui-font);
+}
+.op-card-controls .op-skill {
+  min-width: 65px;
+}
+.op-card-controls :is(.op-card-move, .op-card-remove) {
+  width: 28px;
+}
+.op-card-controls .op-card-move {
+  touch-action: none;
+  cursor: grab;
+}
+.op-card-controls .op-card-move::after {
+  display: inline-block;
+  content: '';
+  width: 11px;
+  height: 12px;
+  background: radial-gradient(circle, #d5dfe1 1px, transparent 1.5px) 0 0/5px 4px;
+}
+.op-card-controls .op-card-remove {
+  font: 18px/1 sans-serif;
+}
+.op-team-list :is(.op-card-choice, .op-card-strip, .op-card-move, .op-card-remove, .op-skill):focus-visible {
+  outline: 2px solid #ffebb7;
+  outline-offset: -2px;
+}
+.op-carrying .op-team-drop {
+  z-index: 2;
+  left: 0;
+  right: auto;
+}
+@media (max-width: 680px) {
+  /* Never hide the cards behind a fullscreen picker: the ring and the scrollable
+     Team rail share the viewport. Tabs and launch validation remain reachable. */
+  .op-setup.op-field-atlas .op-panel.op-staging {
+    grid-template: minmax(0, 44%) minmax(0, 1fr) / minmax(0, 1fr);
+  }
+  .op-panel.op-staging > .op-rail {
+    display: flex;
+  }
+  .op-staging > .op-command-stage {
+    padding: 4px 10px;
+    gap: 2px;
+  }
+  .op-staging .op-family-current {
+    gap: 7px;
+    font-size: 16px;
+  }
+  .op-staging .op-family-current .uc-crest {
+    width: 32px;
+    height: 32px;
+  }
+  .op-staging .op-group-link {
+    font-size: 11px;
+    padding: 1px;
+  }
+  .op-staging .op-ring-caption {
+    gap: 1px;
+  }
+  .op-staging .op-ring-bio h3 {
+    font-size: 21px;
+  }
+  .op-staging :is(.op-ring-origin, .op-ring-dates, .op-ring-meta) {
+    font-size: 11px;
+    line-height: 1.15;
+  }
+  .op-staging .op-ring-assign {
+    padding: 5px 22px;
+    font-size: 14px;
+  }
+}
+@media (max-width: 680px) and (max-height: 520px) and (orientation: landscape) {
+  .op-setup.op-field-atlas .op-panel.op-staging {
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr) minmax(220px, 45%);
+  }
+}

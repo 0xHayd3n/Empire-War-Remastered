@@ -1,0 +1,16 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Endor grass: leafy_grass vs Ground 037</title>
+<style>*{box-sizing:border-box}body{max-width:1040px;margin:auto;padding:20px;background:#121619;color:#eef2ec;font:15px/1.55 system-ui}
+h1{font-size:1.35rem;font-weight:550}figure{--cut:50%;margin:0}.frame{position:relative}.frame img{width:100%;display:block}
+.after{position:absolute;inset:0;clip-path:inset(0 0 0 var(--cut))}.seam{position:absolute;top:0;bottom:0;left:var(--cut);width:2px;background:#fff}
+input{width:100%;margin:14px 0 6px;accent-color:#a5ccae}.row{display:flex;gap:12px;margin-top:14px}
+.sw{flex:1}.sw img{width:100%;display:block}.sw p{margin:.4rem 0 0;font-variant-numeric:tabular-nums}
+figcaption{margin-top:14px;color:#a9b8b0}</style>
+<h1>Endor meadow: 2K albedo, same 512² crop rect</h1>
+<figure><div class="frame"><img src="before-crop.png" alt="leafy_grass, the shipped grass">
+<img class="after" src="after-crop.png" alt="Ground 037, the replacement grass"><i class="seam"></i></div>
+<input aria-label="Reveal the shipped grass" type="range" min="0" max="100" value="50"
+ oninput="this.closest('figure').style.setProperty('--cut',this.value+'%')">
+<div class="row"><div class="sw"><img src="before-mean.png" alt="Mean colour of leafy_grass"><p>Before · leafy_grass · mean sRGB 151.02, 131.34, 89.17</p></div>
+<div class="sw"><img src="after-mean.png" alt="Mean colour of Ground 037"><p>After · Ground037 · mean sRGB 152.44, 146.75, 87.57</p></div></div>
+<figcaption>Left of the seam: the shipped grass (Poly Haven leafy_grass). Right of it: ambientCG Ground 037, both straight from the pinned source PNGs with no tint. The strip below shows each tile's mean colour.</figcaption>
+</figure>

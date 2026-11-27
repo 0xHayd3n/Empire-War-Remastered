@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { openGame } from './megfs.mjs';
 const mod = process.argv.indexOf('--mod');
-const archive = openGame(fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)), mod < 0 ? [] : [process.argv[mod + 1]]);
+const archive = openGame(process.env.SWR_GAME || fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)), mod < 0 ? [] : [process.argv[mod + 1]]);
 globalThis.fetch = async input => {
   const path = String(input);
   if (path.startsWith('api/find?q=')) {
@@ -57,6 +57,9 @@ const make = (delayed = false) => {
   t.gate.moved();
   t.gate.hover(t.target('a'));
   assert.equal(t.builds(), 0, 'not yet');
+  const {setReading} = await import('../public/js/game/readingpreferences.js');
+  setReading('tooltip',0.5); assert.equal(t.gate.delay,375);
+  setReading('tooltip',1);
   t.step(700);
   t.gate.hover(t.target('a'));
   assert.equal(t.builds(), 0, '700 ms is not 750');

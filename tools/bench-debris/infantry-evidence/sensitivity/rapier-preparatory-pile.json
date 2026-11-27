@@ -1,0 +1,58 @@
+{
+  "meta": {
+    "chrome": "158.0.8127.38",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700KF",
+    "cpuRate": 1
+  },
+  "result": {
+    "suite": "quality",
+    "units": {
+      "Stormtrooper": 12,
+      "Rebel_Trooper": 12
+    },
+    "host": 90,
+    "map": "_MP_LAND_TATOOINE.TED",
+    "gpu": "ampere",
+    "backend": "webgpu",
+    "maxStartError": 0,
+    "legs": [
+      {
+        "engine": "rapier",
+        "n": 24,
+        "start": {
+          "bodies": 240,
+          "colliders": 264,
+          "joints": 216
+        },
+        "spawnMs": {
+          "n": 24,
+          "median": 1.04,
+          "p95": 3.745
+        },
+        "afterBlastJoints": 194,
+        "detached": 22,
+        "peakSocketGap": 0.1431,
+        "peakNeckDeg": 14.6906,
+        "peakTorsoRise": 0.1275,
+        "maxTriangle": 4.932,
+        "lowestSampledSkin": -1.323,
+        "minPostFallClearance": -0.9647,
+        "maxPostFallClearance": 0.07,
+        "minFall": 2.8274,
+        "maxDetachedTravel": 13.5214,
+        "parked": 24,
+        "afterParking": {
+          "bodies": 0,
+          "colliders": 0,
+          "joints": 0
+        },
+        "timing": null,
+        "failures": [
+          "Post-fall skin rests on terrain (−0.2 .. 0.7)",
+          "Parked skins grounded"
+        ]
+      }
+    ]
+  },
+  "errors": []
+}

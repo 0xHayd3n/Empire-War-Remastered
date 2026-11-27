@@ -5,6 +5,13 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const src = path.join(here, '..', 'node_modules', 'three');
 const dst = path.join(here, '..', 'public', 'vendor', 'three');
+// The compat ESM contains its own WASM; no CDN or separate fetch at battle time.
+const rapier = path.join(dst, '..', 'rapier');
+fs.mkdirSync(rapier, { recursive: true });
+fs.copyFileSync(path.join(here, '..', 'node_modules', '@dimforge', 'rapier3d-compat', 'rapier.es.js'), path.join(rapier, 'rapier.es.js'));
+const meshopt = path.join(dst, '..', 'meshoptimizer');
+fs.mkdirSync(meshopt, {recursive:true});
+for (const f of ['meshopt_simplifier.js','LICENSE.md']) fs.copyFileSync(path.join(here,'..','node_modules','meshoptimizer',f),path.join(meshopt,f));
 for (const f of ['build/three.module.js', 'examples/jsm/controls/OrbitControls.js', 'LICENSE']) {
   fs.mkdirSync(path.dirname(path.join(dst, f)), { recursive: true });
   fs.copyFileSync(path.join(src, f), path.join(dst, f));

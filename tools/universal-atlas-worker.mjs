@@ -1,5 +1,6 @@
 // Disposable build worker. It reads the resolved local VFS, not Workshop names or remote data.
 // The game database and temporary starting forces die with this worker; only setup metadata leaves it.
+import { campaignPresence } from './campaign-presence.mjs';
 import { parentPort, workerData } from 'node:worker_threads';
 import { openGame } from './megfs.mjs';
 import { loadPack } from './universal-library.mjs';
@@ -326,6 +327,7 @@ try {
     },
     looks,
     facts,
+    presence: campaignPresence(data.campaigns,facts,rows.flatMap(r=>r.variants.map(v=>v.id))),
     planets,
     maps,
     rows,

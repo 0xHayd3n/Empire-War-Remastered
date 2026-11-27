@@ -78,7 +78,7 @@ const assert = require('node:assert/strict'),
       await separate.locator('[data-id="IDC_MAIN_MENU_SINGLE_PLAYER_GAMES"]').waitFor();
       await goHome(separate);
       await separate.locator('[data-id="TITLE_CUSTOMIZE"]:visible').click();
-      await separate.getByRole('heading', { name: 'Customize', exact: true }).waitFor();
+      await separate.locator('#armyPainter[open] #ap-title').waitFor();
       const mountedIds = await separate.evaluate(async () => (await (await fetch('/api/mounted')).json()).map(row => row.workshop));
       assert.deepEqual(mountedIds, ['1125571106']);
       await f.locator('.title-menu[data-section="workshop"]').waitFor();
@@ -87,6 +87,7 @@ const assert = require('node:assert/strict'),
     }
     await goHome();
     await click('TITLE_CUSTOMIZE');
+    await f.getByRole('button', { name: 'Fleet registry', exact: true }).click();
     const fac = f.locator('.faction');
     await fac.locator('option').first().waitFor({ state: 'attached' });
     const v = await fac.locator('option').evaluateAll(os => os.find(o => /^empire$/i.test(o.value))?.value || os[0].value);
@@ -105,7 +106,7 @@ const assert = require('node:assert/strict'),
     await click('TITLE_PLAY');
     await click('IDC_MAIN_MENU_SINGLE_PLAYER_GAMES');
     await click('IDC_INSTANT_BATTLE_BUTTON');
-    await f.getByRole('button', { name: 'Continue', exact: true }).click();
+    await f.getByRole('button', { name: 'Edit fleets', exact: true }).click();
     const preset = f.getByLabel('Fleet preset', { exact: true });
     await preset.selectOption({ label: fleet });
     await f.getByRole('button', { name: 'Apply preset' }).click();
@@ -114,9 +115,11 @@ const assert = require('node:assert/strict'),
     console.log('Preset applied to live staging:', selected);
     await page.goto(`http://127.0.0.1:${port}/`);
     await click('TITLE_CUSTOMIZE');
+    await f.getByRole('button', { name: 'Fleet registry', exact: true }).click();
     const ps = f.locator('select.profile');
     await ps.locator('option[value="1125571106"]').waitFor({ state: 'attached' });
     await ps.selectOption('1125571106');
+    await f.getByRole('button', { name: 'Fleet registry', exact: true }).click();
     await f
       .locator('.title-menu[data-section="customize"] select.profile option[value="1125571106"]:checked')
       .waitFor({ state: 'attached' });

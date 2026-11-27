@@ -1,0 +1,254 @@
+{
+  "meta": {
+    "chrome": "158.0.8127.38",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700KF",
+    "cpuRate": 1
+  },
+  "result": {
+    "suite": "live",
+    "units": {
+      "Stormtrooper": 12,
+      "Rebel_Trooper": 12
+    },
+    "host": 94,
+    "map": "_MP_LAND_TATOOINE.TED",
+    "gpu": "ampere",
+    "backend": "webgpu",
+    "maxStartError": 0,
+    "legs": [
+      {
+        "engine": "rapier",
+        "n": 24,
+        "start": {
+          "bodies": 240,
+          "colliders": 264,
+          "joints": 216
+        },
+        "spawnMs": {
+          "n": 24,
+          "median": 1.07,
+          "p95": 2.375
+        },
+        "afterBlastJoints": 192,
+        "detached": 24,
+        "peakSocketGap": 0.0047,
+        "peakNeckDeg": 14.3295,
+        "peakTorsoRise": 0,
+        "maxTriangle": 4.932,
+        "lowestSampledSkin": 0.0544,
+        "minPostFallClearance": 0.0544,
+        "maxPostFallClearance": 0.07,
+        "minStartingClearance": 0.07,
+        "parkedSkinRange": [
+          0.026,
+          0.07
+        ],
+        "parkedBelowTolerance": [],
+        "minFall": null,
+        "maxDetachedTravel": 16.6091,
+        "parked": 24,
+        "afterParking": {
+          "bodies": 0,
+          "colliders": 0,
+          "joints": 0
+        },
+        "timing": {
+          "frameMs": {
+            "n": 120,
+            "median": 22.21,
+            "p95": 55.62
+          },
+          "ragdollMs": {
+            "n": 120,
+            "median": 8.26,
+            "p95": 11.69
+          },
+          "solverMs": {
+            "n": 120,
+            "median": 7.065,
+            "p95": 9.57
+          },
+          "submitted": 120,
+          "gameSeconds": 3.233,
+          "units": 69
+        },
+        "failures": []
+      },
+      {
+        "engine": "jolt",
+        "n": 24,
+        "start": {
+          "bodies": 264,
+          "colliders": 264,
+          "joints": 216
+        },
+        "spawnMs": {
+          "n": 24,
+          "median": 2.015,
+          "p95": 3.315
+        },
+        "afterBlastJoints": 192,
+        "detached": 24,
+        "peakSocketGap": 0.0079,
+        "peakNeckDeg": 14.3335,
+        "peakTorsoRise": 0,
+        "maxTriangle": 4.932,
+        "lowestSampledSkin": 0.07,
+        "minPostFallClearance": 0.07,
+        "maxPostFallClearance": 0.07,
+        "minStartingClearance": 0.07,
+        "parkedSkinRange": [
+          0.0458,
+          0.07
+        ],
+        "parkedBelowTolerance": [],
+        "minFall": null,
+        "maxDetachedTravel": 12.3665,
+        "parked": 24,
+        "afterParking": {
+          "bodies": 0,
+          "colliders": 0,
+          "joints": 0
+        },
+        "timing": {
+          "frameMs": {
+            "n": 120,
+            "median": 22.23,
+            "p95": 38.895
+          },
+          "ragdollMs": {
+            "n": 120,
+            "median": 13.385,
+            "p95": 14.825
+          },
+          "solverMs": {
+            "n": 120,
+            "median": 12.15,
+            "p95": 13.725
+          },
+          "submitted": 120,
+          "gameSeconds": 2.933,
+          "units": 65
+        },
+        "failures": []
+      },
+      {
+        "engine": "jolt",
+        "n": 24,
+        "start": {
+          "bodies": 264,
+          "colliders": 264,
+          "joints": 216
+        },
+        "spawnMs": {
+          "n": 24,
+          "median": 2.005,
+          "p95": 3.32
+        },
+        "afterBlastJoints": 192,
+        "detached": 24,
+        "peakSocketGap": 0.0079,
+        "peakNeckDeg": 14.3335,
+        "peakTorsoRise": 0,
+        "maxTriangle": 4.932,
+        "lowestSampledSkin": 0.07,
+        "minPostFallClearance": 0.07,
+        "maxPostFallClearance": 0.07,
+        "minStartingClearance": 0.07,
+        "parkedSkinRange": [
+          0.0458,
+          0.07
+        ],
+        "parkedBelowTolerance": [],
+        "minFall": null,
+        "maxDetachedTravel": 12.3665,
+        "parked": 24,
+        "afterParking": {
+          "bodies": 0,
+          "colliders": 0,
+          "joints": 0
+        },
+        "timing": {
+          "frameMs": {
+            "n": 120,
+            "median": 22.215,
+            "p95": 27.83
+          },
+          "ragdollMs": {
+            "n": 120,
+            "median": 12.37,
+            "p95": 14.585
+          },
+          "solverMs": {
+            "n": 120,
+            "median": 11.36,
+            "p95": 13.2
+          },
+          "submitted": 120,
+          "gameSeconds": 2.633,
+          "units": 60
+        },
+        "failures": []
+      },
+      {
+        "engine": "rapier",
+        "n": 24,
+        "start": {
+          "bodies": 240,
+          "colliders": 264,
+          "joints": 216
+        },
+        "spawnMs": {
+          "n": 24,
+          "median": 1.07,
+          "p95": 1.46
+        },
+        "afterBlastJoints": 192,
+        "detached": 24,
+        "peakSocketGap": 0.0047,
+        "peakNeckDeg": 14.327,
+        "peakTorsoRise": 0,
+        "maxTriangle": 4.932,
+        "lowestSampledSkin": 0.0544,
+        "minPostFallClearance": 0.0544,
+        "maxPostFallClearance": 0.07,
+        "minStartingClearance": 0.07,
+        "parkedSkinRange": [
+          0.0016,
+          0.07
+        ],
+        "parkedBelowTolerance": [],
+        "minFall": null,
+        "maxDetachedTravel": 16.6059,
+        "parked": 24,
+        "afterParking": {
+          "bodies": 0,
+          "colliders": 0,
+          "joints": 0
+        },
+        "timing": {
+          "frameMs": {
+            "n": 120,
+            "median": 11.13,
+            "p95": 16.69
+          },
+          "ragdollMs": {
+            "n": 120,
+            "median": 7.075,
+            "p95": 8.14
+          },
+          "solverMs": {
+            "n": 120,
+            "median": 6.195,
+            "p95": 7.135
+          },
+          "submitted": 120,
+          "gameSeconds": 1.633,
+          "units": 59
+        },
+        "failures": []
+      }
+    ]
+  },
+  "errors": []
+}

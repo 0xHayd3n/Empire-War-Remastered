@@ -6,8 +6,9 @@ import { activeLanguage } from '../language.js';
 import { changeController } from './galacticpolitics.js';
 import { planetFactionChange } from './galacticobliterate.js';
 import { StoryPlots } from './storyplots.js';
+import { GalacticSources, moduleKey, mountedSourceLibrary } from './galacticsources.js';
 import { StoryFlags } from './storyflags.js';
-import { fetchText, findFiles } from '../vfs.js';
+import { findFiles } from '../vfs.js';
 import { LuaVM, LuaRef, Multi, loadFengari, engineLacksMethod } from '../lua.js';
 import { GalacticNeutralizePopup } from './galacticpopup.js';
 import { NeutralizeShell } from './neutralizeshell.js';
@@ -50,10 +51,6 @@ const key = s =>
   String(s || '')
     .replace(/\\/g, '/')
     .toUpperCase();
-const moduleKey = s =>
-  key(s)
-    .replace(/\.LUA$/i, '')
-    .replace(/\./g, '/');
 const yes = s => /^(true|yes|1)$/i.test(String(s));
 const scriptNames = new WeakMap();
 const objectScriptName = type => {
@@ -98,14 +95,23 @@ const runsInGalaxy = src =>
   /["']Galactic["']/.test(src) || !/Get_Game_Mode\s*\(\s*\)\s*~=\s*["'](Space|Land)["']/.test(src);
 
 export class GalacticStoryHost extends StoryPlots {
-  static async create(game, { warm = true } = {}) {
-    const restoring = !!game.setup?.restore;
-    const files = await findFiles('SCRIPTS\\\\.*\\.LUA$').catch(() => []);
+  static async prepare(restoring) {
+    const packed = await mountedSourceLibrary();
+    const files = packed ? [...packed.keys()] : await findFiles('SCRIPTS\\\\.*\\.LUA$').catch(() => []);
     if (!files.length && !restoring) return null;
-    const host = new GalacticStoryHost(game, await loadFengari(), files);
+    const sources = new GalacticSources(files, packed);
+    if (!restoring && sources.index.has('GAMESCORING')) sources.source('GameScoring');
+    return { sources, fengari: await loadFengari() };
+  }
+
+  static async create(game, { warm = true, prepared, brain } = {}) {
+    const restoring = !!game.setup?.restore;
+    const inputs = prepared === undefined ? await this.prepare(restoring) : prepared;
+    if (!inputs) return null;
+    const host = new GalacticStoryHost(game, inputs.fengari, inputs.sources);
+    host.brain = brain || await readBrain(['BasicGalacticEquations'], [], []);
     game.story = host;
     if (restoring) {
-      host.brain = await readBrain(['BasicGalacticEquations'], [], []);
       const saved = game.galaxy.storyLuaSaved;
       if (saved) {
         try {
@@ -137,13 +143,10 @@ export class GalacticStoryHost extends StoryPlots {
   constructor(game, fengari, files) {
     super();
     this.game = game;
-    this.index = new Map();
-    this.prefetchModules = new Map();
-    this.moduleAliases = new Map();
-    this.sources = new Map();
-    this.pending = new Map();
-    this.sourceQueue = [];
-    this.activeSources = 0;
+    this.library = files instanceof GalacticSources ? files : new GalacticSources(files);
+    this.index = this.library.index;
+    this.sources = this.library.sources;
+    this.pending = this.library.pending;
     this.instances = [];
     this.plots = new Map();
     this.storyScripts = new Map();
@@ -154,7 +157,7 @@ export class GalacticStoryHost extends StoryPlots {
     this.types = new WeakMap();
     this.players = new Map();
     this.planets = new WeakMap();
-    this.errors = new Map();
+    this.errors = this.library.errors;
     this.missing = new Map();
     this.reasonCache = new Map();
     this.parameterCache = new WeakMap();
@@ -186,26 +189,6 @@ export class GalacticStoryHost extends StoryPlots {
       }
     };
     this.popup = game.neutralizePopup ||= NeutralizeShell.available(game) ? new NeutralizeShell(game) : new GalacticNeutralizePopup(game);
-    for (const path of files.slice().sort((a, b) => Number(!/\\LIBRARY\\/i.test(a)) - Number(!/\\LIBRARY\\/i.test(b)))) {
-      const parts = key(path)
-        .replace(/^.*?\/SCRIPTS\//, '')
-        .replace(/\.LUA$/, '')
-        .split('/');
-      for (let i = 0; i < parts.length; i++) {
-        const n = parts.slice(i).join('/');
-        if (!this.index.has(n)) this.index.set(n, path);
-        const aliases = this.moduleAliases.get(n) || [];
-        aliases.push(parts.join('/'));
-        this.moduleAliases.set(n, aliases);
-      }
-      if (parts.at(-1) === 'INIT')
-        for (let i = 0; i < parts.length - 1; i++) {
-          const alias = parts.slice(i, -1).join('/'),
-            modules = this.prefetchModules.get(alias) || [];
-          modules.push(parts.join('/'));
-          this.prefetchModules.set(alias, modules);
-        }
-    }
     this.vm = new LuaVM(fengari, { source: n => this.source(n) });
     this.vm.traceHost = () => ({ inst: this.current, t: this.game.galaxy ? this.game.galaxy.time : NaN, mode: 'G' });
     this.vm.pairsLua50();
@@ -221,7 +204,6 @@ export class GalacticStoryHost extends StoryPlots {
   }
 
   async initialize(warm = true) {
-    this.brain = await readBrain(['BasicGalacticEquations'], [], []);
     const override = this.game.setup?.startingTechLevel;
     if (Number.isInteger(override) && override >= 0 && override < 6)
       for (const player of this.game.galaxy.players) player.tech = Math.max(0, Math.min(player.maxTech, override));
@@ -432,64 +414,7 @@ export class GalacticStoryHost extends StoryPlots {
   }
 
   source(name) {
-    const requested = moduleKey(name),
-      path = this.index.get(requested);
-    const n = path ? moduleKey(key(path).replace(/^.*?\/SCRIPTS\//, '')) : requested;
-    if (this.sources.has(n)) return this.sources.get(n);
-    if (!path) {
-      this.sources.set(n, null);
-      return null;
-    }
-    if (!this.pending.has(n)) {
-      const p = this.fetchSource(path.replace(/\\/g, '/'))
-        .catch(error => {
-          this.errors.set('Lua source: ' + path, String(error.message || error));
-          return null;
-        })
-        .then(src => {
-          if (src === null && !this.errors.has('Lua source: ' + path))
-            this.errors.set('Lua source: ' + path, 'Indexed Lua source was not readable');
-          this.sources.set(n, src);
-          this.pending.delete(n);
-          if (this.disposed) return;
-          for (const m of (src || '').matchAll(/require\s*\(?\s*["']([^"']+)["']/g)) this.source(m[1]);
-          for (const m of (src || '').matchAll(/ModContentLoader\.get\s*\(\s*["']([^"']+)["']/g)) {
-            const suffix = '/' + moduleKey(m[1]);
-            for (const name of this.index.keys()) if (name.endsWith(suffix)) this.source(name);
-          }
-          for (const m of (src || '').matchAll(/["']([^"'\r\n]+)["']/g)) {
-            const name = moduleKey(m[1]);
-            for (const candidate of this.moduleAliases.get(name) || []) this.source(candidate);
-            for (const candidate of this.prefetchModules.get(name) || []) this.source(candidate);
-            if (/[/_]$/.test(name))
-              for (const [alias, candidates] of this.moduleAliases)
-                if (alias.startsWith(name)) for (const candidate of candidates) this.source(candidate);
-          }
-          for (const m of (src || '').matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\s*=/g))
-            for (const candidate of this.moduleAliases.get(moduleKey(m[1])) || []) this.source(candidate);
-        });
-      this.pending.set(n, p);
-    }
-    return undefined;
-  }
-
-  fetchSource(path) {
-    return new Promise((resolve, reject) => {
-      this.sourceQueue.push({ path, resolve, reject });
-      this.drainSources();
-    });
-  }
-  drainSources() {
-    while (this.activeSources < 8 && this.sourceQueue.length) {
-      const job = this.sourceQueue.shift();
-      this.activeSources++;
-      fetchText(job.path)
-        .then(job.resolve, job.reject)
-        .finally(() => {
-          this.activeSources--;
-          this.drainSources();
-        });
-    }
+    return this.library.source(name);
   }
 
   clickFaction(name) {
@@ -2623,7 +2548,7 @@ export class GalacticStoryHost extends StoryPlots {
     };
   }
   dispose() {
-    this.disposed = true;
+    this.disposed = this.library.disposed = true;
     this.popup.close();
     for (const inst of this.instances) this.drop(inst);
     for (const inst of this.objectScripts?.values() || []) if (inst) this.drop(inst);

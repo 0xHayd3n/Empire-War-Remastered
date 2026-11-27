@@ -1,0 +1,320 @@
+{
+  "job": "490435e4137147e142c9c3df434cbcee7946d04f977fcba6e668d96b6ac17b83",
+  "pack": "naboo-ground",
+  "policy": "polyhaven-2k",
+  "families": [
+    {
+      "id": "meadow-turf",
+      "asset": "forrest_ground_01",
+      "role": "grass",
+      "tileMeters": 2,
+      "slots": [
+        0,
+        7,
+        58
+      ],
+      "regular": false,
+      "use": "natural",
+      "evidence": "f642259752748c0da1cdc02f4f1dcff2eb2f674b37d5a2e6fd5fc2e5d44d1340",
+      "why": "Overlap native live blades from the same registered four-channel scan at their original size. The sparse source alone read as bare brown soil at the western muster. No recoloring.",
+      "liveBlades": true
+    },
+    {
+      "id": "open-cover",
+      "asset": "forrest_ground_01",
+      "role": "grass",
+      "tileMeters": 2,
+      "slots": [
+        5,
+        59
+      ],
+      "regular": false,
+      "use": "natural",
+      "evidence": "fd4e25a8976340b587d6d850127d3e289629f395deef72dd2beed6b682a8fed1",
+      "why": "The unlayered sparse sward exposes stems and soil on better-drained shoulders of the same meadow.",
+      "reuse": "yavin-ground"
+    },
+    {
+      "id": "worn-track",
+      "asset": "grass_path_3",
+      "role": "soil",
+      "tileMeters": 1.0,
+      "slots": [
+        22,
+        23,
+        44,
+        48,
+        61
+      ],
+      "regular": false,
+      "use": "natural",
+      "evidence": "3098b45cb2d09d11d6cce2514282a27b4142b41d698c14447be906a29d681157",
+      "why": "Compacted fine earth and grit occur on unpaved tracks and at their crossings; the four isolated stock concrete vertices have no documented apron.",
+      "levelTangent": true
+    },
+    {
+      "id": "bed-gravel",
+      "asset": "gravel_floor_02",
+      "role": "sand",
+      "tileMeters": 2.0,
+      "slots": [
+        32,
+        33,
+        34
+      ],
+      "regular": false,
+      "use": "natural",
+      "evidence": "27d72a566a8c13d20e5cb35362deb01b961b620be2f08e498f75ac0e3422c43c",
+      "why": "Fine pale gray aggregate lies on the cut floor. The browner coarse gravel option looked like the bank soil, not the distinct stony bed."
+    },
+    {
+      "id": "rock",
+      "asset": "mossy_rock",
+      "role": "rock",
+      "tileMeters": 3,
+      "slots": [
+        15,
+        16,
+        17,
+        18
+      ],
+      "regular": false,
+      "use": "natural",
+      "evidence": "3098b45cb2d09d11d6cce2514282a27b4142b41d698c14447be906a29d681157",
+      "why": "Lichen-grained stone follows the steep bank projections and connects them to the existing boulders. Do not expose it over level grass.",
+      "reuse": "endor-terrain"
+    },
+    {
+      "id": "root-mat",
+      "asset": "brown_mud_leaves_01",
+      "role": "moss",
+      "tileMeters": 1.3,
+      "slots": [
+        4
+      ],
+      "regular": false,
+      "use": "natural",
+      "evidence": "3098b45cb2d09d11d6cce2514282a27b4142b41d698c14447be906a29d681157",
+      "why": "Leaf fragments stay near deciduous roots. The widely painted temperate slot provides this channel, not a map-wide leaf stencil.",
+      "reuse": "yavin-ground"
+    },
+    {
+      "id": "court-sett",
+      "asset": "cobblestone_05",
+      "role": "concrete",
+      "tileMeters": 2.4,
+      "slots": [
+        47
+      ],
+      "regular": true,
+      "use": "built",
+      "evidence": "23b932f6291ed333eb704204cad22f0467c03edbf6ae83fa524c8e91d57ae45a",
+      "why": "Worn, warm tan stone with recessed dark joints, aligned only in the painted civic courts. The lighter alternative supplied inverted relief."
+    },
+    {
+      "id": "concrete",
+      "asset": "concrete_floor_02",
+      "role": "concrete",
+      "tileMeters": 2,
+      "slots": [
+        62
+      ],
+      "regular": true,
+      "use": "built",
+      "evidence": "0b1533e519476ae8de7b1a0b8682d789dd2c7a0a81d49aca2307cdfadf1990e4",
+      "why": "Only an actual construction event may draw concrete; it does not mark the palace forecourt.",
+      "reuse": "endor-terrain"
+    }
+  ],
+  "composition": {
+    "kind": "terraced-meadow",
+    "design": "Turf follows the saddle and skirts the Theed courts. Convex shoulders carry shorter open turf; damp depressions and deciduous roots interrupt it. Washed gravel stays in incisions, stone on banks and the two steep projections. Do not turn brick-colored paint on remote grass into a street.",
+    "channels": [
+      0,
+      5,
+      22,
+      33,
+      15,
+      16,
+      4
+    ],
+    "thinHints": [
+      5,
+      59
+    ],
+    "pathHints": [
+      22,
+      23,
+      44,
+      61
+    ],
+    "bedHints": [
+      32,
+      33,
+      34
+    ],
+    "treeModels": [
+      "W_TREE_DEC_01_CLUSTER.ALO",
+      "W_TREE_DEC_01_HI.ALO",
+      "W_TREE_DEC_CANOPY_A.ALO",
+      "W_TREE_DEC_00YELLOW_CLUSTER.ALO",
+      "W_TREE_DEC_00_HI.ALO",
+      "W_TREE_DEC_NS01_CLUSTER.ALO",
+      "W_TREE_DEC_NSYELLOW_CLUSTER.ALO"
+    ],
+    "deposition": {
+      "seed": 31723,
+      "heading": 0.26,
+      "length": 228,
+      "width": 143
+    },
+    "variation": {
+      "pair": [
+        0,
+        5
+      ],
+      "minSpan": 0.2,
+      "process": "Grass height and exposed soil vary with drainage across these rounded, irregular grass shoulders; short turf follows the high lips between the cut beds rather than repeated strokes or a permanent wind stripe.",
+      "preserve": "Keep court paving aligned and limited to its supported footprint. Real canopy roots, bare rock faces and the channel gravels break the meadow; do not grow grass over them."
+    },
+    "regions": [
+      {
+        "name": "Western deployment lawn",
+        "view": "command",
+        "grid": [
+          54,
+          166,
+          32,
+          29
+        ],
+        "maxBoundary": 0.19,
+        "maxSmallShare": 0.055,
+        "maxJump": 0.042
+      },
+      {
+        "name": "Eastern meadow approach",
+        "view": "east-meadow",
+        "grid": [
+          174,
+          162,
+          35,
+          31
+        ],
+        "maxBoundary": 0.19,
+        "maxSmallShare": 0.055,
+        "maxJump": 0.042
+      }
+    ],
+    "evidence": [
+      "23b932f6291ed333eb704204cad22f0467c03edbf6ae83fa524c8e91d57ae45a",
+      "0b1533e519476ae8de7b1a0b8682d789dd2c7a0a81d49aca2307cdfadf1990e4",
+      "3098b45cb2d09d11d6cce2514282a27b4142b41d698c14447be906a29d681157",
+      "27d72a566a8c13d20e5cb35362deb01b961b620be2f08e498f75ac0e3422c43c",
+      "f642259752748c0da1cdc02f4f1dcff2eb2f674b37d5a2e6fd5fc2e5d44d1340",
+      "fd4e25a8976340b587d6d850127d3e289629f395deef72dd2beed6b682a8fed1"
+    ]
+  },
+  "zones": [
+    {
+      "slot": 47,
+      "natural": 0,
+      "construction": false,
+      "aprons": [
+        {
+          "model": "W_THEEDPALACE.ALO",
+          "anchor": [
+            2374.4375,
+            4547.73095703125
+          ],
+          "rect": [
+            2030,
+            3995,
+            2790,
+            4850
+          ]
+        },
+        {
+          "model": "W_THEEDBUILD_A.ALO",
+          "anchor": [
+            2141.539794921875,
+            2839.558837890625
+          ],
+          "rect": [
+            1880,
+            2610,
+            2720,
+            3120
+          ]
+        },
+        {
+          "model": "W_THEEDBUILD_B.ALO",
+          "anchor": [
+            2139.038330078125,
+            2411.8984375
+          ],
+          "rect": [
+            1935,
+            2210,
+            2210,
+            2460
+          ]
+        },
+        {
+          "model": "W_THEEDBUILD_C.ALO",
+          "anchor": [
+            2037.265869140625,
+            4163.1513671875
+          ],
+          "rect": [
+            1950,
+            4060,
+            2150,
+            4280
+          ]
+        },
+        {
+          "model": "W_THEEDBUILD_C.ALO",
+          "anchor": [
+            3006.69091796875,
+            4379.4453125
+          ],
+          "rect": [
+            2850,
+            4270,
+            3120,
+            4500
+          ]
+        }
+      ],
+      "evidence": "23b932f6291ed333eb704204cad22f0467c03edbf6ae83fa524c8e91d57ae45a"
+    },
+    {
+      "slot": 62,
+      "natural": 0,
+      "construction": true,
+      "aprons": [],
+      "evidence": "0b1533e519476ae8de7b1a0b8682d789dd2c7a0a81d49aca2307cdfadf1990e4"
+    }
+  ],
+  "binding": {
+    "key": "naboo",
+    "seed": 31723,
+    "retainedPlants": {
+      "broadleaf": [
+        "W_TREE_DEC_01_CLUSTER.ALO",
+        "W_TREE_DEC_01_HI.ALO",
+        "W_TREE_DEC_CANOPY_A.ALO",
+        "W_TREE_DEC_00YELLOW_CLUSTER.ALO",
+        "W_TREE_DEC_00_HI.ALO",
+        "W_TREE_DEC_NS01_CLUSTER.ALO",
+        "W_TREE_DEC_NSYELLOW_CLUSTER.ALO"
+      ],
+      "ground-herbs": [
+        "W_GRNDCVR_B.ALO",
+        "W_GRNDCVR_D.ALO",
+        "W_GRNDCVR_F.ALO",
+        "W_GRNDCVR_G.ALO"
+      ]
+    }
+  }
+}

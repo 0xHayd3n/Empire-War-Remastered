@@ -1,0 +1,72 @@
+[
+  {
+    "asset": "shrub_02",
+    "kind": "bush",
+    "variant": 3,
+    "material": "bush",
+    "file": "bush3-bush.bin",
+    "vertices": 3528,
+    "triangles": 5188,
+    "sha256": "270a5216c5292de9fbdb9655a88f9ff3937175c4df4b0084c6f654580c56d1c1"
+  },
+  {
+    "asset": "grass_medium_02",
+    "kind": "meadow",
+    "variant": 0,
+    "material": "meadow",
+    "file": "meadow0-meadow.bin",
+    "vertices": 645,
+    "triangles": 714,
+    "sha256": "6852aaec0e5b59b4a86f7008cd83228fe8872c8d4c37aec04c7d949c7d2ae9df"
+  },
+  {
+    "asset": "grass_bermuda_01",
+    "kind": "grass",
+    "variant": 7,
+    "material": "grass",
+    "file": "grass7-grass.bin",
+    "vertices": 24,
+    "triangles": 24,
+    "sha256": "b36467cec868ecaf2a54c7336c08917d6c790ba1ad1a493a00afa6f97701fe24"
+  },
+  {
+    "asset": "grass_bermuda_01",
+    "kind": "grass",
+    "variant": 8,
+    "material": "grass",
+    "file": "grass8-grass.bin",
+    "vertices": 28,
+    "triangles": 30,
+    "sha256": "796496fedea8e20723a3339eec0b0e171a102ce29f860bf5c97e73f75171daac"
+  },
+  {
+    "asset": "fern_02",
+    "kind": "fern",
+    "variant": 2,
+    "material": "fern",
+    "file": "fern2-fern.bin",
+    "vertices": 544,
+    "triangles": 784,
+    "sha256": "40472f1da4179b0b0f9b0d52abcb838c3b0150107893c4949c07317fc316bbe4"
+  },
+  {
+    "asset": "fir_sapling",
+    "kind": "sapling",
+    "variant": 2,
+    "material": "bark",
+    "file": "sapling2-bark.bin",
+    "vertices": 268,
+    "triangles": 384,
+    "sha256": "e298146b01e523a89c249b842bfec258c174bd1581f699f467128dd2ff474026"
+  },
+  {
+    "asset": "fir_sapling",
+    "kind": "sapling",
+    "variant": 2,
+    "material": "needles",
+    "file": "sapling2-needles.bin",
+    "vertices": 13965,
+    "triangles": 17015,
+    "sha256": "ce4ca8e3a9355f2cabc62b496c0dd58b5ae032e7c07357178e4136ce9cdcebfa"
+  }
+]

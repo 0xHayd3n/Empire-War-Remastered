@@ -812,7 +812,7 @@ export function bombingRun(world, side, x, y) {
     world.scene.add(holder);
     const craft = { off, holder, unit: null };
     run.craft.push(craft);
-    loadModel(type.str('Land_Model_Name'), { teamColor: world.colors[side] || null })
+    loadModel(type.str('Land_Model_Name'), { teamColor: world.colors[side] || null, livery: world.liveryFor?.(side) ?? null })
       .then(inst => {
         holder.add(inst.root);
         const squad = world.squadOf(type, side, { native: true, bomber: true, busy: true });

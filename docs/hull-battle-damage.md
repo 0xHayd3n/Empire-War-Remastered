@@ -1,0 +1,15 @@
+# Reading Star Destroyer damage without the HUD
+
+Reload the mounted [Universal game](http://127.0.0.1:8590/) and play a stock space battle. **Settings → Video → Graphics Quality → Space battles → Star Destroyer battle damage** is on by default with individual settings. The **Battle realism** master also controls it. It works with the original hull; no texture pack or flyby is required.
+
+- **Shields:** keep the mounted shield-hit effect when available. Otherwise, a blue ring spreads over the ship’s actual shield shell and disappears in under half a second. A fully absorbed hit leaves no scorch.
+- **Hull:** once damage reaches the hull, an exposed plate can retain a heat mark. Its center cools from amber to soot, and the mark moves with the hit triangles rather than facing the camera. Existing projectile bursts remain the immediate hit; the new layer is the residue. An authored destruction decal takes priority at a destroyed hardpoint.
+- **Engine bank:** the mounted stock ship has **one** engine hardpoint controlling the main bank. When it is destroyed, the original engine proxy stops emitting, its existing exhaust and explosion die out, and the three main bells show dark interiors. The renderer does not give each nozzle invented HP. Functional engines on other ships are unchanged.
+
+Marks are presentation state inside the current battle, not save data. Hidden, cloaked, dead and hyperspace ships do not show them. There are at most eight scorch patches and two ripples per affected ship, 64 patches across the battle; close repeats coalesce, and the oldest marks are recycled. The effect is restricted to the signature-matched stock hull and material. No mounted geometry is distributed and the option does not alter combat results.
+
+## Checks
+
+`node tools/test-impact-patch.mjs` checks the projection against synthetic front, back and separated plates. `node tools/check-hull-damage.cjs` opens the mounted Universal window, checks settings persistence and a narrow keyboard layout, launches Abregado Rae with 100 roster entries per side, and calls the ordinary shield, hull and hardpoint damage paths at controlled times. Repeat with `LOOK_BACKEND=webgl`. It records the battle canvas without the HUD; the same frozen pose and FX are compared with the option off/on. Local screenshots and reports go to the OS temporary directory under `universal-hull-damage`, not the repository.
+
+Both 1080p checks showed a transient blue shield hit and an exact clean frame after expiry. A strike at the aft plates cooled to a visible scorch at fleet zoom; after a facing order the projected contact stayed at the same point on the hull. The sampled main engine cores fell from near-white to below one fifth of their original luminance after the authored plume decayed. Hiding the ship removed the effect on both renderers. A short live fleet pan completed on WebGPU and WebGL; this is not a sustained damage-saturation or mobile performance benchmark. The local damage injection is not a multiplayer synchronization test.

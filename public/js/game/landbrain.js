@@ -93,13 +93,17 @@ function parse(src) {
   return expr();
 }
 
+// Fetch a group together, but consume it in manifest order: duplicate definitions
+// and goal proposal order must not depend on disk speed (including in lockstep).
+const aiTexts = (dir, files) => Promise.all(files.map(file => fetchText(`Data/XML/AI/${dir}/${file}.xml`).catch(() => null)));
+
 let PLAYERS = null;
 export async function aiSets(faction) {
   PLAYERS ||= (async () => {
     const out = new Map();
     const files = await findFiles('XML\\\\AI\\\\PLAYERS\\\\[^\\\\]*\\.XML$').catch(() => []);
-    for (const f of files) {
-      const s = ((await fetchText('Data/XML/AI/Players/' + f.split('\\').pop()).catch(() => null)) || '').replace(/<!--[\s\S]*?-->/g, '');
+    for (const text of await Promise.all(files.map(f => fetchText('Data/XML/AI/Players/' + f.split('\\').pop()).catch(() => null)))) {
+      const s = (text || '').replace(/<!--[\s\S]*?-->/g, '');
       const name = /<Name>\s*([^<]*?)\s*<\/Name>/.exec(s),
         sets = /<GoalProposalFunctionSets>([^<]*)<\/GoalProposalFunctionSets>/.exec(s);
       const tag = k => {
@@ -223,18 +227,21 @@ const dirFiles = async dir =>
 
 export async function readBrain(FILES, SETS, GOALS = null, shared = null) {
   if (shared) return Object.assign(Object.create(shared), { fnOf: await readGoalFunctions(SETS) });
-  const get = f => fetchText('Data/XML/AI/' + f).catch(() => null);
   const first = new Set(FILES.map(f => f.toUpperCase()));
-  FILES = FILES.concat((await dirFiles('PERCEPTUALEQUATIONS')).filter(f => !first.has(f.toUpperCase())).sort());
-  GOALS ||= await dirFiles('GOALS');
+  const [equations, goalFiles, templateFiles] = await Promise.all([dirFiles('PERCEPTUALEQUATIONS'), GOALS || dirFiles('GOALS'), dirFiles('TEMPLATES')]);
+  const [eqTexts, goalTexts, templateTexts, fnOf] = await Promise.all([
+    aiTexts('PerceptualEquations', FILES.concat(equations.filter(f => !first.has(f.toUpperCase())).sort())),
+    aiTexts('Goals', goalFiles),
+    aiTexts('Templates', templateFiles),
+    readGoalFunctions(SETS)
+  ]);
   const strip = s => (s || '').replace(/<!--[\s\S]*?-->/g, '');
   const eq = new Map(),
-    fnOf = new Map(),
     goals = new Map(),
     defs = new Map(),
     templates = new Map();
-  for (const f of FILES) {
-    const s = strip(await get('PerceptualEquations/' + f + '.xml')).replace(/<\/?Equations>/g, '');
+  for (const text of eqTexts) {
+    const s = strip(text).replace(/<\/?Equations>/g, '');
     for (const m of s.matchAll(/<([A-Za-z_0-9]+)>/g)) {
       const end = s.indexOf('</' + m[1] + '>', m.index);
       if (end > 0 && !eq.has(m[1].toUpperCase()) && !/^[<\s]*$/.test(s.slice(m.index + m[0].length, end))) {
@@ -244,9 +251,8 @@ export async function readBrain(FILES, SETS, GOALS = null, shared = null) {
       }
     }
   }
-  for (const [goal, fns] of await readGoalFunctions(SETS)) fnOf.set(goal, fns);
-  for (const f of GOALS) {
-    const lg = strip(await get('Goals/' + f + '.xml'));
+  for (const text of goalTexts) {
+    const lg = strip(text);
     for (const m of lg.matchAll(/<([A-Za-z_0-9]+)>\s*<AIGoalApplicationFlags>\s*([^<]*?)\s*<\/AIGoalApplicationFlags>/g)) {
       const name = m[1].toUpperCase(),
         flags = m[2].split('|').map(x => x.trim().toUpperCase());
@@ -281,8 +287,8 @@ export async function readBrain(FILES, SETS, GOALS = null, shared = null) {
         });
     }
   }
-  for (const f of await dirFiles('TEMPLATES')) {
-    const s = strip(await get('Templates/' + f + '.xml'));
+  for (const text of templateTexts) {
+    const s = strip(text);
     for (const m of s.matchAll(/<([A-Za-z_0-9]+)>\s*<Priority>/g)) {
       const end = s.indexOf('</' + m[1] + '>', m.index),
         body = end > 0 ? s.slice(m.index, end) : '';
@@ -374,11 +380,8 @@ export function hashOrder(entries) {
 
 async function readGoalFunctions(sets) {
   const out = new Map();
-  for (const file of sets) {
-    const source = ((await fetchText('Data/XML/AI/GoalFunctions/' + file + '.xml').catch(() => null)) || '').replace(
-      /<!--[\s\S]*?-->/g,
-      ''
-    );
+  for (const text of await aiTexts('GoalFunctions', sets)) {
+    const source = (text || '').replace(/<!--[\s\S]*?-->/g, '');
     for (const m of source.matchAll(/<Goal>\s*([^<\s]+)\s*<\/Goal>\s*<Function>\s*([^<\s]+)\s*<\/Function>/g)) {
       const name = m[1].toUpperCase();
       if (!out.has(name)) out.set(name, []);
@@ -546,8 +549,13 @@ export class Mind extends Reason {
     const weigh = (u, att) => power(u) * (att ? 1 - (1 - Math.max(0, Math.min(1, u.health / (u.maxHealth || 1)))) * att : 1);
     this.weigh = weigh;
     const sum = (list, c, att = 0) => list.reduce((n, u) => n + (inCats(u, c) ? weigh(u, att) : 0), 0);
-    this.sum = sum;
-    this.total = Math.max(0, sum(this.friends) + sum(this.foes));
+    // Each Mind owns these two roster snapshots. Their unfiltered, unattenuated
+    // totals depend only on definition power. Many per-target goal expressions
+    // request the identical denominator; health-weighted queries stay live.
+    const friendlyPower=sum(this.friends), hostilePower=sum(this.foes);
+    this.total = Math.max(0, friendlyPower + hostilePower);
+    this.sum = (list, c, att=0) => !c && !att && list===this.friends ? friendlyPower
+      : !c && !att && list===this.foes ? hostilePower : sum(list,c,att);
     this.faction = (w.factions[side] || '').toUpperCase();
     this.owned = new Set(
       w

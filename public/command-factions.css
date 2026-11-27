@@ -1,0 +1,237 @@
+/* A stage-local directory: the toolbar and assigned players stay sharp while
+   the arena dims. The same transparent native busts also appear on seats. */
+.op-ring-tools .op-faction-toggle {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid #b6c7d26e;
+  border-radius: 2px;
+  background: #17232cde;
+  color: #fff9ef;
+}
+.op-faction-toggle[aria-expanded='true'] {
+  border-color: #dcc59b;
+}
+.op-directory-icon {
+  width: 19px;
+  height: 19px;
+  background:
+    linear-gradient(currentColor, currentColor) left top / 8px 8px,
+    linear-gradient(currentColor, currentColor) right top / 8px 8px,
+    linear-gradient(currentColor, currentColor) left bottom / 8px 8px,
+    linear-gradient(currentColor, currentColor) right bottom / 8px 8px;
+  background-repeat: no-repeat;
+}
+.is-browsing-factions::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: #0b141ebf;
+  backdrop-filter: blur(6px);
+}
+.op-faction-browser {
+  grid-area: 2 / 1 / 5 / 2;
+  position: relative;
+  z-index: 2;
+  min-height: 0;
+  --cell-w: 88px;
+  --cell-h: 90px;
+  --cell-gap: 5px;
+  --category-w: calc(4 * var(--cell-w) + 3 * var(--cell-gap));
+  --category-gap: 16px;
+  /* Space for two categories plus the list padding and scrollbar, never three. */
+  width: min(100%, calc(2 * var(--category-w) + var(--category-gap) + 32px));
+  justify-self: center;
+}
+.op-faction-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: flex-start;
+  align-items: flex-start;
+  gap: 14px var(--category-gap);
+  height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #8d9da6 transparent;
+  box-sizing: border-box;
+  padding: 4px 7px 12px;
+}
+.op-faction-section {
+  flex: 0 0 min(100%, var(--category-w));
+  min-width: 0;
+}
+.op-faction-section h3 {
+  display: flex;
+  justify-content: center;
+  margin: 0 0 6px;
+}
+.op-faction-browser .op-faction-group {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 9px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 3px 13px 3px 8px;
+  color: #fff8e9;
+  text-align: center;
+  font: 500 17px/1.12 var(--ui-font);
+  border: 1px solid color-mix(in srgb, var(--group-a) 65%, #59616b);
+  border-radius: 3px;
+  background: linear-gradient(
+    105deg,
+    color-mix(in srgb, var(--group-a) 45%, #11202b),
+    color-mix(in srgb, var(--group-b) 22%, #101820) 75%,
+    #111c26
+  );
+}
+.op-group-fan {
+  display: flex;
+  align-items: center;
+  isolation: isolate;
+  flex: none;
+  padding: 0 3px;
+}
+.op-group-fan .uc-crest {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 2px #09111d);
+}
+.op-group-fan .uc-crest + .uc-crest {
+  margin-left: -9px;
+}
+.op-group-fan .uc-crest:first-child {
+  transform: translateY(2px);
+}
+.op-group-fan .uc-crest:last-child {
+  transform: translateY(-2px);
+}
+.op-faction-group::after {
+  content: '›';
+  color: #e4d9c3;
+}
+.op-faction-browser .op-faction-group:is(:hover, :focus-visible) {
+  border-color: #fff6dc;
+}
+.op-faction-options {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--cell-gap);
+  --tile-w: calc((100% - 3 * var(--cell-gap)) / 4);
+}
+.op-faction-browser .op-faction-option {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: stretch;
+  flex: 0 0 var(--tile-w);
+  box-sizing: border-box;
+  width: var(--tile-w);
+  height: var(--cell-h);
+  gap: 0;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  text-align: center;
+  border: 1px solid #b6c7d23d;
+  border-radius: 2px;
+  background: #131f29;
+  color: #f1f4f2;
+}
+.op-faction-browser .op-faction-option[aria-current='true'] {
+  border-color: var(--brief-accent, #d8bd87);
+  box-shadow: inset 3px 0 var(--brief-accent, #d8bd87);
+}
+.op-faction-browser .op-faction-option:is(:hover, :focus-visible) {
+  background: #30404b;
+}
+.op-directory-art {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  width: 100%;
+  min-height: 0;
+  background: linear-gradient(
+    115deg,
+    color-mix(in srgb, var(--roster-shade) 16%, #0d1822),
+    color-mix(in srgb, var(--roster-shade) 34%, #17232b)
+  );
+}
+.op-directory-art .uc-crest {
+  position: absolute;
+  inset: 9% auto auto 4%;
+  width: 60%;
+  height: 82%;
+  object-fit: contain;
+  opacity: 0.84;
+}
+.op-directory-art .op-card-still {
+  position: absolute;
+  right: -3%;
+  bottom: 0;
+  height: 100%;
+  width: 95%;
+  object-fit: contain;
+  object-position: right bottom;
+}
+.op-directory-art .op-directory-credit {
+  position: absolute;
+  bottom: 2px;
+  left: 3px;
+  padding: 0 3px;
+  background: #111a23cc;
+  color: #d4dcdd;
+  font: 400 9px/1.1 var(--ui-font);
+}
+.op-directory-caption {
+  display: grid;
+  gap: 1px;
+  padding: 2px 2px 3px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.op-directory-name {
+  font: 500 13px/1.06 var(--ui-font);
+  color: #fff9ee;
+}
+.op-directory-faction {
+  font: 400 11.5px/1.06 var(--ui-font);
+  color: #cfdae0;
+}
+.op-faction-empty {
+  color: #d5dee1;
+}
+@media (max-width: 680px), (max-height: 520px) {
+  .op-faction-browser {
+    --cell-w: 80px;
+    --cell-h: 82px;
+    --cell-gap: 4px;
+  }
+  .op-faction-list {
+    row-gap: 9px;
+  }
+  .op-faction-browser .op-faction-group {
+    font-size: 16px;
+  }
+  .op-directory-name {
+    font-size: 12px;
+  }
+  .op-directory-faction {
+    font-size: 11px;
+  }
+}
+@media (max-width: 680px) and (orientation: portrait) {
+  /* Give the gallery enough room for more than one row of busts. Closing it
+     restores the usual arena/Teams split. Neither blocks the assigned cards. */
+  .op-setup.op-field-atlas .op-panel.op-staging:has(.is-browsing-factions) {
+    grid-template-rows: minmax(0, 62%) minmax(0, 1fr);
+  }
+}

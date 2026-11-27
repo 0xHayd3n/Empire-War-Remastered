@@ -1,6 +1,18 @@
 import assert from 'node:assert/strict';
-import { pinRadarPoint, spaceRimPins } from '../public/js/game/combat-hud.js';
+import { compassBearing, pinRadarPoint, spaceRimPins } from '../public/js/game/combat-hud.js';
 
+assert.deepEqual(
+  [90, 45, 0, 315, 270, 225, 180, 135].map(d => compassBearing(d, 'eight')),
+  ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+);
+assert.deepEqual(
+  [90, 45, 0, 270].map(d => compassBearing(d, 'degrees')),
+  ['0°', '45°', '90°', '180°']
+);
+assert.deepEqual(
+  [45, 75, 90].map(d => compassBearing(d, 'cardinal')),
+  ['', '', 'N']
+);
 assert.deepEqual(pinRadarPoint(65, 81, 100, 90), [65, 81]);
 assert.deepEqual(pinRadarPoint(100, -990, 100, 90), [100, 10]);
 const diagonal = pinRadarPoint(2100, 2100, 100, 90);

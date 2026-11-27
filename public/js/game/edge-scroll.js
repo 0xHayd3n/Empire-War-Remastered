@@ -1,3 +1,4 @@
+import { viewOptions } from './viewpreferences.js';
 import { edgePan, held } from './keybinds.js';
 
 // Equal mouse/key directions don't double the speed; opposite inputs cancel.
@@ -35,6 +36,7 @@ export function edgeCursor(canvas, signal) {
     // Fullscreen pointertrap locks the document root and dispatches virtual
     // mouse positions on the canvas. A canvas lock instead belongs to look.
     if (!active || !edgePan() || document.hidden || (lock && lock !== document.documentElement) || !document.hasFocus()) return idle;
+    band *= viewOptions.edgeWidth;
     out.right = edgeAxis(x, innerWidth, band);
     out.forward = -edgeAxis(y, innerHeight, band);
     // A dialog or minimap may open under a stationary cursor between events.

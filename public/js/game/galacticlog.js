@@ -1,4 +1,5 @@
 import { db } from '../gamedata.js';
+import { viewOptions as prefs } from './viewpreferences.js';
 import { iconUrl } from '../icons.js';
 import { loadTextureCanvas } from '../dds.js';
 import { openDialog, loadDialogs } from './dialogs.js';
@@ -360,7 +361,7 @@ export class GalacticLog {
     this.add(record.text, record.color);
     const faction = db.faction(g.me);
     g.audio?.play(record.sfx || faction.str(record.urgent ? 'SFXEvent_HUD_Advisor_Urgent' : 'SFXEvent_HUD_Advisor_Message'));
-    this.hold = record.text.length * db.constants.num('Advisor_Hint_Duration', 0.1);
+    this.hold = record.text.length * db.constants.num('Advisor_Hint_Duration', 0.1) * prefs.advisorHold;
     if (this.hold > 0 && this.help) {
       this.helpAlpha = 0;
       this.help.root.style.opacity = '0';

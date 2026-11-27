@@ -209,8 +209,8 @@ const after = (world, secs, fn) => {
   let t = secs;
   effect(world, dt => ((t -= dt) <= 0 ? (fn(), true) : false));
 };
-const fx = (world, name, at, dz = 0) => {
-  if (name && world.onFx) world.onFx(name, at.x, at.y, (at.z || 0) + dz);
+const fx = (world, name, at, dz = 0, soilMarked = false) => {
+  if (name && world.onFx) world.onFx(name, at.x, at.y, (at.z || 0) + dz, true, soilMarked);
 };
 const sound = (world, name, at, side = at.side) => {
   if (name && world.onSound) world.onSound(name, at.x, at.y, side, at.type ? at : null);
@@ -246,13 +246,15 @@ export const blastFactor = (d, r, tiers) => (tiers > 0 ? Math.max(0, Math.min(1,
 export function blast(world, P, x, y, side, on = null) {
   if (!P) return;
   const at = { x, y, z: world.groundZ(x, y) };
+  // Includes planted charges and the actual orbital detonation (not its dud carrier).
+  const soilMarked = !on?.flies && P.num('Projectile_Blast_Area_Damage',0) > 0 && world.onBlastGround?.(P,x,y,at.z);
   fx(
     world,
     P.str('Projectile_Lifetime_Detonation_Particle') ||
       P.str('Projectile_Ground_Detonation_Particle') ||
       P.str('Projectile_Object_Detonation_Particle'),
     at,
-    4
+    4, soilMarked
   );
   sound(world, P.str('Projectile_SFXEvent_Detonate'), at);
   const foes = (r, pred) => near(world, x, y, r, u => !world.ally(u.side, side) && pred(u));

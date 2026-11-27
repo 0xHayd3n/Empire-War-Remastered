@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
+import { readLibrary } from './workshop-library.mjs';
 import { openGame } from './megfs.mjs';
-const archive = openGame(fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)));
+const { game } = readLibrary();
+if (!game) throw Error('No mounted game located; set SWR_GAME');
+const archive = openGame(game);
 globalThis.fetch = async input => {
   const path = String(input);
   if (path.startsWith('api/find?q=')) {

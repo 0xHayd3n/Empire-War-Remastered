@@ -41,6 +41,8 @@
     <link rel="stylesheet" href="instant.css" />
     <link rel="stylesheet" href="spectator.css" />
     <link rel="stylesheet" href="battlefront-deploy.css" />
+    <link rel="stylesheet" href="ui-theme.css" />
+    <link rel="stylesheet" href="army-painter.css" />
     <script type="importmap">
       { "imports": { "three": "./vendor/three/build/three.module.js", "three/addons/": "./vendor/three/examples/jsm/" } }
     </script>
@@ -291,6 +293,14 @@
       </div>
     </div>
 
-    <script type="module" src="js/main.js"></script>
+    <link rel="modulepreload" href="js/main.js" />
+    <script type="module">
+      import { loadPlayerPreferences } from './js/playerprefs.js';
+      await loadPlayerPreferences();
+      // Keep the normal module error/retry path when the game bundle is unavailable.
+      const entry = document.createElement('script');
+      entry.type = 'module'; entry.src = 'js/main.js';
+      document.body.append(entry);
+    </script>
   </body>
 </html>

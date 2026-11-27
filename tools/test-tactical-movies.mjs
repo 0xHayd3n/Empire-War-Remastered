@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { openGame } from './megfs.mjs';
 
-const archive = openGame(fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)));
+const archive = openGame(process.env.SWR_GAME || fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)));
 const overrides = new Map(),
   gates = new Map(),
   audio = [];

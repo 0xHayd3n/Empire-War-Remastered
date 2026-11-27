@@ -12,6 +12,17 @@ import { loadDialogs } from './dialogs.js';
 
 const PANEL = { cls: 'front', stretch: true };
 
+export function titlePreviews(current) {
+  const life = new AbortController();
+  const ready = import('./universalsolowarm.js').then(({ soloWarmer }) => {
+    if (life.signal.aborted) return;
+    const warm = soloWarmer(current, life.signal);
+    if (!navigator.connection?.saveData) for (const mode of ['conquest', 'story', 'skirmish']) void warm(mode);
+    return warm;
+  }).catch(() => undefined);
+  return { ready, close: () => life.abort() };
+}
+
 export class FrontEnd {
   constructor(audio, { skirmish, instant, leave, start, multiplayer, playlist, mapRotation, universal, load }) {
     this.universal = universal;
@@ -30,6 +41,7 @@ export class FrontEnd {
     this.events = new AbortController();
     this.onKey = e => {
       if (this.universal && document.querySelector('.era-panel[open], [data-universal-screen]')) return;
+      if (e.target.closest?.('#armyPainter')) return;
       const top = this.menus.stack[this.menus.stack.length - 1];
       if (e.code === 'Escape' && !this.menus.listening && this.menus.stack.length > 1 && top.veil.style.display !== 'none') {
         e.stopPropagation();
@@ -66,6 +78,7 @@ export class FrontEnd {
   dispose() {
     this.campaignRequest?.abort();
     this.events.abort();
+    this.previews?.close();
     cancelAnimationFrame(this.movieFrame);
     if (this.tacticalMovies) this.tacticalMovies.onFinish = null;
     this.menus.closeAll();
@@ -118,6 +131,7 @@ export class FrontEnd {
 
   async main() {
     const defs = (await loadDialogs())?.dialogs;
+    if (this.universal) this.previews ||= titlePreviews(this.universal.current);
     let dlg = this.title = titleMenu(defs?.get('IDD_MAIN_MENU_DIALOG'), this.audio, {
       mapRotation: this.mapRotation,
       findMatch: this.playlist && (async options => {
@@ -166,7 +180,12 @@ export class FrontEnd {
     return (await import('./campaignpicker.js')).chooseCampaign({load:id=>this.menus.loadChecked(id,this.load),back:()=>this.title?.focus()});
   }
 
-  pickEra(mode, dlg) {
+  async pickEra(mode, dlg) {
+    if (['conquest', 'story', 'skirmish', 'instant'].includes(mode)) {
+      const button = dlg.ctl({ conquest:'IDC_CUSTOM_CAMPAIGN_BUTTON', story:'IDC_NEW_CAMPAIGN_BUTTON', skirmish:'IDC_SKIRMISH_GAMES_BUTTON', instant:'IDC_INSTANT_BATTLE_BUTTON' }[mode]);
+      await (await this.previews?.ready)?.(mode);
+      if (this.events.signal.aborted || !dlg.veil.isConnected || (button && !button.isConnected)) return;
+    }
     const overlay = document.getElementById('frontOverlay');
     dlg.veil.style.display = 'none';
     if (overlay) overlay.style.display = 'none';
@@ -296,6 +315,7 @@ export class FrontEnd {
   }
 
   async options() {
+    if (this.universal) return this.menus.options();
     const def = (await loadDialogs())?.dialogs.get('IDD_MAIN_OPTIONS_DIALOG'),
       okC = def && def.controls.find(c => c.id === 'IDC_OK_MAIN'),
       above = okC && def.controls.filter(c => /^IDC_MAIN_OPTIONS_/.test(c.id) && c.y < okC.y).sort((a, b) => b.y - a.y)[0],

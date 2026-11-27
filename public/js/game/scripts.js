@@ -61,17 +61,12 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const hasProp = typeHasProperty;
 
 export class ScriptHost {
-  static async create(game) {
+  // Only read source on the loading path. VM creation, AI attachment and script
+  // execution still see the fully assembled world at their original point.
+  static async prepare() {
     const files = await findFiles('SCRIPTS\\\\.*\\.LUA$').catch(() => []);
     if (!files.length) return null;
-    const fengari = await loadFengari().catch(() => null);
-    return fengari ? new ScriptHost(game, fengari, files) : null;
-  }
-
-  constructor(game, fengari, files) {
-    this.game = game;
-    this.world = game.world;
-    this.index = new Map();
+    const index = new Map(), plans = new Map();
     const lib = k => (/\\LIBRARY\\/.test(k) ? 0 : 1);
     for (const k of files.slice().sort((a, b) => lib(a) - lib(b))) {
       const parts = k
@@ -80,9 +75,28 @@ export class ScriptHost {
         .split('\\');
       for (let i = 0; i < parts.length; i++) {
         const key = parts.slice(i).join('/');
-        if (!this.index.has(key)) this.index.set(key, k);
+        if (!index.has(key)) index.set(key, k);
       }
     }
+    // Plans.find needs these exact resolved files in either tactical mode. Keep
+    // scope local to this launch; aliases and other mod mounts must not collide.
+    for (const [key, file] of index)
+      if (!key.includes('/') && /\\SCRIPTS\\AI\\/.test(file) && !plans.has(file))
+        plans.set(file, fetchText(file.replace(/\\/g, '/')).catch(() => null));
+    const fengari = await loadFengari().catch(() => null);
+    return fengari && { fengari, index, plans };
+  }
+
+  static async create(game, prepared = ScriptHost.prepare()) {
+    const input = await prepared;
+    return input ? new ScriptHost(game, input) : null;
+  }
+
+  constructor(game, { fengari, index, plans }) {
+    this.game = game;
+    this.world = game.world;
+    this.index = index;
+    this.planSources = plans;
     this.sources = new Map();
     this.fetching = 0;
     this.missing = new Map();
@@ -282,22 +296,30 @@ export class ScriptHost {
     this.fetch(key, file);
     return undefined;
   }
+  sourcesReady() {
+    if (this.fetching) return (this.drain ||= new Promise(resolve => { this.resolveDrain = resolve; }));
+  }
   fetch(key, file) {
     if (this.sources.has(key) || this.pending?.has(key)) return;
     (this.pending ||= new Set()).add(key);
     this.fetching++;
-    fetchText(file.replace(/\\/g, '/'))
+    (this.planSources?.get(file) || fetchText(file.replace(/\\/g, '/')))
       .catch(() => null)
       .then(text => {
         this.sources.set(key, text ?? null);
         this.pending.delete(key);
-        this.fetching--;
         for (const m of (text || '').matchAll(/require\s*\(?\s*["']([^"']+)["']/g)) {
           const k = m[1]
             .replace(/\.lua$/i, '')
             .replace(/[\\.]/g, '/')
             .toUpperCase();
           if (this.index.has(k)) this.fetch(k, this.index.get(k));
+        }
+        // A parent's completion may have enqueued another require(). Only
+        // wake startup after the whole source dependency chain drains.
+        if (--this.fetching === 0) {
+          this.resolveDrain?.();
+          this.drain = this.resolveDrain = null;
         }
       });
   }
@@ -2450,7 +2472,7 @@ export class ScriptHost {
     const s = this.scoring;
     if (s && s.state === 'new') {
       this.source(s.key);
-      while (this.fetching) await new Promise(r => setTimeout(r, 10));
+      await this.sourcesReady();
       if (this.start(s)) {
         s.next = w.time + simRandom() * 0.3;
         for (const [name, args] of this.told.splice(0)) this.tell(name, ...args);
@@ -2459,7 +2481,7 @@ export class ScriptHost {
     const mine = this.instances.filter(i => i.e && !i.plan && !i.story && !i.fs && i.state === 'new');
     for (let round = 0; round < 8; round++) {
       for (const inst of mine) if (inst.state === 'new') this.source(inst.key);
-      while (this.fetching) await new Promise(r => setTimeout(r, 10));
+      await this.sourcesReady();
       let waiting = 0;
       for (const inst of mine) {
         if (inst.state !== 'new') continue;

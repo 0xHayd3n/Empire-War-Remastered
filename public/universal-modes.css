@@ -1,6 +1,13 @@
 @import url('universal-atlas.css');
 
-/* Other modes keep their mounted staging dialogs and fallback picker. */
+@import url('operation-setup.css');
+@import url('skirmish-stage.css');
+@import url('command-ring.css');
+@import url('command-factions.css');
+@import url('skirmish-seat-cards.css');
+@import url('universal-settings.css');
+
+/* Saves keep their mounted staging dialogs and fallback picker. */
 .uc-window {
   z-index: 205;
 }

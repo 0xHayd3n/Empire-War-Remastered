@@ -1,4 +1,5 @@
 import { db } from '../gamedata.js';
+import { viewOptions as prefs } from './viewpreferences.js';
 import { iconUrl } from '../icons.js';
 
 const T = (id, fallback = '') => db.t(id) || fallback;
@@ -10,6 +11,12 @@ const rgb = (s, def) => {
   return c.length >= 3 ? `rgb(${c[0]},${c[1]},${c[2]})` : def;
 };
 const KEY = 'swr.hints';
+export function tacticalHintsEnabled() {
+  try { return localStorage.getItem(KEY) !== '0'; } catch { return true; }
+}
+export function saveTacticalHints(on) {
+  try { localStorage.setItem(KEY, on ? '1' : '0'); } catch {}
+}
 const WEATHER = [
   'i_pa_weather_sun.tga',
   'i_pa_weather_fire.tga',
@@ -25,11 +32,7 @@ export class Advisor {
     this.log = [];
     this.next = 0;
     this.timer = 5;
-    let on = true;
-    try {
-      on = localStorage.getItem(KEY) !== '0';
-    } catch {}
-    this.enabled = on;
+    this.enabled = tacticalHintsEnabled();
     this.interval = db.constants.num('Advisor_Hint_Interval', 300);
   }
 
@@ -42,9 +45,7 @@ export class Advisor {
 
   setEnabled(on) {
     this.enabled = on;
-    try {
-      localStorage.setItem(KEY, on ? '1' : '0');
-    } catch {}
+    saveTacticalHints(on);
   }
 
   message(text, sfx = '') {
@@ -54,7 +55,7 @@ export class Advisor {
     const faction = g.human?.faction;
     g.audio?.play(sfx || faction?.str('SFXEvent_HUD_Advisor_Urgent'));
     const bar = g.ui && g.ui.bar;
-    if (bar && bar.showHint) bar.showHint(text, SHOW_SECONDS);
+    if (bar && bar.showHint) bar.showHint(text, SHOW_SECONDS * prefs.advisorHold);
   }
 
   update(dt) {
@@ -63,14 +64,14 @@ export class Advisor {
     if (g.advisorEnabled?.[String(g.human?.factionName || '').toUpperCase()] === false) return;
     this.timer -= dt;
     if (this.timer > 0) return;
-    this.timer = this.interval;
+    this.timer = this.interval * prefs.tacticalHintInterval;
     const list = this.hints();
     if (!list.length) return;
     const text = list[this.next++ % list.length];
     this.log.push({ time: g.world.time, text });
     g.audio.play(g.human.faction.str('SFXEvent_HUD_Advisor_Hint'));
     const bar = g.ui && g.ui.bar;
-    if (bar && bar.showHint) bar.showHint(text, SHOW_SECONDS);
+    if (bar && bar.showHint) bar.showHint(text, SHOW_SECONDS * prefs.advisorHold);
   }
 
   async openLog() {

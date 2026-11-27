@@ -32,7 +32,12 @@ function findCaseInsensitive(root, rel) {
 const EXPANSION_DIRS = ['corruption', 'EAWX'],
   GAME_EXES = ['StarWarsG.exe', 'swfoc.exe', 'sweaw.exe'];
 
-export function openGame(gameDir, mods = [], { language = 0, expansion = true, packedLayer = null, collectMod = null } = {}) {
+// `looseIndex` is an optional Map a caller can share between mounts in one pass (for example a
+// plan that opens every installed scope). Each root's loose-file listing is then walked and
+// stat'ed once instead of once per mount; file bytes are still read and hashed on demand. It is a
+// snapshot: a file added or replaced after a root's first mount in this process is not picked up by
+// a later mount, so pass it only for read-only intake runs over a paused installation.
+export function openGame(gameDir, mods = [], { language = 0, expansion = true, packedLayer = null, collectMod = null, looseIndex = null } = {}) {
   language = languageId(language) ?? 0;
   const languages = new Map();
   const layers = [];
@@ -76,6 +81,15 @@ export function openGame(gameDir, mods = [], { language = 0, expansion = true, p
     layers.push({ entries });
     apply(index, entries);
   };
+  function looseTree(root, dir = 'Data') {
+    if (!looseIndex) return indexLoose(root, dir);
+    const key = path.resolve(root) + '\0' + dir,
+      cached = looseIndex.get(key);
+    if (cached) return cached;
+    const entries = indexLoose(root, dir);
+    looseIndex.set(key, entries);
+    return entries;
+  }
   function indexLoose(root, dir = 'Data', entries = new Map()) {
     for (const e of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
       const rel = dir + '/' + e.name;
@@ -103,7 +117,7 @@ export function openGame(gameDir, mods = [], { language = 0, expansion = true, p
         apply(index, entries);
       } else if (f) mount(readMegIndex(f));
     }
-    mount(indexLoose(root));
+    mount(looseTree(root));
   }
 
   const mountMod = entries => {
@@ -117,7 +131,7 @@ export function openGame(gameDir, mods = [], { language = 0, expansion = true, p
         const f = findCaseInsensitive(root, m[1].replace(/\\/g, '/'));
         if (f && !fds.has(f)) mountMod(readMegIndex(f));
       }
-    mountMod(indexLoose(root, path.basename(findCaseInsensitive(root, 'Data') || 'Data')));
+    mountMod(looseTree(root, path.basename(findCaseInsensitive(root, 'Data') || 'Data')));
   }
   if (packedLayer) mount(packedLayer);
 

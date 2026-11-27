@@ -14,9 +14,11 @@ import { surfaceAt, surfaceStatus, surfaceLight, surfaceEffect, NO_SURFACE, SURF
 import { CombatMods, MOD, combatBonus, LAND, bonusSourceDefs, bonusTypeFits, bonusOwnerFits } from './combatmods.js';
 import { animKinds } from './animkinds.js';
 import { tacticalCost, padCost, tacticalRules } from './tacticalrules.js';
+import { postTransitionSeconds } from './battlefrontrules.js';
 import { LandPaths } from './landpath.js';
 import { POSE_MARGIN } from './landinstances.js';
 import { cachedPose, settlePose } from './posecache.js';
+import { tickCraterGait, clearCraterGait } from './crater-gait.js';
 
 import { equip, tickBase, shieldStops, ungarrison, hostOf, specialAttack, looks, canExit } from './landbase.js';
 import { landAbilities, useAbility, abilityBlocked, refreshMods, tickAbilities, blastFactor } from './landabilities.js';
@@ -30,7 +32,8 @@ import { swapMode } from './weaponswap.js';
 import { fireNum, startingWeapon, thrownReach, fixedMuzzle } from './weaponswap.js';
 import { tickCollisions, resetCollideIds, collisionClass, terrainRound } from './landcollide.js';
 import { isSpawner } from './landgarrison.js';
-import { collisionOf, collisionBoxOf, meshHit, shapeOf } from './collmesh.js';
+import { LandShotRows } from './land-shot-rows.js';
+import { collisionOf, collisionBoxOf, projectileHullOf, meshHit, shapeOf } from './collmesh.js';
 import { SPACE_LAYER } from './tacticalcinematics.js';
 import {
   CAT,
@@ -425,6 +428,7 @@ class LandUnit {
     this.turret = undefined;
     this.kind = undefined;
     this.hitRadius = undefined;
+    this.shotBound = 0;
     this.captures = undefined;
     this.inaccuracy = undefined;
     this.builds = undefined;
@@ -838,6 +842,12 @@ export class LandSquad {
 }
 
 export function buildsFor(type, faction, campaign = false) {
+  const guest=!campaign && db.faction(faction)?.detachment;
+  if(guest){
+    const foundation=buildsFor(type,guest.host,false);
+    if(foundation.some(t=>t.has('Company_Units')))return guest.roster.map(n=>db.type(n));
+    return foundation.filter(t=>!isUpgrade(t));
+  }
   const out = [];
   let on = false;
   for (const k of type
@@ -929,6 +939,7 @@ export class LandWorld {
     }
     this.queues = factions.map(() => ({ units: [], upgrades: [] }));
     this.colors = factions.map(() => null);
+    this.liveries = factions.map(() => null);
     this.colorize = true;
     this.beaten = new Set();
     this.mods = factions.map(() => ({ build: 1, credit: 1, damage: 1, health: 1, shield: 1 }));
@@ -937,6 +948,10 @@ export class LandWorld {
     this.bounty = new BountyBook();
     this.sideMods = factions.map(() => new CombatMods());
     this.projectileMods = new ProjectileMods();
+    // Optional native weapon-cast authority (BattleWeaponCasts): decide ordinary
+    // projectile strikes on the authored hull triangles instead of the authored
+    // collision box. Undefined keeps every legacy decision below untouched.
+    this.weaponCasts = undefined;
     this.bonusHolders = [];
     this.bonusSeen = 0;
     this.collected = factions.map(() => 0);
@@ -1279,6 +1294,9 @@ export class LandWorld {
   teamColorFor(side, type) {
     if (!(side >= 0)) return this.colors[side] || null;
     return unitTeamColor(this.colorize !== false, type, this.factions[side], this.colors[side] || null);
+  }
+  liveryFor(side) {
+    return side >= 0 && this.liveries ? this.liveries[side] || null : null;
   }
   ally(a, b) {
     return a === b || (this.team[a] !== undefined && this.team[a] === this.team[b]);
@@ -2512,7 +2530,7 @@ export class LandWorld {
       if (pt.locked) continue;
       if (pt.side >= 0 && this.time < (this.captureWait ??= db.constants.num('Land_Capture_Allowed_Countdown_Seconds', 0))) continue;
       const lead = this.pointLead(pt),
-        rate = dt / Math.max(1e-3, pt.seconds);
+        rate = dt / Math.max(1e-3, postTransitionSeconds(pt, lead, this.shooter?.rules));
       if (lead === pt.side) {
         if (pt.taker !== -1 && (pt.progress -= rate) <= 0) {
           pt.taker = -1;
@@ -2565,20 +2583,48 @@ export class LandWorld {
     return lead;
   }
 
-  addBaseSite(o, side, built = false) {
-    const faction = this.factions[side];
-    let options = [];
-    for (const name of o.type.list('Marker_For_Specific_Object_Type')) {
-      const pad = db.type(name);
-      options = pad ? buildsFor(pad, faction) : [];
-      if (options.length) break;
+  // A team marker names each faction's counterpart pad. Share the physical
+  // site, but resolve its purchase menu for the requesting player.
+  basePad(marker, faction) {
+    const cache = this.basePads ||= new WeakMap();
+    if (!cache.has(marker)) cache.set(marker, new Map());
+    const byFaction = cache.get(marker);
+    if (!byFaction.has(faction)) {
+      let pad = null, options = [];
+      for (const n of marker.list('Marker_For_Specific_Object_Type')) {
+        pad = db.type(n);
+        options = pad ? buildsFor(pad, faction) : [];
+        if (options.length) break;
+      }
+      byFaction.set(faction,{pad,options});
     }
+    return byFaction.get(faction);
+  }
+
+  productionFor(u, side) {
+    if (!u || u.dead || !this.ally(u.side,side)) return [];
+    const faction = this.factions[side];
+    if (faction === this.factions[u.side] && u.builds) return u.builds;
+    let type = u.type;
+    const site = u.site;
+    if (site?.marker && !this.campaign && faction !== this.factions[u.side]) {
+      const own = this.basePad(site.marker,this.factions[u.side]).options;
+      const index = own.findIndex(uc => (db.type(uc.str('Tactical_Buildable_Constructed')) || uc) === u.type);
+      const counterpart = this.basePad(site.marker,faction).options[index];
+      if (counterpart) type = db.type(counterpart.str('Tactical_Buildable_Constructed')) || counterpart;
+    }
+    return buildsFor(type,faction,this.campaign).filter(t => t.has('Company_Units') || isUpgrade(t));
+  }
+
+  addBaseSite(o, side, built = false) {
+    const {pad,options} = this.basePad(o.type,this.factions[side]);
     if (!options.length) return null;
     const site = {
       base: true,
       side,
       point: null,
-      pad: db.type(o.type.list('Marker_For_Specific_Object_Type').find(n => db.type(n) && buildsFor(db.type(n), faction).length) || ''),
+      marker: o.type,
+      pad,
       x: o.pos[0],
       y: o.pos[1],
       z: o.pos[2],
@@ -2593,6 +2639,7 @@ export class LandWorld {
     if (file)
       loadModel(file, {
         teamColor: this.teamColorFor(side, site.pad),
+        livery: this.liveryFor(side),
         alt: Math.max(
           ...site.pad
             .list('Land_Damage_Alternates')
@@ -2686,7 +2733,7 @@ export class LandWorld {
   siteMenu(site, side) {
     const list = site.base
       ? this.ally(site.side, side)
-        ? site.options
+        ? site.marker && this.factions[site.side] !== this.factions[side] ? this.basePad(site.marker,this.factions[side]).options : site.options
         : []
       : site.point.side >= 0 && this.ally(site.point.side, side)
         ? buildsFor(site.point.type, this.factions[side], this.campaign)
@@ -2736,7 +2783,7 @@ export class LandWorld {
   async finishSite(site, uc, side = site.side) {
     const type = db.type(uc.str('Tactical_Buildable_Constructed')) || uc;
     const file = type.str('Land_Model_Name'),
-      inst = file && (await loadModel(file, { teamColor: this.teamColorFor(side, type), alts: true }).catch(() => null));
+      inst = file && (await loadModel(file, { teamColor: this.teamColorFor(side, type), livery: this.liveryFor(side), alts: true }).catch(() => null));
     if (!inst) {
       site.building = null;
       return null;
@@ -3002,7 +3049,7 @@ export class LandWorld {
   }
 
   cantBuy(u, type, side = u.side) {
-    if (u.dead || !this.ally(u.side, side) || !buildsFor(u.type, this.factions[side], this.campaign).includes(type)) return 'Not sold here';
+    if (!this.productionFor(u,side).includes(type)) return 'Not sold here';
     if (this.shooter && !isUpgrade(type)) return 'Units arrive by respawning';
     if (this.queueOf(side, type).length >= 5) return 'The queue is full';
     if (isHeroCompany(type)) {
@@ -3143,6 +3190,7 @@ export class LandWorld {
     const L = u.speed > 0 && !u.structure ? (u.loco ??= this.locoOf(u)) : null,
       yaw = L && L.sec && !u.fixedHeading ? this.secondaryYaw(u, dt) : u.heading;
     if (yaw !== u.heading && u.holder) u.holder.rotation.z = yaw + Math.PI / 2;
+    if (u.foot) tickCraterGait(this, u, dt, yaw);
     if ((u.holder && !u.holder.visible) || (l && (u.x - l.x) ** 2 + (u.y - l.y) ** 2 > l.r * l.r) || (l && l.see && !l.see(u, POSE_MARGIN))) {
       u.lagDt = (u.lagDt || 0) + dt;
       return;
@@ -3635,9 +3683,23 @@ export class LandWorld {
               continue;
             const d = Math.hypot(b.x - a.x, b.y - a.y),
               want = a.body + b.body;
-            if (d < (b.foot ? want : want * 0.8)) this.hurt(b, 1e9, null, 'CRUSHED');
+            if (d < (b.foot ? want : want * 0.8)) this.hurt(b, 1e9, null, 'CRUSHED', null, null, a);
           }
         }
+    }
+  }
+
+  // A ground vehicle with an authored jump may land with no remaining path,
+  // so the ordinary moving-crusher pass won't see it. Only at touchdown, after
+  // accepted movement, use the existing squash flags, damage and death handler.
+  crushLanding(a) {
+    if (!this.landingCrushRule || !a.crusher || a.kind !== 'VEHICLE' || a.foot || a.flies || a.dead || a.inside || a.flight || a.rope || a.scriptHidden || a.scriptZ != null || a.cinematicTransport) return;
+    for (const b of this.units) {
+      if (b === a || b.dead || b.gone || b.structure || b.kind === 'STRUCTURE' || b.flies || b.inside || b.flight || b.rope || b.scriptHidden || b.scriptZ != null || b.cinematicTransport || this.ally(a.side,b.side)) continue;
+      if (!(b.squashable || (a.supercrusher && b.squashableBig))) continue;
+      if (Math.abs(b.z-a.z) > Math.max(3, Math.min(a.body,b.body))) continue;
+      const r=(a.body+b.body)*(b.foot?1:.8);
+      if (Math.hypot(b.x-a.x,b.y-a.y)<r) this.hurt(b,1e9,null,'CRUSHED',null,null,a);
     }
   }
 
@@ -4067,7 +4129,7 @@ export class LandWorld {
         while (data && !this.fixed && this.sliceOver()) await this.nextSlice();
         let inst = null;
         try {
-          inst = data ? buildModel(data, { teamColor: this.teamColorFor(side, t) }) : null;
+          inst = data ? buildModel(data, { teamColor: this.teamColorFor(side, t), livery: this.liveryFor(side) }) : null;
         } catch {
           inst = null;
         }
@@ -4280,7 +4342,7 @@ export class LandWorld {
             file = h && h.str('Model_To_Attach'),
             bone = file && inst.bone ? inst.bone(h.str('Attachment_Bone')) : null;
           if (bone)
-            loadModel(file, { teamColor: this.teamColorFor(side, t) })
+            loadModel(file, { teamColor: this.teamColorFor(side, t), livery: this.liveryFor(side) })
               .then(a => {
                 if (!a || !a.root || u.gone) return;
                 bone.add(a.root);
@@ -4917,10 +4979,14 @@ export class LandWorld {
     this.order(squad, gx, gy);
   }
 
-  foesNear(x, y, reach) {
+  foesNear(x, y, reach, shotStep) {
     const S = FOE_CELL,
       r = reach + FOE_PAD;
-    if (r > S * 12) return this.units;
+    const shots = shotStep !== undefined && this.shotBatch;
+    if (r > S * 12) {
+      if (!shots) return this.units;
+      const list = (this.foeList ||= []);list.length=0;shots.append(this.units,x,y,shotStep,list);return list;
+    }
     if (this.foeGridAt !== this.time) {
       this.foeGridAt = this.time;
       const G = (this.foeGrid ||= new Map());
@@ -4943,7 +5009,9 @@ export class LandWorld {
     for (let cx = x0; cx <= x1; cx++)
       for (let cy = y0; cy <= y1; cy++) {
         const l = G.get(cx * 4096 + cy);
-        if (l) for (let i = 0; i < l.length; i++) out.push(l[i]);
+        if (!l) continue;
+        if (shots && l.length >= 8) shots.append(l,x,y,shotStep,out);
+        else for (let i = 0; i < l.length; i++) out.push(l[i]);
       }
     return out;
   }
@@ -5252,6 +5320,7 @@ export class LandWorld {
     }
   }
   die(u, how = '') {
+    clearCraterGait(u);
     const kind =
       {
         CRUSHED: 'Damage_Crush',
@@ -5298,7 +5367,7 @@ export class LandWorld {
     u.lieFor = u.vanish ? 0 : after(u.anim && u.anim.anim ? u.anim.anim.duration : 0);
     const file = clone ? clone.str('Land_Model_Name') : '';
     if (file && file.toUpperCase() !== u.type.str('Land_Model_Name').toUpperCase() && !/^NI_|^EI_|^RI_|^UI_/i.test(file)) {
-      loadModel(file, { teamColor: this.teamColorFor(u.side, u.type) })
+      loadModel(file, { teamColor: this.teamColorFor(u.side, u.type), livery: this.liveryFor(u.side) })
         .then(inst => {
           if (!inst || u.gone) return;
           u.inst.root.visible = false;
@@ -5341,7 +5410,7 @@ export class LandWorld {
     }
   }
 
-  hurt(u, amount, from, how = '', shot = null) {
+  hurt(u, amount, from, how = '', shot = null, contact = null, crusher = null) {
     if (u.dead || u.invulnUntil > this.time || u.limbo) return;
     if (u.noOpportunity) u.noOpportunity = false;
     if (from?.noOpportunity) from.noOpportunity = false;
@@ -5364,6 +5433,7 @@ export class LandWorld {
     const soak = Math.min(u.shield, amount);
     u.shield -= soak;
     u.health -= amount - soak;
+    if (contact && amount > soak && u.health > 0) this.onArmorHit?.(u,contact,amount-soak);
     u.lastHit = this.time;
     this.trackDamage(u, amount, from);
     if (from && from.side !== undefined) u.hitBy = from.side;
@@ -5433,7 +5503,9 @@ export class LandWorld {
         if (ex.length && this.onFx) this.onFx(ex[Math.floor(Math.random() * ex.length)], u.x, u.y, u.z);
       }
       this.collectBounty(u);
-      if (this.onDeath) this.onDeath(u);
+      // Only the lethal hit carries a physical crush cause. Do not use the
+      // damage source slot: the authored squash rule has no weapon attacker.
+      if (this.onDeath) this.onDeath(u, how, crusher);
       u.dead = true;
       u.path = [];
       u.target = null;
@@ -5926,22 +5998,29 @@ export class LandWorld {
     } else if (cat !== CAT.STATIC_BOMB) {
       let hit = null,
         ht = 2;
-      for (const o of this.foesNear(s.x, s.y, step + this.hitMax)) {
+      for (const o of this.foesNear(s.x, s.y, step + this.hitMax, step)) {
+        // The shared grid searches for the largest hull on the map. Most of
+        // the returned infantry cannot reach this segment. Cheap per-unit
+        // rejection first; keep eligibility and exact cast order for survivors.
+        const dx = o.x - s.x, dy = o.y - s.y;
+        const coarse = Math.max(o.hitRadius, o.shotBound || 0) + step;
+        const distance2 = dx * dx + dy * dy;
+        if (distance2 > coarse * coarse && o.collModel === (o.inst && o.inst.model)) continue;
         if (!this.shotMeets(o, s) && !(this.shooter && this.shooter.blocks(o, s))) continue;
         const C = this.meshOf(o),
-          r = C ? o.collR : o.hitRadius,
+          r = C ? Math.max(o.collR, this.weaponCasts?.enabled ? o.shotR || 0 : 0) : o.hitRadius,
           h = Math.max(r, o.aimZ * 0.6),
           reach = Math.max(r, o.collBall || 0) + step;
-        if ((o.x - s.x) ** 2 + (o.y - s.y) ** 2 > reach * reach) continue;
+        if (distance2 > reach * reach) continue;
         const oz = this.fixed && !o.structure ? o.z : o.holder.position.z;
-        if (C && (Math.max(z0, s.z) < oz + o.collLo - r || Math.min(z0, s.z) > oz + o.collHi + r)) continue;
+        if (C && (Math.max(z0, s.z) < oz + (o.shotLo ?? o.collLo) - r || Math.min(z0, s.z) > oz + (o.shotHi ?? o.collHi) + r)) continue;
         const tall = !C && this.shooter && o.kind === 'INFANTRY' ? this.shooter.heightOf(o) : 0;
         let tt = C
           ? this.meshStrike(o, x0, y0, z0, s.x, s.y, s.z)
           : tall
-            ? sweep(x0, y0, z0, s.x, s.y, s.z, o.x, o.y, o.z + tall * 0.5, 0, r, r, tall * 0.5)
-            : sweep(x0, y0, z0, s.x, s.y, s.z, o.x, o.y, o.z + o.aimZ * 0.6, 0, r, r, h);
-        if (tt < 0 && o.collBall > 0) tt = sweep(x0, y0, z0, s.x, s.y, s.z, o.x, o.y, o.z, 0, o.collBall, o.collBall, o.collBall);
+            ? sweep(x0, y0, z0, s.x, s.y, s.z, o.x, o.y, o.z + tall * 0.5, 0, r, r, tall * 0.5, this.weaponCasts)
+            : sweep(x0, y0, z0, s.x, s.y, s.z, o.x, o.y, o.z + o.aimZ * 0.6, 0, r, r, h, this.weaponCasts);
+        if (tt < 0 && o.collBall > 0) tt = sweep(x0, y0, z0, s.x, s.y, s.z, o.x, o.y, o.z, 0, o.collBall, o.collBall, o.collBall,this.weaponCasts);
         if (tt >= 0 && tt < ht) {
           ht = tt;
           hit = o;
@@ -6025,6 +6104,7 @@ export class LandWorld {
         o.collInv = new THREE.Matrix4().copy(o.inst.root.matrixWorld).invert();
       }
     } else o.collR = o.collBall;
+    o.shotBound = o.collR;
     return C;
   }
 
@@ -6046,7 +6126,38 @@ export class LandWorld {
     }
     const a = _ms0.set(x0, y0, z0).applyMatrix4(o.collInv),
       b = _ms1.set(x1, y1, z1).applyMatrix4(o.collInv);
-    return meshHit(o.coll, a.x, a.y, a.z, b.x - a.x, b.y - a.y, b.z - a.z);
+    return this.strikeHull(this.hullOf(o), a.x, a.y, a.z, b.x, b.y, b.z);
+  }
+
+  // Which authored hull decides a projectile strike. meshOf() above is an io/audio
+  // and broadphase cache and keeps its own box-first pick (collR, collLo, collHi are
+  // read by range, deflect and z culling); when a weapon-cast authority is wired in
+  // the narrow phase prefers the authored collision triangles and falls back to the
+  // authored COLLISIONBOX only for models that author no triangles at all. A shot
+  // that clips a box corner but misses the hull it approximates is a glancing miss
+  // here and a hit under meshOf()'s box.
+  hullOf(o) {
+    if (!this.weaponCasts?.enabled) return o.coll;
+    if (o.hullModel === o.collModel) return o.hull;
+    o.hullModel = o.collModel;
+    o.hull = projectileHullOf(o.inst && o.inst.model) || o.coll;
+    // A mod may give the precise hull a wing outside the authored box. Widen
+    // shot candidate bounds without changing range/deflection or damage padding.
+    if (o.hull && o.hull !== o.coll) {
+      const b=o.hull.box, k=Math.abs(o.holder.scale.x);
+      o.shotLo=Math.min(o.collLo,b[2]*k);o.shotHi=Math.max(o.collHi,b[5]*k);
+      o.shotR=Math.hypot(Math.max(-b[0],b[3]),Math.max(-b[1],b[4]))*k;
+    } else o.shotLo=o.shotHi=o.shotR=undefined;
+    o.shotBound = Math.max(o.collR || 0, o.shotR || 0);
+    return o.hull;
+  }
+
+  // Narrow phase for one hull: the native cast when the authority can answer for
+  // this hull, otherwise the legacy collmesh BVH test unchanged.
+  strikeHull(C, x0, y0, z0, x1, y1, z1) {
+    if (!C) return -1;
+    const t = this.weaponCasts?.segment(C, x0, y0, z0, x1, y1, z1);
+    return t === undefined ? meshHit(C, x0, y0, z0, x1 - x0, y1 - y0, z1 - z0) : t;
   }
 
   shotMeets(o, s) {
@@ -6100,7 +6211,8 @@ export class LandWorld {
           this.shotDamage(s) * db.damageMod(s.w.damageType, hit.armor) * this.absorbs(hit, s) * (this.shooter ? this.shooter.hitScale(s, hit) : 1),
           s.from,
           '',
-          s.w.proj
+          s.w.proj,
+          s
         );
     } else if (!hit) this.misses = (this.misses || 0) + 1;
     this.shotBlast(s, s.x, s.y, hit);
@@ -7151,11 +7263,16 @@ export class LandWorld {
         const near = box.near || (box.near = []),
           reach = box.slack + 45;
         near.length = 0;
+        box.nearFootprint = 0;
         for (const o of this.squads) {
           if (o === q || o.structure || !o.members.length) continue;
           const ob = o.box || o.members[0];
           if (!o.members[0].foot || (ob.x - box.x) ** 2 + (ob.y - box.y) ** 2 > (reach + (o.box ? o.box.slack : 10)) ** 2) continue;
-          for (const u of o.members) if (!u.dead && !u.inside && !u.flies) near.push(u);
+          for (const u of o.members) if (!u.dead && !u.inside && !u.flies) {
+            near.push(u);
+            const fp = (u.fp ??= u.type.num('Custom_Soft_Footprint_Radius', 0) || 3);
+            box.nearFootprint = Math.max(box.nearFootprint, Math.abs(fp));
+          }
         }
       }
       const dx = p.x - box.x,
@@ -7280,13 +7397,16 @@ export class LandWorld {
           hy = Math.sin(wantH),
           lx2 = -hy,
           ly2 = hx,
-          mine = (u.fp ??= t.num('Custom_Soft_Footprint_Radius', 0) || 3);
+          mine = (u.fp ??= t.num('Custom_Soft_Footprint_Radius', 0) || 3),
+          wide = (Math.abs(mine) + (box.nearFootprint ?? Infinity)) * 1.3;
         let ax = 0,
           ay = 0;
         for (const o of near) {
-          const ox = o.x - u.x,
-            oy = o.y - u.y,
-            R = (mine + (o.fp ??= o.type.num('Custom_Soft_Footprint_Radius', 0) || 3)) * 1.3,
+          const ox = o.x - u.x;
+          if (Math.abs(ox) > wide) continue;
+          const oy = o.y - u.y;
+          if (Math.abs(oy) > wide) continue;
+          const R = (mine + (o.fp ??= o.type.num('Custom_Soft_Footprint_Radius', 0) || 3)) * 1.3,
             d2 = ox * ox + oy * oy;
           if (d2 >= R * R || o.dead) continue;
           if ((o.v || 0) > 1 && Math.cos(o.heading - u.heading) > 0.5) continue;
@@ -7702,8 +7822,7 @@ export class LandWorld {
     const from = this.isOpen(f.x, f.y, f.need) ? { x: f.x, y: f.y } : this.nearestOpen(f.x, f.y, f.need) || { x: f.x, y: f.y };
     const way = this.route(from.x, from.y, place.x, place.y, f.need);
     if (!way || !way.length) return null;
-    const pts = [from, ...way],
-      cum = [0];
+    const pts = [from, ...way], cum = [0];
     for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
     const spacing = Math.max(0, ...f.units.map(u => u.g.q.type.num('FormationSpacing', 0)));
     const F = {
@@ -7718,6 +7837,12 @@ export class LandWorld {
       members: f.units.map(u => ({ q: u.g.q, g: u.g, dest: null, s: 0, seg: 0, dev: 0, side: 0, off: null }))
     };
     if (F.len < 1) return null;
+    // At a short initial switchback, the normal 40-unit lookahead can send
+    // the front rank back through following ranks. Identify it once per route.
+    if (this.formationAvoidance && pts.length > 2 && cum[1] < 40) {
+      const [a, b, c] = pts;
+      F.entryTurn = (b.x-a.x)*(c.x-b.x) + (b.y-a.y)*(c.y-b.y) < -0.15 * cum[1] * (cum[2]-cum[1]);
+    }
     this.groups.push(F);
     return F;
   }
@@ -7733,7 +7858,7 @@ export class LandWorld {
     return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, h: Math.atan2(b.y - a.y, b.x - a.x) };
   }
 
-  groupPlace(F, m, d, P, along = true) {
+  groupPlace(F, m, d, P, along = true, remember = true) {
     const S = F.sides;
     let shift = 0,
       free = Infinity;
@@ -7754,8 +7879,7 @@ export class LandWorld {
       ox = along ? off.x : 0,
       c = Math.cos(P.h),
       s = Math.sin(P.h);
-    m.off = off;
-    m.side = off.y + shift;
+    if (remember) {m.off = off; m.side = off.y + shift;}
     return { x: P.x + c * ox - s * off.y - s * shift, y: P.y + s * ox + c * off.y + c * shift, h: P.h };
   }
 
@@ -7880,6 +8004,16 @@ export class LandWorld {
           const o = u.off || { x: 0, y: 0 };
           let pt = { x: at.x + (c * o.x - s * o.y) * kk, y: at.y + (s * o.x + c * o.y) * kk };
           if (!this.isOpen(pt.x, pt.y, u.need)) pt = { x: Q.x, y: Q.y };
+          if (F.entryTurn && u.foot && m.s < F.cum[1] + 120) {
+            // Aim beyond the turn only when both the lane and the soldier's
+            // own offset slot are reachable. Fade back to 40 over 120 units;
+            // snapping the target back can send ranks through one another again.
+            const ahead = Math.min(F.len, m.s + 100 - Math.max(0, m.s - F.cum[1]) * 0.5),
+              p = this.groupAt(F, ahead), far = this.groupPlace(F,m,ahead,p,false,false),
+              c2 = Math.cos(p.h), s2 = Math.sin(p.h),
+              x = far.x + (c2*o.x - s2*o.y)*kk, y = far.y + (s2*o.x + c2*o.y)*kk;
+            if (this.clear(u.x,u.y,p.x,p.y,u.need) && this.clear(u.x,u.y,x,y,u.need)) pt={x,y};
+          }
           u.formPt = pt;
           if (!this.clear(u.x, u.y, pt.x, pt.y, u.need) && this.time >= (u.formRouteAt || 0)) {
             u.formRouteAt = this.time + 1;
@@ -8332,8 +8466,14 @@ export class LandWorld {
   cluttered(px, py, hx, hy, c, s, need, sent, slots = null) {
     const most = 0.15 * hx * hy,
       wide = Math.hypot(hx, hy) + db.constants.num('Destination_Collision_Query_Extension', 60);
-    const mine = [];
-    for (const q of sent) for (const u of q.members) if (!u.dead && !u.inside && !u.flies) mine.push(u);
+    let mine;
+    const attackers = () => {
+      if (!mine) {
+        mine=[];
+        for (const q of sent) for (const u of q.members) if (!u.dead && !u.inside && !u.flies) mine.push(u);
+      }
+      return mine;
+    };
     const boxes = (slots && slots.length ? slots : [{ x: 0, y: 0, hx, hy, q: null }]).map(b => ({
       x: px + c * b.x - s * b.y,
       y: py + s * b.x + c * b.y,
@@ -8352,12 +8492,12 @@ export class LandWorld {
       for (const u of q.members) {
         if (u.dead || u.inside || u.flies || (u.ccls ??= collisionClass(u.type)) < 5) continue;
         if ((u.x - px) ** 2 + (u.y - py) ** 2 > wide * wide) continue;
-        const ux = hardExtent(u, 'X'),
-          uy = hardExtent(u, 'Y'),
+        const ux = u.hardX ?? hardExtent(u, 'X'),
+          uy = u.hardY ?? hardExtent(u, 'Y'),
           ub = { x: u.x, y: u.y, c: Math.cos(u.heading), s: Math.sin(u.heading), hx: ux, hy: uy };
         let hit = false;
         for (const b of boxes) {
-          if (this.overlap(b, ub) <= 0 || crushed(b.q ? b.q.members : mine, u)) continue;
+          if (this.overlap(b, ub) <= 0 || crushed(b.q ? b.q.members : attackers(), u)) continue;
           hit = true;
           break;
         }
@@ -8524,6 +8664,10 @@ export class LandWorld {
     this.settleRestored();
     this.time += dt;
     const sim = !this.puppet;
+    // Consume the preceding tick's accepted travel before sampling this tick's
+    // ground. Stamping after unit placement left feet one depression too high.
+    if (sim) this.groundSteps?.step(this.units,dt);
+    if (sim) this.ramImpacts?.begin(this.units, dt);
     if (sim) {
       this.repathSome();
       if (this.moveTries.size) this.retryMoves();
@@ -8598,16 +8742,24 @@ export class LandWorld {
       let m = 0;
       for (const u of this.units)
         if (!u.dead) {
-          this.meshOf(u);
-          m = Math.max(m, u.hitRadius, u.collR || 0);
+          if (this.meshOf(u) && this.weaponCasts?.enabled) this.hullOf(u);
+          m = Math.max(m, u.hitRadius, u.collR || 0, u.shotR || 0);
         }
       this.hitMax = m;
     }
+    // A batch is synchronous; no one moves between ordinary in-flight segments.
+    // Endpoints, blasts, lightsabers and legacy shots can run gameplay callbacks.
+    this.shotBatch = this.shots.length >= 8 ? (this.shotRows ||= new LandShotRows()) : null;
+    this.shotBatch?.reset();
     for (const s of this.shots) {
       if (s.cat !== undefined) {
-        if (this.flyShot(s, dt)) this.shots[k++] = s;
+        if (this.flyShot(s, dt)) {
+          this.shots[k++] = s;
+          if (s.cat === CAT.LIGHT_SABER) this.shotBatch?.reset();
+        } else this.shotBatch?.reset();
         continue;
       }
+      this.shotBatch?.reset();
       if (s.track && !s.target.dead) {
         const T = s.target,
           sp = s.speed ?? s.w.speed,
@@ -8656,14 +8808,16 @@ export class LandWorld {
       const t = s.target;
       if (!t.dead && !t.spot) t.lastDamage = s.w.damageType;
       const lands = !s.ground && !s.expired && !t.dead && Math.hypot(t.x - s.ax, t.y - s.ay) <= t.hitRadius && !this.deflects(t, s);
-      if (lands) this.hurt(t, this.shotDamage(s) * db.damageMod(s.w.damageType, t.armor) * this.absorbs(t, s), s.from, '', s.w.proj);
+      if (lands) this.hurt(t, this.shotDamage(s) * db.damageMod(s.w.damageType, t.armor) * this.absorbs(t, s), s.from, '', s.w.proj, s);
       else this.misses = (this.misses || 0) + 1;
       this.shotBlast(s, s.ax, s.ay, lands ? t : null);
       if (s.onLand) s.onLand(s);
       else if (this.onImpact) this.onImpact(s);
       s.done = true;
     }
+    this.shotBatch = null;
     this.shots.length = k;
+    let touchdowns;
     if (this.flashes.length) this.flashes = this.flashes.filter(f => (this.time < f.until ? true : (f.mesh.visible = false)));
     let alive = 0;
     for (const u of this.units) {
@@ -8766,7 +8920,10 @@ export class LandWorld {
         u.z = heightAt(this.terrain, u.x, u.y) + Math.sin(Math.PI * k) * 45;
         u.holder.position.set(u.x, u.y, u.z);
         u.holder.rotation.z = u.heading + Math.PI / 2;
-        if (k >= 1) u.flight = null;
+        if (k >= 1) {
+          u.flight = null;
+          if (sim && this.landingCrushRule && u.crusher) (touchdowns ||= []).push(u);
+        }
         continue;
       }
       if (u.stunUntil > this.time) {
@@ -8952,5 +9109,13 @@ export class LandWorld {
       this.show(u, dt);
     }
     this.units.length = alive;
+    if (sim) this.ramImpacts?.end(this.units, (a,b,amount,at) => {
+      const contact={ax:at.x,ay:at.y,z:at.z};
+      for (const [target, from] of [[a,b],[b,a]]) {
+        target.lastDamage = 'Damage_Normal';
+        this.hurt(target, amount * db.damageMod('Damage_Normal',target.armor), from, '', null, contact);
+      }
+    });
+    if (touchdowns) for (const u of touchdowns) this.crushLanding(u);
   }
 }

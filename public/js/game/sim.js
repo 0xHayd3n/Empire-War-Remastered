@@ -5,7 +5,7 @@ import { ProjectileMods } from './projectilemods.js';
 import { survivorPicks } from './survivors.js';
 import { unitTeamColor } from './teamcolor.js';
 import * as THREE from '../../vendor/three/build/three.module.js';
-import { db, spawnList, SPAWN_TIERS, particleFile } from '../gamedata.js';
+import { db, spawnList, SPAWN_TIERS, particleFile, skirmishStation } from '../gamedata.js';
 import { Pathfinder, layerMask, ASTEROID_LAYERS } from './pathfind.js';
 import { prioritySet, priorityOf, setOf } from './priorities.js';
 import { BountyBook, bountyValue } from './bounty.js';
@@ -416,11 +416,11 @@ export const HYPER = (() => {
 })();
 
 export class Player {
-  constructor(id, team, { human = false, credits = 6000, color = null, popCap = 0, name = '', difficulty = 'medium' } = {}) {
+  constructor(id, team, { human = false, credits = 6000, color = null, popCap = 0, name = '', difficulty = 'medium', faction = team.factionName } = {}) {
     this.id = id;
     this.team = team;
     team.players.push(this);
-    this.faction = db.faction(team.factionName);
+    this.faction = db.faction(faction);
     this.factionName = this.faction.name;
     this.human = human;
     this.name = name || (human ? 'You' : 'Bot ' + id);
@@ -846,6 +846,7 @@ export class Unit {
     if (data) {
       this.model = buildModel(data, {
         teamColor: this.player && this.player.id >= 0 ? unitTeamColor(w.colorize !== false, this.type, this.player.factionName, this.player.color) : null,
+        livery: this.player && this.player.id >= 0 ? this.player.livery || null : null,
         ...w.modelOpts
       });
       this.obj.add(this.model.root);
@@ -1290,6 +1291,7 @@ export class Unit {
           this.player && this.player.id >= 0
             ? unitTeamColor(this.world.colorize !== false, this.type, this.player.factionName, this.player.color)
             : null,
+        livery: this.player && this.player.id >= 0 ? this.player.livery || null : null,
         ...this.world.modelOpts
       });
       const own = fireA ? [] : [def.str('Fire_Bone_A'), def.str('Fire_Bone_B')].map(n => n && hp.model.bone(n)).filter(Boolean);
@@ -1890,6 +1892,9 @@ export class World {
     this.hitPart = null;
     this.bonusHolders = [];
     this.projectileMods = new ProjectileMods();
+    // Optional native weapon-cast authority (BattleWeaponCasts). Undefined keeps
+    // every legacy narrow-phase decision below untouched.
+    this.weaponCasts = undefined;
   }
 
   addTeam(t) {
@@ -2124,7 +2129,8 @@ export class World {
         !u.dead &&
         !u.squad &&
         (u.player === player || (u.isStation && u.player.team === player.team)) &&
-        (u.type.upperName ||= u.type.name.toUpperCase()) === n
+        ((u.type.upperName ||= u.type.name.toUpperCase()) === n ||
+          (u === player.station && player.factionName !== u.player.factionName && this.stationForSeat(u,player)?.name.toUpperCase() === n))
       )
         c++;
     for (const s of this.squads)
@@ -2167,12 +2173,36 @@ export class World {
     return out;
   }
 
+  // A mixed-faction alliance still has one physical station. Each seat buys
+  // from its own pack-defined station at the shared station's current level.
+  stationForSeat(station, player) {
+    if (station.player.factionName === player.factionName) return station.type;
+    const cache = station.seatStations ||= new Map();
+    if (!cache.has(player.factionName)) {
+      let t = skirmishStation(player.factionName);
+      const level = station.type.num('Base_Level', 1);
+      for (let i = 0; t && i < 12 && t.num('Base_Level', 1) < level; i++) {
+        const next = db.type(t.str('Next_Level_Base'));
+        if (!next || next === t) break;
+        t = next;
+      }
+      cache.set(player.factionName, t);
+    }
+    return cache.get(player.factionName);
+  }
+
   buildOptions(builder, player) {
-    if (!builder.isPad)
-      return builder.player === player ||
-        ((builder.isStation || builder.type.bool('Is_Community_Property')) && builder.player.team === player.team)
-        ? builder.buildList
-        : [];
+    if (!builder.isPad) {
+      if (builder.player === player) return builder.buildList;
+      if (builder.player.team !== player.team || !(builder.isStation || builder.type.bool('Is_Community_Property'))) return [];
+      if (builder.player.factionName === player.factionName) return builder.buildList;
+      builder._lists ||= new Map();
+      if (!builder._lists.has(player)) {
+        const t = builder === player.station ? this.stationForSeat(builder, player) : builder.type;
+        builder._lists.set(player, t ? buildListFor(t,player.factionName) : []);
+      }
+      return builder._lists.get(player);
+    }
     if (builder.padOwner !== player || builder.padChild) return [];
     builder._lists ||= new Map();
     let l = builder._lists.get(player);
@@ -2719,8 +2749,17 @@ export class World {
       }
     }
     let d = amount * db.damageMod(damageType, target.armor);
-    if (this.viewerSees(target)) this.fx.hit(x, y, z, Math.min(40, 6 + d * 0.5), fx && fx.hit);
     const part = hp && hp.unit === target ? hp.route : null;
+    if (this.viewerSees(target)) {
+      // Carry a receiver only for a real, non-quiet hull strike. Area damage uses the unit origin,
+      // not a surface contact. Never serialize a Hardpoint or draw a second authored destruction decal.
+      const contact = x !== undefined && d > 0 && (x !== target.x || y !== target.y || z !== target.z) &&
+        !(part?.destroyable && (!part.alive || (part.health <= d && part.decal)));
+      const size = Math.min(40, 6 + d * 0.5);
+      if (contact && (this.presentArmorHits || /(?:^|[\\/])EV_STARDESTROYER(?:\.ALO)?$/i.test(target.type.str('Space_Model_Name'))))
+        this.fx.hit(x, y, z, size, fx && fx.hit, target, part ? target.hardpoints.indexOf(part) : -1);
+      else this.fx.hit(x, y, z, size, fx && fx.hit);
+    }
     if (part && part.destroyable) {
       if (!part.alive) return;
       part.health -= d;
@@ -3056,6 +3095,7 @@ export class World {
   }
 
   updateBegin(dt) {
+    this.ramImpacts?.begin(this.units,dt);
     this.stepDt = dt;
     this.stepAt = 0;
     this.time += dt;
@@ -3161,6 +3201,9 @@ export class World {
     if (this.wings.length) mergeWings(this);
     if (this.forces.length) recheckForces(this);
     for (const s of this.squads) if (!s.dead) this.updateSquad(s, dt);
+    this.ramImpacts?.end(units,(a,b,amount,at)=>{
+      for (const [target,from] of [[a,b],[b,a]]) this.damage(target,amount,{...at,damageType:'Damage_Normal',attacker:from,from});
+    });
     if (this.bonusHolders.length) this.tickBonuses();
     this.projectileMods.tick(this.time, (u, pm) => {
       if (u.cmods && u.cmods.drop(pm)) u.applyBonuses();
@@ -5445,10 +5488,11 @@ export class World {
                           h,
                           o.hitA,
                           o.hitB,
-                          o.hitC
+                          o.hitC,
+                          this.weaponCasts
                         )
-                      : sweep(x0, y0, z0, p.x, p.y, p.z, o.x, o.y, o.z, 0, o.hitRadius, o.hitRadius, o.hitRadius);
-                if (tt < 0 && o.collBall > 0) tt = sweep(x0, y0, z0, p.x, p.y, p.z, o.x, o.y, o.z, 0, o.collBall, o.collBall, o.collBall);
+                      : sweep(x0, y0, z0, p.x, p.y, p.z, o.x, o.y, o.z, 0, o.hitRadius, o.hitRadius, o.hitRadius,this.weaponCasts);
+                if (tt < 0 && o.collBall > 0) tt = sweep(x0, y0, z0, p.x, p.y, p.z, o.x, o.y, o.z, 0, o.collBall, o.collBall, o.collBall,this.weaponCasts);
                 if (tt >= 0 && tt < ht) {
                   ht = tt;
                   hit = o;
@@ -5632,6 +5676,17 @@ export class World {
     return out;
   }
 
+  // Narrow phase for one hull: the native weapon cast when the authority can
+  // answer for this hull, otherwise the legacy collmesh BVH test unchanged. Space
+  // already uploads only authored collision triangles into o.coll and o.hpColl, so
+  // this is the same hull either way - the native query decides, and hardpoint
+  // ordering below (strictly nearer wins, hull first on a tie) is untouched.
+  strikeHull(C, x0, y0, z0, x1, y1, z1) {
+    if (!C) return -1;
+    const t = this.weaponCasts?.segment(C, x0, y0, z0, x1, y1, z1);
+    return t === undefined ? meshHit(C, x0, y0, z0, x1 - x0, y1 - y0, z1 - z0) : t;
+  }
+
   meshStep(o, x0, y0, z0, x1, y1, z1, bare = false) {
     const k = 1 / (o.scale || 1),
       a = -((o.heading || 0) + Math.PI / 2),
@@ -5669,7 +5724,7 @@ export class World {
     };
     const A = to(x0, y0, z0, _ms0),
       B = to(x1, y1, z1, _ms1);
-    let best = o.coll ? meshHit(o.coll, A.x, A.y, A.z, B.x - A.x, B.y - A.y, B.z - A.z) : -1;
+    let best = this.strikeHull(o.coll, A.x, A.y, A.z, B.x, B.y, B.z);
     this.hitPart = null;
     if (o.hpColl && !bare)
       for (const part of o.hpColl) {
@@ -5681,7 +5736,7 @@ export class World {
           bx = e[0] * B.x + e[4] * B.y + e[8] * B.z + e[12],
           by = e[1] * B.x + e[5] * B.y + e[9] * B.z + e[13],
           bz = e[2] * B.x + e[6] * B.y + e[10] * B.z + e[14];
-        const t = meshHit(part.coll, ax, ay, az, bx - ax, by - ay, bz - az);
+        const t = this.strikeHull(part.coll, ax, ay, az, bx, by, bz);
         if (t >= 0 && (best < 0 || t < best)) {
           best = t;
           this.hitPart = part.hp;

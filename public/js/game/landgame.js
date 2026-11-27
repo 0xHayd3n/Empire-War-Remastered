@@ -1,20 +1,37 @@
 import { tacticalIntro } from './tacticalintro.js';
 import { TacticalMarker } from './tacticalobjects.js';
 import { colorizes } from './teamcolor.js';
+import { battleAnchor, landInstantWinner, stagePlanetSkirmish } from './planetbattle.js';
 import { setTacticalRules } from './tacticalrules.js';
 import { linkedParent, reportLinkedVictory, authoredMapOwner, ensureMissionPlayers, missionMapActor } from './linktactical.js';
 import { mpBattleParent } from './galacticmpbattle.js';
 
 import * as THREE from 'three';
+import { prepareDetachments } from './skirmishdetachments.js';
 import { db, selectionBoxColors } from '../gamedata.js';
 import { switchTarget } from './switchsides.js';
-import { loadMap, startEnvironment } from '../ted.js';
-import { loadModel, lighting, setPlanetEnvironment, depthMaterial, programSources, planetClock } from '../model.js';
+import { mapSourceDigest, loadMap, startEnvironment } from '../ted.js';
+import { battlePrefs } from '../battlerealism.js';
+import { CloseSubject } from './close-subject.js';
+import { HullShadow } from './hullshadow.js';
+import { BlastField } from './blastfield.js';
+import { bindSkyFaces } from './orbitprobe.js';
+import { landSkyFaces,landFinish,weatherProbeDue } from './land-sky-light.js';
+import { loadModel, lighting, blastLights, setBattleSurface, setPlanetEnvironment, depthMaterial, leafShadowMaterial, programSources, planetClock } from '../model.js';
 import { env as gpuEnv, wantGPU } from '../gpu/env.js';
 import { loadALO } from '../alo.js';
 import { iconUrl, iconCanvasRect, iconAtlas } from '../icons.js';
 import { renderSkyAtlas, clearSkyAtlas } from '../skyreflect.js';
 import { buildTerrain, buildWater, drawSky, skyMaterial, heightAt, paintFog, fogTexture, CELL } from './terrain.js';
+import { VehicleWrecks } from './vehicle-wrecks.js';
+import { CrushedRemains } from './crushed-remains.js';
+import { usesBattleDestruction, loadWreckPhysics } from './rapier-runtime.js';
+import { wantsRamming } from './ram-impacts.js';
+import { motionRule, installBattlePhysics } from './battle-physics.js';
+import { LandScars } from './land-scars.js';
+import { ArmorDamage } from './armor-geometry.js';
+import { InfantryBlast } from './infantry-blast.js';
+import { combinedStarts } from './combined-arms.js';
 import { LandWorld, costOf, timeOf, isUpgrade, buildsFor, FACING, placeRotation, landPop } from './land.js';
 import { showHand, formation, slotAt, stretched, laidOut, WHEEL_TURN } from './placehand.js';
 import { ArcView } from './directview.js';
@@ -65,13 +82,21 @@ import { loadBrain, Mind, target, buildGoal, aiFreeStore } from './landbrain.js'
 import { loadPrioritySets } from './priorities.js';
 import { weaponFireSound } from './weaponswap.js';
 import { LandScripts } from './landscripts.js';
+import { ScriptHost } from './scripts.js';
 import { TacticalStoryHost } from './tacticalstory.js';
 import { stepTacticalSpeech } from './tacticalspeech.js';
 import { fetchText } from '../vfs.js';
 import { gfx, pixelRatio, shadowSize, shadowReach, gammaOn } from '../gfx.js';
+import { airDensity, windVector } from '../battlefield.js';
+import { ForestWeather } from '../endor-weather.js';
+import { ImmersiveWeather, useWeatherLibrary, weatherContext } from '../immersive-weather.js';
+import { proceduralLandSky } from './procedural-land-sky.js';
+import { GroundRain } from '../groundrain.js';
+import { snapGroundGrid, nearGroundFit, nearGroundTarget } from './groundday.js';
 import { fitShadowToView } from './shadowfit.js';
 import { tickGarrisons, adoptGarrisons } from './landgarrison.js';
 import { PostFX } from './post.js';
+import { imagePostNeeded, postVertex } from '../imagesampling.js';
 import { BoltFeed, boltTint, clearBolts, extraFxOn, useGrade, GRADE } from './extrafx.js';
 import { categoryOf, CAT } from './projflight.js';
 import { placeLandInvasion, invasionWinner, landInvasionResult, invasionStructureDeath, restoreSheltered } from './campaignland.js';
@@ -131,6 +156,8 @@ async function landCamera() {
 import { ParticleManager, loadParticles } from '../particles.js';
 import { basisOf } from '../particlesim.js';
 import { LandInstances, viewTest, shaderScene } from './landinstances.js';
+import { ModelDetail } from './model-detail.js';
+import { LandScenery } from './scenery-lod.js';
 import { MirrorRenderer, mirrorSupported } from '../mirror.js';
 import { loadBlackMarket } from './blackmarket.js';
 import { giveFreeUpgrades } from './planetabilities.js';
@@ -150,16 +177,23 @@ import { openDialog } from './dialogs.js';
 import { showLoadScreen, endLoadScreen } from './loadscreen.js';
 import { showSplash, battleDestination } from '../splash.js';
 import { pressed, held, bothButtonsRotate, keysOf, keyName } from './keybinds.js';
+import { battleMessage } from './battlemessages.js';
+import { viewOptions as prefs, tacticalWheel, landZoomStep, showUnitVitals } from './viewpreferences.js';
 import { edgeCursor, panAxis } from './edge-scroll.js';
 import { beaconType } from './beacons.js';
 import { SpectatorView } from './spectator.js';
+import { applySetupLiveries, liveriesForSides } from './liverytransport.js';
 
 const LAND_TICK = 1 / 30;
 const ARMED_ORDERS = new Set(['guard', 'attack', 'move', 'attackmove']);
 const nextTask = () =>
   new Promise(r => {
     const ch = new MessageChannel();
-    ch.port1.onmessage = () => r();
+    ch.port1.onmessage = () => {
+      ch.port1.close();
+      ch.port2.close();
+      r();
+    };
     ch.port2.postMessage(0);
   });
 
@@ -267,12 +301,31 @@ async function spawnMapLoadTables(game, world, map) {
   }
 }
 
+// A replacement tree can use leaf cards and bark in different geometry groups of the
+// same InstancedMesh. Keep group indices (and non-leaf render state) intact.
+const leafGroups = new WeakMap();
+function groundLeafDepth(material, remaster) {
+  if (!remaster || !Array.isArray(material)) return leafShadowMaterial(material);
+  let slots = leafGroups.get(material);
+  if (!slots) leafGroups.set(material, (slots = []));
+  let any = false;
+  for (let i = 0; i < material.length; i++) {
+    const leaf = leafShadowMaterial(material[i]);
+    slots[i] = leaf || (material[i]?.visible && depthMaterial(material[i])) || material[i];
+    if (leaf) any = true;
+  }
+  slots.length = material.length;
+  return any ? slots : null;
+}
+
 function readyDrawsOnly(R) {
   if (!R.extensions.get('KHR_parallel_shader_compile')) return;
   const props = R.properties,
     direct = R.renderBufferDirect.bind(R),
     building = new WeakSet();
   R.renderBufferDirect = function (camera, scene, geometry, material, object, group) {
+    // Unlike a streaming model, a post quad cannot be skipped: subsequent passes would read an empty target.
+    if (material.vertexShader === postVertex) return direct(camera, scene, geometry, material, object, group);
     const prog = props.get(material).currentProgram;
     if (prog) {
       if (prog.isReady()) return direct(camera, scene, geometry, material, object, group);
@@ -320,12 +373,13 @@ export class LandGame {
     this.me = setup.players.indexOf(human);
     this.teams = setup.players.map(p => p.team);
     this.myTeam = human.team;
-    this.factions = setup.players.map(p => setup.teamFactions[p.team] || setup.teamFactions[0]);
+    this.factions = setup.players.map(p => p.skirmishFaction || setup.teamFactions[p.team] || setup.teamFactions[0]);
     this.ai = setup.players.map(() => ({ timer: 4 + simRandom() * 3, wait: null, sleep: 0 }));
     this.view = { x: 0, y: 0, dist: 460, yaw: -90 * DEG, pitch: 55 * DEG };
     this.keys = new Set();
     this.bolts = [];
     this.zones = [];
+    this.props = [];
     this.aiTimer = 5;
     this.hudTimer = 0;
     this.frame = this.frame.bind(this);
@@ -338,6 +392,22 @@ export class LandGame {
 
   dispose() {
     clearSkyAtlas();
+    this.world?.weaponCasts?.dispose();
+    this.closeShadow?.dispose();
+    this.scars?.dispose(); this.scars = this.craters = null;
+    this.armorDamage?.clear();
+    this.crushedRemains?.dispose();
+    this.crushedRemains=null;
+    this.vehicleWrecks?.dispose();
+    this.vehicleWrecks = null;
+    this.scenery?.dispose();
+    this.modelDetail?.dispose();
+    this.dropGroundShadow();
+    if(this.cast){const t=this.cast.target;if(lighting.shadowMap.value===t.depthTexture){lighting.shadowOn.value=0;lighting.shadowMap.value=this.noShadow;}
+      this.cast.renderer?.releaseTarget?.(t);t.depthTexture.dispose();t.dispose();this.cast=null;}
+    this.landProbe = null;
+    for (const entry of this.environmentSkies?.values() || []) entry.procedural?.dispose();
+    this.landFinish?.cancel?.();this.landFinish?.texture?.dispose();this.landFinish=null;this.terrain?.paint?.soilGrid?.tex.dispose();
     this.shooter?.dispose();
     this.modeSuspended = true;
     this.over = true;
@@ -386,7 +456,7 @@ export class LandGame {
       w = this.world;
     if (!m || this.over || !w) return;
     if (m.mode !== 'battle' && w.time - m.fought < 1) this.setMusic('battle', true);
-    else if (m.mode === 'battle' && w.time - m.fought >= m.peace) this.setMusic('ambient', true);
+    else if (m.mode === 'battle' && w.time - m.fought >= m.peace * prefs.peaceDelay) this.setMusic('ambient', true);
   }
 
   scriptEffect(kind, d) {
@@ -644,19 +714,29 @@ export class LandGame {
   async start() {
     const P = this.progress,
       setup = this.setup;
+    await prepareDetachments(setup);
     $('lobby').classList.add('hidden');
     const finishSplash = !setup.attract && showSplash(setup.restore ? 'save' : 'land', battleDestination(setup));
     if (setup.attract) document.body.classList.add('attract', 'hud-hidden');
     P('Loading map', 0);
     const map = (this.map = await loadMap(setup.mapFile));
+    stagePlanetSkirmish(map, setup);
     ensureMissionPlayers(setup, map);
+    applySetupLiveries(setup);
     startEnvironment(map, setup);
+    // A named solo shortcut selects one of this TED's authored environments, once. Do
+    // not set a phase, change the scenario, or override restore/network/normal rolls.
+    if(setup.endorShowers && setup.instant && !setup.net && !setup.restore && map.file?.toUpperCase()==='_MP_LAND_ENDOR.TED'){
+      const [{reviewedEndor},{edition}]=await Promise.all([import('../forestfloor.js'),import('../edition.js')]);
+      const i=map.environments?.findIndex(e=>e.name==='Noon_Rain' && e.weather?.toUpperCase()==='RAIN_RANDOM');
+      if(i>=0 && reviewedEndor(edition(),await mapSourceDigest(map))){map.environment=map.environments[i];map.activeEnvironment=i;}
+    }
     if (finishSplash) {
       showLoadScreen({ setup, map, land: true });
       finishSplash();
     }
     this.teams = this.players.map(p => p.team);
-    this.factions = this.players.map(p => setup.teamFactions[p.team]);
+    this.factions = this.players.map(p => p.skirmishFaction || setup.teamFactions[p.team]);
     if (setup.linkedTactical) {
       let team = Math.max(-1, ...this.teams) + 1;
       for (const o of map.objects || []) {
@@ -673,10 +753,13 @@ export class LandGame {
     const t = (this.terrain = map.terrain);
     if (!t) throw new Error('not a land map: ' + setup.mapFile);
 
+    const q = new URLSearchParams(location.search);
+    const scriptInputs = !q.has('noscripts') && ScriptHost.prepare().catch(() => null);
+    const hud = !setup.headless && loadHudAssets(this.factions[this.me]).catch(e => { console.warn('command bar', e); return null; });
     const glOpts = { antialias: gfx.aa !== false, powerPreference: 'high-performance', stencil: true };
     const onThread = /[?&]worker(&|$)/.test(location.search) && mirrorSupported();
     const renderer = (this.renderer = onThread ? new MirrorRenderer({ ...glOpts, webgpu: wantGPU() }) : new THREE.WebGLRenderer(glOpts));
-    if (renderer.isMirror && renderer.webgpu) renderer.gpuEnv(lighting, programSources);
+    if (renderer.isMirror && renderer.webgpu) renderer.gpuEnv(lighting, programSources, blastLights);
     renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     renderer.debug.checkShaderErrors = /[?&]shadercheck/.test(location.search);
     readyDrawsOnly(renderer);
@@ -689,6 +772,7 @@ export class LandGame {
     const scene = (this.scene = new THREE.Scene());
     this.sky = new THREE.Scene();
     this.skyTick = [];
+    this.immersiveWeather = new ImmersiveWeather();
 
     const env = map.environment;
     P('Building the ground', 0.2);
@@ -700,13 +784,18 @@ export class LandGame {
           .filter(i => i >= 0)
       )
     ];
-    this.ground = await buildTerrain(t);
+    const [ground, tables, brains] = await Promise.all([
+      buildTerrain(t, map, this.gpuOn ? this.gpu : renderer, this.life.signal), loadLandTables().catch(() => null),
+      Promise.all(this.factions.map(f => db.faction(f)?.detachment ? null : loadBrain(f).catch(() => null))),
+      this.applyEnvironment(env), loadBlobMaterials().catch(() => null),
+      loadPrioritySets().catch(e => console.warn('targeting priorities not loaded', e)), loadClashes().catch(() => null)
+    ]);
+    this.ground = ground;
     lighting.fowMap.value = fogTexture(t);
     lighting.fowSide.value = (t.size - 1) * CELL;
     scene.add(this.ground);
     this.water = buildWater(t);
     if (this.water) scene.add(this.water);
-    await this.applyEnvironment(env);
 
     if (shooterWanted(setup)) setup.fog = false;
     const world = (this.world = new LandWorld(map, scene, {
@@ -715,6 +804,25 @@ export class LandGame {
       credits: setup.credits,
       popCap: setup.popCap
     }));
+    let destructionReady;
+    if (usesBattleDestruction(setup)) {
+      this.infantryBlast = new InfantryBlast();
+      this.scars = new LandScars(world,ground,scene,setup);
+      this.craters = this.scars.pits;
+      const armor = this.armorDamage = new ArmorDamage();
+      world.onArmorHit = (u,s,d) => {
+        if ((!u.structure && u.kind!=='VEHICLE') || u.foot || u.inside || u.scriptHidden || u.seen===false || world.viewFogged(u.x,u.y) || !u.inst?.root) return;
+        armor.hit(u,u.holder,s.ax,s.ay,s.z??u.z+u.aimZ,Math.max(.7,Math.min(u.hitRadius*.22,1.4+d*.1)),d>=16,world.time);
+      };
+      destructionReady = loadWreckPhysics().then(R => {
+        if (!this.life.signal.aborted && wantsRamming(setup)) {
+          installBattlePhysics(world,R,'land',motionRule(setup),CELL);
+          world.landingCrushRule=world.battlePhysicsRule===1 && !setup.replay && (!setup.restore || setup.restore.battle?.landingCrushRule===1);
+          world.formationAvoidance=world.battlePhysicsRule===1 && (!setup.restore || setup.restore.battle?.formationAvoidance===1);
+        }
+        if (!this.life.signal.aborted) this.vehicleWrecks = new VehicleWrecks(R, scene, this.scars.visibleZ, (x, y) => world.viewFogged(x, y), () => gfx.keepInfantryBodies === true);
+      }).catch(e => console.warn('Using stock vehicle deaths:', e));
+    }
     world.campaign = !!setup.campaign;
     world.campaignSides = setup.campaign?.attacker && setup.campaign?.defender ? { attacker: setup.campaign.attacker.side, defender: setup.campaign.defender.side } : null;
     world.landControl = setup.type === 'control';
@@ -759,11 +867,9 @@ export class LandGame {
       const c = db.faction(f)?.vec('Color', null);
       return c ? new THREE.Color(c[0] / 255, c[1] / 255, c[2] / 255) : null;
     });
-    world.tables = await loadLandTables().catch(() => null);
-    await loadBlobMaterials().catch(() => null);
-    await loadPrioritySets().catch(e => console.warn('targeting priorities not loaded', e));
-    await loadClashes().catch(() => null);
-    this.brains = await Promise.all(this.factions.map(f => loadBrain(f).catch(() => null)));
+    world.liveries = liveriesForSides(this.players);
+    world.tables = tables;
+    this.brains = brains;
     this.goals = new URLSearchParams(location.search).has('oldai') ? null : new LandGoals(this);
     world.setWeather(env && env.weather);
     this.players.forEach((p, i) => {
@@ -806,6 +912,7 @@ export class LandGame {
         try {
           if (beh(o.type).has('MARKER') || o.type.bool('Is_Marker'))
             world.mapObjects.set(mapIndex, [new TacticalMarker(o, () => world.sidePlayers[side >= 0 ? side : world.wild])]);
+          if (setup.instant && (team || beh(o.type).has('CAPTURE_POINT'))) return;
           if (beh(o.type).has('CAPTURE_POINT')) {
             const pt = await world.addPoint(o);
             pt.hostile = hostileOwner(o.type, o);
@@ -905,8 +1012,8 @@ export class LandGame {
                   });
                   grp.matrixWorldAutoUpdate = false;
                 }
-                const entry = { grp, holder: grp, inst, x: o.pos[0], y: o.pos[1], scriptHidden: false };
-                (this.props ||= []).push(entry);
+                const entry = { grp, holder: grp, inst, modelFile: file, mapType: o.type.name, surfaceHint:o.type.str('Scenery_Surface'), x: o.pos[0], y: o.pos[1], scriptHidden: false };
+                this.props.push(entry);
                 world.bonusSource(o.type, side);
                 if (o.hint) {
                   const prop = new TacticalMarker(o, () => world.sidePlayers[world.wild]);
@@ -931,7 +1038,7 @@ export class LandGame {
       })
     );
 
-    if (!(setup.restore && setup.restore.battle) && this.netRole !== 'client') await spawnMapLoadTables(this, world, map);
+    if (!setup.instant && !(setup.restore && setup.restore.battle) && this.netRole !== 'client') await spawnMapLoadTables(this, world, map);
     const save = setup.restore && setup.restore.battle;
     const marks = team =>
       map.objects
@@ -943,10 +1050,26 @@ export class LandGame {
     const spots = sides.map(side => {
       const m = marks(this.teams[side]);
       if (m.length) return m;
+      if (setup.instant) {
+        const [x,y] = battleAnchor(map, this.teams[side]);
+        const at = world.nearestOpen(x,y);
+        if (at) return [at];
+      }
       const h = homeOf(side);
       const middle = (world.n * CELL) / 2;
       return [world.nearestOpen(h ? h.x + 40 : 400, h ? h.y : 400) || world.nearestOpen(middle + side * 200, middle)];
     });
+    // Physics encounters stage the first exchange in camera range. Ordinary
+    // Instant armies still use their map starts.
+    const encounter = !setup.net && !save && spots.length === 2 && setup.instant?.physicsEncounter;
+    const infantryEncounter = encounter === 'infantry', mixed = encounter === 'combined' || encounter === 'offensive';
+    if (mixed) spots.splice(0,spots.length,...combinedStarts(world,spots));
+    else if (encounter) {
+      const a = spots[0][0], b = spots[1][0], angle = Math.atan2(b.y - a.y, b.x - a.x), dx = Math.cos(angle), dy = Math.sin(angle);
+      const spread = infantryEncounter ? 19 : 45, distance = infantryEncounter ? 56 : 140;
+      for (const side of sides) spots[side] = [-spread, 0, spread].map(offset =>
+        world.nearestOpen(a.x + side * distance * dx - offset * dy, a.y + side * distance * dy + offset * dx, infantryEncounter ? 1 : 2) || spots[side][0]);
+    }
     if (setup.campaign?.tech) world.campaignTech = this.factions.map(f => setup.campaign.tech[f]);
     if (setup.campaign) world.planetCorruption = setup.campaign.corruption ?? -1;
     for (const [name, f] of Object.entries(setup.campaign?.spawn || {})) activateSpawners(world, name, f);
@@ -992,13 +1115,14 @@ export class LandGame {
         sides.flatMap(side => {
           const enemy = sides.find(o => !world.ally(o, side)) ?? side,
             other = spots[enemy][0],
-            list = db.faction(this.factions[side]).list('Land_Skirmish_AI_Default_Forces');
+            list = setup.instant?.groundArmies?.[side] || db.faction(this.factions[side]).list('Land_Skirmish_AI_Default_Forces');
           const nth = world.teamSides(side).indexOf(side);
           return list.map((n, i) => {
             const sp = spots[side],
               at = sp[(i + nth) % sp.length],
               o = world.nearestOpen(at.x + (i >= sp.length ? 40 : 0) + nth * 70, at.y + nth * 50) || at;
-            return world.spawn(n, o.x, o.y, Math.atan2(other.y - o.y, other.x - o.x), side);
+            const facing = mixed ? spots[enemy][i] : other;
+            return world.spawn(n, o.x, o.y, Math.atan2(facing.y - o.y, facing.x - o.x), side);
           });
         })
       );
@@ -1008,9 +1132,12 @@ export class LandGame {
       if (!this.audio.play(type.str('SFXEvent_Build_Complete')))
         this.audio.play(db.faction(this.factions[side]).str('Reinforcements_Ready_SFXEvent'));
     };
-    const fx = (this.fx = new ParticleManager(scene));
+    const fx = (this.fx = new ParticleManager(scene, this.immersiveWeather.dustAir));
     this.shotLooks = new Shots(scene, fx, !!this.shooter);
     const decals = (this.decals = new Decals(world, scene));
+    if (this.scars) decals.heightAt = this.scars.visibleZ;
+    this.groundRain = new GroundRain();
+    this.forestSky = new ForestWeather();
     const particle = name => {
       const t = db.type(name);
       return t ? t.str('Land_Model_Name') || t.str('Space_Model_Name') : '';
@@ -1059,22 +1186,65 @@ export class LandGame {
     world.onOverrun = side => {
       if (side === this.me) this.audio.play(db.faction(world.factions[side])?.str('SFXEvent_HUD_Tactical_Victory_Near'));
     };
+    world.onBlastGround = (p,x,y,z) => this.scars?.shot({w:{proj:p},ax:x,ay:y,z,ground:true},world.viewFogged(x,y));
     world.onImpact = s => {
       const p = s.w.proj;
-      if (s.target && !s.target.dead && s.target.side !== undefined ? s.target.seen === false : world.viewFogged(s.ax, s.ay)) return;
+      const concealed = world.viewFogged(s.ax,s.ay) || (!s.ground && s.struck?.seen === false);
+      this.scars?.shot(s,concealed);
+      if (concealed) return;
       if (!this.shooter && extraFxOn()) this.blastAt(s);
+      const splash = s.w.blastR ?? p.num('Projectile_Blast_Area_Range', 0);
+      if (!s.dud && !s.expired && splash > 0) {
+        const z=s.z ?? heightAt(t,s.ax,s.ay);
+        this.infantryBlast?.emit(world.units,s.ax,s.ay,z,Math.min(100,splash*1.4));
+        if (p.num('Projectile_Blast_Area_Damage',0)>0) {
+          this.vehicleWrecks?.blast(s.ax,s.ay,z,Math.min(72,splash));
+        }
+      }
+      if ((gfx.battleRealism === 'on' || battlePrefs(gfx).litPuffs) && !s.dud && !s.expired) {
+        const range = s.w.blastR ?? p.num('Projectile_Blast_Area_Range', 0);
+        if (range > 0) (this.blastField ||= new BlastField()).emit(s.ax, s.ay, (s.z ?? heightAt(this.terrain, s.ax, s.ay)) + 6, range, false);
+      }
       const first = s.ground ? 'Projectile_Ground_Detonation_Particle' : 'Projectile_Object_Detonation_Particle',
         second = s.ground ? 'Projectile_Object_Detonation_Particle' : 'Projectile_Ground_Detonation_Particle';
       if (s.expired) burst(particle(p.str('Projectile_Lifetime_Detonation_Particle')), s.ax, s.ay, s.z);
       else burst(particle(p.str(first)) || particle(p.str(second)), s.ax, s.ay, s.z);
-      if (!s.expired)
-        scorch(decals, p.str('Projectile_Ground_Detonation_Particle') || p.str('Projectile_Object_Detonation_Particle'), s.ax, s.ay);
+      // The persistent soil owns the ground mark. Don't stamp the legacy flat
+      // particle decal across a bowl, or under a shot which ended in mid-air.
       if (Math.random() < 0.3)
         this.audio.play(p.str('Projectile_SFXEvent_Detonate') || p.str('Projectile_SFXEvent_Detonate_Reduced_By_Armor'), s.ax, s.ay);
     };
     this.losses = new Map();
     this.floats = [];
-    world.onDeath = u => {
+    this.presentLandDeath = (u,how,crusher) => {
+      // Capture the last live pose before LandWorld selects its death clone. Its
+      // original death clock, explosions, survivors and obstacle logic still run.
+      const concealed = u.netHidden || u.cloaked || u.seen === false || world.viewFogged(u.x,u.y);
+      const pressed = how === 'CRUSHED' && !u.flies && !u.structure && !u.inside && !u.scriptHidden;
+      if (pressed) this.scars?.crushPrint?.(crusher,u,concealed);
+      else this.scars?.wreck(u,concealed);
+      if (u.inside || u.scriptHidden || concealed) return;
+      if (pressed && this.vehicleWrecks) {
+        this.crushedRemains ||= new CrushedRemains(this.scene,this.scars.visibleZ,(x,y)=>world.viewFogged(x,y),()=>gfx.keepInfantryBodies===true);
+        if (this.crushedRemains.present(u, crusher?.heading ?? u.heading ?? 0)) {
+          this.vehicleWrecks.residue.emit(u);
+          this.vehicleWrecks.replaced.add(u);
+          u.holder.visible=false;
+          return;
+        }
+      }
+      if (!this.infantryBlast) return;
+      const explodes = u.kind === 'VEHICLE' && !u.foot && !u.flies && !u.structure && u.type.list('Death_Explosions').length;
+      const braced = this.infantryBlast.applyOne(u);
+      try { this.vehicleWrecks?.presentDeath(u); } finally { if (braced) this.infantryBlast.restore(); }
+      if (explodes && !u.spin) {
+        const z = u.z + u.aimZ * 0.5;
+        this.infantryBlast?.emit(world.units, u.x, u.y, z, Math.min(125, Math.max(92, u.hitRadius * 5)));
+        this.vehicleWrecks?.blast(u.x, u.y, z, 64);
+      }
+    };
+    world.onDeath = (u,how,crusher) => {
+      this.presentLandDeath(u,how,crusher);
       if (this.invasionBook) invasionStructureDeath(world, this.invasionBook, u);
       this.reportView?.landDeath(u);
       if (world.companyLost(u)) {
@@ -1085,8 +1255,12 @@ export class LandGame {
         lost.set(ty, (lost.get(ty) || 0) + 1);
       }
       const ex = u.type.list('Death_Explosions');
-      if (!u.spin && ex.length) burst(particle(ex[Math.floor(Math.random() * ex.length)]), u.x, u.y, u.z + u.aimZ * 0.5);
-      for (const n of u.type.list('Death_Explosions')) scorch(decals, n, u.x, u.y);
+      if (!u.spin && ex.length) {
+        const z = u.z + u.aimZ * 0.5;
+        burst(particle(ex[Math.floor(Math.random() * ex.length)]), u.x, u.y, z);
+      }
+      if ((u.kind !== 'VEHICLE' || u.foot) && !u.flies && u.seen !== false && !world.viewFogged(u.x,u.y))
+        for (const n of u.type.list('Death_Explosions')) scorch(decals, n, u.x, u.y);
       this.audio.play(u.type.str('Death_SFXEvent_Start_Die') || u.type.str('SFXEvent_Die'), u.x, u.y);
       const f = db.faction(this.factions[this.me]);
       if (u.structure && world.ally(u.side, this.me)) this.audio.play(u.type.str('SFXEvent_Unit_Lost'));
@@ -1104,8 +1278,9 @@ export class LandGame {
         this.ui.radar?.event(pt.type.str(tag).trim(), pt.x, pt.y);
     };
     world.onCaptureStart = (pt, taker) => transition(pt, 'Begin_Control_Transition_Radar_Event', pt.side, taker);
-    world.onFx = (name, x, y, z) => {
-      scorch(decals, name, x, y);
+    world.onFx = (name, x, y, z, emitParticles = true, soilMarked = false) => {
+      if (!soilMarked) scorch(decals, name, x, y);
+      if (!emitParticles) return;
       const t = db.type(name);
       burst(t ? t.str('Land_Model_Name') || t.str('Space_Model_Name') : name, x, y, z);
     };
@@ -1138,16 +1313,33 @@ export class LandGame {
       Object.assign(this, { ui: setup.headless.ui, cine: setup.headless.cine, cam: setup.headless.cam });
       sidePlayersOf(this);
     } else {
-      const assets = await loadHudAssets(this.factions[this.me]).catch(e => {
-        console.warn('command bar', e);
-        return null;
-      });
+      const assets = await hud;
       if (!assets) throw new Error('the command bar art is missing');
       this.ui = new LandUI(this, assets);
       this.cine = new LandCinematic(this);
       this.cam = await landCamera();
     }
+    await destructionReady; // Already loading alongside the map, units and HUD; authored fallback on error.
+    if (wantsRamming(setup) && save?.physicsRule && !world.battlePhysicsRule) throw Error('This battle requires the local Rapier simulation rules; it cannot resume with different physics.');
+    if (save?.ramContacts && this.loadedLand) world.ramImpacts?.restore(save.ramContacts,this.savedThing(this.loadedLand));
     this.view.dist = this.cam.start;
+    if (encounter) {
+      const a = spots[0][mixed ? 11 : 1], b = spots[1][mixed ? 11 : 1];
+      if (mixed) {
+        const tanks = world.units.filter(u => u.side === 1 && u.type.name === 'T2B_Tank');
+        this.openingWreck = tanks.sort((l,r)=>Math.hypot(l.x-b.x,l.y-b.y)-Math.hypot(r.x-b.x,r.y-b.y))[0];
+        if (this.openingWreck) {
+          // Park the disabled tank so its crew's escort and the blast stay in view.
+          const tank = this.openingWreck;
+          tank.health = Math.min(tank.health,tank.maxHealth*0.12);
+          // A stunned unit skips the first locomotion tick that normally sets Z.
+          tank.holder.position.z = tank.z = heightAt(this.terrain,tank.x,tank.y) + (tank.lift || 0) + (tank.hoverZ || 0);
+          tank.stunUntil = tank.invulnUntil = 3;
+        }
+      }
+      Object.assign(this.view, { x: mixed ? b.x : (a.x + b.x) / 2, y: mixed ? b.y : (a.y + b.y) / 2, dist: infantryEncounter ? 106 : mixed ? 215 : 240, yaw: Math.atan2(b.y-a.y, b.x-a.x) - Math.PI/2, pitch: infantryEncounter ? 0.44 : 0.68 });
+      this.paused = true;
+    }
     this.viewHome = { ...this.view };
     if (!setup.headless) this.bindInput();
     const me = db.faction(this.factions[this.me]);
@@ -1166,7 +1358,6 @@ export class LandGame {
       if (m && this.music) this.music.peace = parseFloat(m[1]);
     });
 
-    const q = new URLSearchParams(location.search);
     this.noBatch = q.has('nobatch');
     this.noCull = q.has('nocull');
     this.noLoose = q.has('noloose');
@@ -1203,7 +1394,7 @@ export class LandGame {
       };
     this.world.poseCache = !this.noBatch && !q.has('nocache');
     if (!q.has('noscripts')) {
-      this.scripts = await LandScripts.create(this).catch(() => null);
+      this.scripts = await LandScripts.create(this, scriptInputs).catch(() => null);
       if (this.scripts && !setup.net) this.scripts.host.budgetMs = 4;
       this.savedScripts = this.scripts && this.loadedLand && setup.restore?.battle?.scripts;
       if (this.scripts) {
@@ -1268,6 +1459,14 @@ export class LandGame {
         this.savedScripts = null;
       }
     }
+    // Resolve the chosen landscape with the final map placements, before signalling
+    // multiplayer readiness or drawing even a warm-up frame. Never time out to a late swap.
+    const landscapeReady = this.ground.userData.landscape?.prepare(this);
+    if (landscapeReady) {
+      P('Preparing remastered landscape', 0.98);
+      await landscapeReady;
+      if (this.life.signal.aborted) return;
+    }
     if (setup.net) await this.prepareLockstep();
     if (setup.shooterNet) {
       this.progress(this.netRole === 'client' ? 'Joining the battle' : 'Opening the battle to other players', 1);
@@ -1290,11 +1489,13 @@ export class LandGame {
     if (!q.has('nowarm')) await this.warmFrames().catch(e => console.warn('warm frames', e));
     if (finishSplash) finishSplash();
     $('loading').classList.add('hidden');
-    await endLoadScreen({ direct: setup.benchmark || setup.restore || setup.direct || setup.net || setup.shooterNet, unlock: () => this.audio.unlock?.() });
     this.bench?.restart();
     this.last = performance.now();
-    requestAnimationFrame(this.frame);
-    if (!setup.campaign)
+    this.frame(this.last);
+    if (this.renderer.isMirror) await this.renderer.idle();
+    await endLoadScreen({ direct: setup.benchmark || setup.restore || setup.direct || setup.net || setup.shooterNet, unlock: () => this.audio.unlock?.() });
+    if (setup.instant) this.say('Instant Battle — eliminate the opposing ground force.');
+    else if (!setup.campaign)
       this.say('Take reinforcement points with infantry, build from your command centre, destroy the enemy command centre');
   }
 
@@ -1327,7 +1528,7 @@ export class LandGame {
         fog: s.fog,
         ...(s.spectate ? { spectate: true } : {}),
         teamFactions: s.teamFactions.slice(),
-        players: s.players.map(p => ({ human: !!p.human, team: p.team, color: p.color, difficulty: p.difficulty }))
+        players: s.players.map(p => ({ human: !!p.human, team: p.team, ...(p.skirmishFaction ? {skirmishFaction:p.skirmishFaction} : {}), color: p.color, difficulty: p.difficulty, ...(p.human && p.livery ? { livery: p.livery } : {}) }))
       },
       mode: 'land',
       summary: {
@@ -1339,6 +1540,11 @@ export class LandGame {
       },
       battle: {
         kind: 'land',
+        physicsRule: w.battlePhysicsRule || 0,
+        ...(w.landingCrushRule ? {landingCrushRule:1} : {}),
+        ...(w.formationAvoidance ? {formationAvoidance:1} : {}),
+        ...this.scars?.save(),
+        ...(w.ramImpacts?.held.size ? {ramContacts:w.ramImpacts.snapshot(this.thingRef(live))} : {}),
         environment: this.savedEnvironment ? this.savedEnvironment.index : this.map.activeEnvironment,
         time: r1(w.time),
         speed: this.speed,
@@ -1636,7 +1842,7 @@ export class LandGame {
     const reorder = (side, name, left) => {
       const t = db.type(name);
       if (!t || !w.queues[side]) return;
-      const from = w.units.find(u => u.structure && !u.dead && w.ally(u.side, side) && u.builds && u.builds.includes(t));
+      const from = w.units.find(u => u.structure && !u.dead && w.ally(u.side, side) && w.productionFor(u, side).includes(t));
       w.queueOf(side, t).push({ type: t, left, total: Math.max(left, timeOf(t) * w.mods[side].build), from, side });
     };
     this.reorder = reorder;
@@ -1793,13 +1999,12 @@ export class LandGame {
     }
     lighting.shadowTint.value.setRGB(-1, -1, -1);
 
-    const generation = (this.environmentGeneration = (this.environmentGeneration || 0) + 1);
     this.environmentSkies ||= new Map();
     let entry = this.environmentSkies.get(env);
     if (!entry) {
-      entry = { sky: new THREE.Scene(), ticks: [] };
+      entry = { sky: new THREE.Scene(), ticks: [], context: weatherContext(env, '', this.map) };
       this.environmentSkies.set(env, entry);
-      entry.loading = (async () => {
+      entry.loadOriginal = async () => {
         for (const type of (env && env.landSkies) || []) {
           const file = type.str('Land_Model_Name'),
             inst = await loadModel(file).catch(() => null);
@@ -1834,32 +2039,55 @@ export class LandGame {
           entry.sky.add(inst.root);
           break;
         }
-      })();
+        entry.originalReady = true;
+      };
     }
-    await entry.loading;
-    if (generation !== this.environmentGeneration) return;
-    this.sky = entry.sky;
+    this.skyEntry = entry;
+    await this.selectLandSky();
+  }
+  selectLandSky() {
+    const entry = this.skyEntry, landscape = this.ground?.userData;
+    const enabled = entry.context && useWeatherLibrary(gfx.immersiveWeather, landscape?.stockDaylight, landscape?.endorLandscape?.active || landscape?.reviewedLandscape?.active);
+    if (enabled && !entry.procedural) entry.procedural = proceduralLandSky(entry.context, this.immersiveWeather, lighting.sunDir, this.terrain?.clouds?.drift);
+    if (!enabled && !entry.originalReady) {
+      entry.loading ||= entry.loadOriginal();
+      // Keep this environment's sky visible during an uncached live switch. The async
+      // loader only populates its own entry; it cannot overwrite a later environment.
+      if (this.activeSky && this.activeSky === entry.procedural) return entry.loading;
+    }
+    this.activeSky = enabled ? entry.procedural : null;
+    this.sky = this.activeSky?.sky || entry.sky;
     this.skyTick = entry.ticks;
+    if (!enabled) return entry.loading;
   }
   refreshSkyAtlas(R) {
     const A = (this.skyAtlasState ||= { sky: null, by: null, left: 0, wait: 0 });
-    if (A.sky !== this.sky || A.by !== R) {
-      A.sky = this.sky;
-      A.by = R;
-      A.left = 5;
-      A.wait = 0;
+    const switched = A.sky !== this.sky || A.by !== R;
+    const color = this.immersiveWeather.uniforms.wxZenith.value, time = this.world?.time || 0;
+    // Cloud motion is continuous in the visible sky and water. Refresh filtered material
+    // probes on significant weather changes, not every frame or while the battle is paused.
+    const changed = this.activeSky && !switched && weatherProbeDue(A, color, time, this.world?.weather);
+    if (switched || changed) {
+      this.landProbe = null;
+      this.landFinish?.cancel?.(); this.landFinish?.texture?.dispose(); this.landFinish = null;
+      if (switched) clearSkyAtlas();
+      A.sky = this.sky; A.by = R; A.left = switched ? (this.activeSky ? 2 : 5) : 1; A.wait = 0;
+      (A.color ||= new THREE.Vector4()).copy(color); A.nextSample = time + 4;
     }
     if (A.left <= 0 || performance.now() < A.wait || !this.sky.children.length) return;
     A.left--;
     A.wait = performance.now() + 1000;
     renderSkyAtlas(R, this.sky);
+    A.version = (A.version || 0) + 1;
+    // The first WebGPU capture can submit an empty pass while the cube pipeline compiles.
+    if (this.activeSky && !A.left && R.pendingPipelines?.().includes('land-atmosphere')) A.left = 1;
   }
   weatherLightning(L, real) {
     const s = (this.lightningNow ||= lightningState()),
       was = !!s.light,
       light = stepLightning(s, L, real);
     if (light) {
-      const b = light.strength;
+      const b = light.strength * prefs.stormFlash;
       if (this.bombardLit) lighting.fillColor2.value.setRGB(...lighting.fillColor2.value.toArray().map(c => c + b));
       else {
         lighting.fillDir2.value.set(...light.dir);
@@ -1913,20 +2141,8 @@ export class LandGame {
     $('view').appendChild(bars);
   }
 
-  say(text, cls = '', color = '', life = 6000) {
-    if (!text) return;
-    const box = $('messages');
-    if (box.lastChild && box.lastChild.textContent === text) return;
-    const d = document.createElement('div');
-    d.textContent = text;
-    d.className = cls;
-    if (color) d.style.color = color;
-    const wrap = document.createElement('p');
-    wrap.style.margin = '0';
-    wrap.appendChild(d);
-    box.appendChild(wrap);
-    while (box.childElementCount > 5) box.firstChild.remove();
-    setTimeout(() => wrap.remove(), life);
+  say(text,cls,color,life) {
+    battleMessage($('messages'),text,cls,color,life);
   }
 
   tacticalCredits() {
@@ -2514,16 +2730,17 @@ export class LandGame {
     });
     addEventListener('keyup', e => this.keys.delete(e.code));
     const k = this.cam.steps,
-      far = k[k.length - 1];
+      far = k[k.length - 1],
+      near = this.setup.instant?.physicsEncounter === 'infantry' ? Math.min(80, k[0][0]) : k[0][0];
     const tilt = d => {
       for (let i = 1; i < k.length; i++)
         if (d <= k[i][0]) return (k[i - 1][1] + ((k[i][1] - k[i - 1][1]) * Math.max(0, d - k[i - 1][0])) / (k[i][0] - k[i - 1][0])) * DEG;
       return far[1] * DEG;
     };
-    v.dist = Math.min(far[0], Math.max(k[0][0], v.dist));
+    v.dist = Math.min(far[0], Math.max(near, v.dist));
     v.pitch = tilt(v.dist);
     this.viewTilt = tilt;
-    this.viewDist = d => Math.min(far[0], Math.max(k[0][0], d));
+    this.viewDist = d => Math.min(far[0], Math.max(near, d));
     el.addEventListener(
       'wheel',
       e => {
@@ -2539,18 +2756,18 @@ export class LandGame {
           return;
         }
         if (this.chase?.on) {
-          this.chase.wheel(e.deltaY / 100);
+          this.chase.wheel(tacticalWheel(e.deltaY) / 100);
           return;
         }
         if (this.track?.on) {
-          v.dist = Math.min(far[0], Math.max(k[0][0] * 0.25, v.dist * Math.exp(e.deltaY * 0.0011)));
+          v.dist = Math.min(far[0], Math.max(k[0][0] * 0.25, v.dist * Math.exp(tacticalWheel(e.deltaY) * 0.0011)));
           return;
         }
         if (ui.placing && globalThis.reinforceTurn !== false) {
           ui.placeTurn = (ui.placeTurn || 0) + Math.sign(e.deltaY) * WHEEL_TURN;
           return;
         }
-        v.dist = Math.min(far[0], Math.max(k[0][0], v.dist * (e.deltaY > 0 ? 1.12 : 0.89)));
+        v.dist = Math.min(far[0], Math.max(near, v.dist * landZoomStep(e.deltaY)));
         v.pitch = tilt(v.dist);
       },
       { passive: true }
@@ -2570,8 +2787,9 @@ export class LandGame {
       }
       if (this.track?.on) {
         if (this.controlsLocked) return;
-        v.yaw -= (e.movementX || 0) * TRACK_LOOK;
-        v.pitch = Math.min(1.5, Math.max(0.02, v.pitch + (e.movementY || 0) * TRACK_LOOK));
+        const k = TRACK_LOOK * prefs.orbitLook;
+        v.yaw -= (e.movementX || 0) * k;
+        v.pitch = Math.min(1.5, Math.max(0.02, v.pitch + (e.movementY || 0) * k * (prefs.orbitInvert ? -1 : 1)));
         return;
       }
       if (
@@ -2583,9 +2801,9 @@ export class LandGame {
         this.turnDrag = 'tilt';
         this.down = null;
       }
-      if (!this.controlsLocked && (e.buttons & 4 || (this.turnDrag && e.buttons & 3))) v.yaw -= e.movementX * 0.005;
+      if (!this.controlsLocked && (e.buttons & 4 || (this.turnDrag && e.buttons & 3))) v.yaw -= e.movementX * 0.005 * prefs.turn;
       if (!this.controlsLocked && this.turnDrag === 'tilt' && e.buttons & 2)
-        v.pitch = Math.min(far[1] * DEG, Math.max(k[0][1] * DEG, v.pitch + e.movementY * 0.005));
+        v.pitch = Math.min(far[1] * DEG, Math.max(k[0][1] * DEG, v.pitch + e.movementY * 0.005 * prefs.turn));
     });
     const send = (x, y, mode = '') => {
       if (this.controlsLocked) return;
@@ -2740,7 +2958,7 @@ export class LandGame {
         const pad = !u && g ? ui.padAt(g.x, g.y) : null;
         if (u && !u.dead && !u.squad.craft) {
           const now = performance.now(),
-            twice = this.lastPick && now - this.lastPick.t < 400 && this.lastPick.type === u.squad.type && u.side === me && !u.structure;
+            twice = this.lastPick && now - this.lastPick.t < 400 * prefs.multiClick && this.lastPick.type === u.squad.type && u.side === me && !u.structure;
           this.lastPick = { t: now, type: u.squad.type };
           if (twice) {
             ui.select(
@@ -2931,12 +3149,15 @@ export class LandGame {
 
   think(side, army = true) {
     const w = this.world,
-      ai = this.ai[side],
-      faction = this.factions[side];
+      ai = this.ai[side];
     const mine = w.units.filter(u => u.structure && w.ally(u.side, side) && !u.dead);
     const going = w.sites.some(s => s.building && s.building.side === side);
     const brain = this.brains[side] || null;
     const mind = brain ? new Mind(brain, w, side, { difficulty: this.players[side].difficulty || 'Normal' }) : null;
+    if(!going && !mind && db.faction(this.factions[side])?.detachment && !mine.some(u=>w.productionFor(u,side).some(t=>t.has('Company_Units')))) {
+      const site=w.sites.find(s=>s.base && w.ally(s.side,side) && w.siteOptions(s,side).length);
+      if(site)w.startSite(site,w.siteOptions(site,side)[0],side);
+    }
     if (!going && mind && !ai.led) {
       let best = null;
       for (const s of w.sites)
@@ -3003,7 +3224,7 @@ export class LandGame {
     if (!scripted && !ai.wait && w.time >= (ai.next || 0) && !w.queues[side].units.length) {
       const sold = [];
       for (const u of mine)
-        for (const t of buildsFor(u.type, faction, w.campaign)) if (t.has('Company_Units') || isUpgrade(t)) sold.push([u, t]);
+        for (const t of w.productionFor(u, side)) sold.push([u, t]);
       const pick = (test, most) => {
         let n = Math.floor(simRandom() * (most + 1));
         const can = () => sold.filter(([u, t]) => test(t) && !w.cantBuy(u, t, side));
@@ -3048,7 +3269,7 @@ export class LandGame {
     this.players.forEach((p, i) => {
       if ((p.human && !(this.shooter && i === this.me)) || w.aiSuspended || w.beaten.has(this.teams[i]) || this.setup.benchmark) return;
       const ai = this.ai[i];
-      const led = this.goals ? this.goals.tick(i, dt) : false;
+      const led = this.goals && !db.faction(this.factions[i])?.detachment ? this.goals.tick(i, dt) : false;
       ai.led = led;
       if (ai.armyDue) {
         ai.armyDue = false;
@@ -3089,6 +3310,23 @@ export class LandGame {
   stepEnd(dt) {
     const w = this.world;
     tickGarrisons(w).catch(e => console.error('garrison', e));
+    if (this.openingWreck && w.time >= 3.0) {
+      const tank = this.openingWreck;
+      this.openingWreck = null;
+      if (!tank.dead) {
+        // In the offensive vignette the nearest exposed escort is caught in the
+        // staged opening loss. No extra splash damage is added to ordinary battles.
+        if (this.setup.instant?.physicsEncounter==='offensive') {
+          let nearest=null, range=60;
+          for(const u of w.units) if(u.foot && !u.dead && !u.inside && u.side===tank.side) {
+            const d=Math.hypot(u.x-tank.x,u.y-tank.y); if(d<range){range=d;nearest=u;}
+          }
+          if(nearest) w.hurt(nearest,1e9,null);
+        }
+        w.hurt(tank,1e9,null);
+      }
+    }
+    if (this.setup.instant && !this.over) w.winner = landInstantWinner(w);
     if (this.setup.type === 'control') this.dominationStep(dt);
     if (this.invasionVictory && !this.over) {
       this.invasionVictory.left -= dt;
@@ -3126,7 +3364,7 @@ export class LandGame {
       k = this.keys,
       dt = this.warming || this.paused || this.over || this.tacticalMovies?.pausesMode ? 0 : real * this.speed;
     if (!this.menus.open && !this.controlsLocked) {
-      const sp = v.dist * 1.1 * real * (k.has('ShiftLeft') || k.has('ShiftRight') ? 2.6 : 1),
+      const sp = v.dist * 1.1 * real * prefs.pan * (k.has('ShiftLeft') || k.has('ShiftRight') ? 2.6 : 1),
         fx = -Math.cos(v.yaw),
         fy = -Math.sin(v.yaw);
       const steer = !!this.direct && this.steerDirect();
@@ -3138,8 +3376,8 @@ export class LandGame {
       const r = steer ? 0 : panAxis(k, 'SCROLL_RIGHT', 'SCROLL_LEFT', edge?.right);
       v.x += (fx * f + fy * r) * sp;
       v.y += (fy * f - fx * r) * sp;
-      if (held(k, 'ROTATE_LEFT')) v.yaw -= real * 1.2;
-      if (held(k, 'ROTATE_RIGHT')) v.yaw += real * 1.2;
+      if (held(k, 'ROTATE_LEFT')) v.yaw -= real * 1.2 * prefs.turn;
+      if (held(k, 'ROTATE_RIGHT')) v.yaw += real * 1.2 * prefs.turn;
       const fq = this.following;
       if (fq && (fq.dead || !fq.members?.length || f || r)) this.following = null;
       else if (fq) {
@@ -3207,19 +3445,24 @@ export class LandGame {
       this.ui.refresh();
       if (this.setup.fog !== false && !this.reveal && !this.tacticalCinematics?.on) {
         w.updateSight(this.me);
-        for (const u of w.units) u.holder.visible = u.seen && !u.inside && !u.scriptHidden && !u.netHidden;
+        for (const u of w.units) u.holder.visible = u.seen && !u.inside && !u.scriptHidden && !u.netHidden && !this.vehicleWrecks?.replaced.has(u);
         paintFog(this.terrain, w.eyes, true, this.paused ? 0 : 0.25 * (this.speed || 1), db.constants.num('LandFOWRegrowTime', 6));
         for (const p of this.props || []) p.grp.visible = !p.scriptHidden;
       } else {
         w.viewSide = undefined;
         for (const u of w.units) {
           u.seen = true;
-          u.holder.visible = !u.inside && !u.scriptHidden && !u.netHidden;
+          u.holder.visible = !u.inside && !u.scriptHidden && !u.netHidden && !this.vehicleWrecks?.replaced.has(u);
         }
         for (const prop of this.props || []) prop.grp.visible = !prop.scriptHidden;
         paintFog(this.terrain, null, false);
       }
     }
+    // Let the final wreck settle after the victory clock stops, but never while paused.
+    if (this.armorDamage?.rows.size) this.armorDamage.update();
+    this.vehicleWrecks?.step(this.over && !this.paused && !this.menus.open ? real : dt, w.units);
+    this.crushedRemains?.step(dt);
+    this.infantryBlast?.step(dt);
     this.ui.drawRadar();
     this.fogFade(real);
     if (w.interp) {
@@ -3258,9 +3501,14 @@ export class LandGame {
     this.tacticalCinematics?.paint();
     this.drawMarks();
     planetClock.value += dt;
+    // Follow the battle presentation clock, not wall time. Keep weather history when the
+    // setting is hidden/off so switching it on mid-shower gives the correct comparison.
+    const saturation = this.groundRain.update(w.weather, dt);
+    if(this.ground.userData.endorLandscape) this.forestSky.update(w.weather,dt,saturation);
+    this.decals.groundWet = this.ground.material.uniforms.groundWet.value = battlePrefs(gfx).rainSurfaces ? saturation : 0;
     if (dt > 0 && (this.trailTimer = (this.trailTimer || 0) - real) <= 0) {
       this.trailTimer = 0.1;
-      this.decals.trail(w.units, w.look, this.audio, (name, x, y) => w.onFx && w.onFx(name, x, y, heightAt(this.terrain, x, y) + 1));
+      this.decals.trail(w.units, w.look, this.audio, (name, x, y, emit) => w.onFx && w.onFx(name, x, y, heightAt(this.terrain, x, y) + 1, emit));
       this.decals.update();
     }
     {
@@ -3268,18 +3516,23 @@ export class LandGame {
         a = w.weather.fog || 0;
       if (this.environmentFogEnabled !== false && F && F.on && F.end > 0) {
         lighting.fogTint.value.setRGB(...F.color);
-        lighting.fogRange.value.set((1 - a) * F.start + a * (F.end - 0.0001), F.end);
+        // For the reviewed forest, raising a tactical camera above its own subject is not
+        // another kilometre of lowland mist. Keep distant scenery and authored weather fog.
+        const clearColumn = this.ground.userData.endorLandscape?.active
+          ? Math.max(0,this.view.dist*Math.sin(this.view.pitch)-120)*.85*(1-a) : 0;
+        lighting.fogRange.value.set((1 - a) * F.start + a * (F.end - 0.0001) + clearColumn, F.end + clearColumn);
       } else lighting.fogRange.value.set(0, 0);
     }
     {
       const L = bombardLightsNow(w, this.view.x, this.view.y),
         base = (this.ambientBase ||= new THREE.Color());
       if (!this.bombardLit) base.copy(lighting.ambient.value);
-      if (L) {
+      if (L && prefs.bombardFlash > 0) {
+        const k = prefs.bombardFlash;
         this.bombardLit = true;
         lighting.fillDir2.value.set(...L.dir);
-        lighting.fillColor2.value.setRGB(...L.color);
-        lighting.ambient.value.setRGB(base.r + 0.4 * L.color[0], base.g + 0.4 * L.color[1], base.b + 0.4 * L.color[2]);
+        lighting.fillColor2.value.setRGB(k * L.color[0], k * L.color[1], k * L.color[2]);
+        lighting.ambient.value.setRGB(base.r + 0.4 * k * L.color[0], base.g + 0.4 * k * L.color[1], base.b + 0.4 * k * L.color[2]);
       } else if (this.bombardLit) {
         this.bombardLit = false;
         lighting.fillColor2.value.setRGB(0, 0, 0);
@@ -3303,7 +3556,7 @@ export class LandGame {
         f.scale = 1;
         f.vx = f.vy = 0;
         f.energy = Math.min(1, w.weather.level);
-      });
+      }, { forecastDust: /^p_dust_storm\.alo$/i.test(wx.emitter) });
     else if (this.wxFx && (wx.level <= 0.01 || this.wxFx.dead)) {
       this.wxFx.stop();
       this.wxFx = null;
@@ -3320,6 +3573,8 @@ export class LandGame {
       }
     }
     this.weatherLightning(wx.lightning || 0, real);
+    const fieldPrefs=battlePrefs(gfx);
+    this.fx.breeze = fieldPrefs.sharedWind ? windVector(this.terrain.clouds,w.time,w.weather,this.fieldBreeze ||= new Float32Array(4)) : null;
     this.fx.wind = windDisturbances(w, dt, this.fx.wind || []);
     this.fx.update(dt);
     const L = this.audio.listener;
@@ -3364,21 +3619,62 @@ export class LandGame {
     }
     if (this.water) this.water.userData.tick(dt);
     this.ground.userData.tick(dt);
+    this.scars?.update();
+    this.ground.userData.landscape?.(this);
+    this.craters?.sync(); // terrain painting/material switches are now complete
+    this.selectLandSky();
     for (const f of this.skyTick) f(dt);
+    if (this.activeSky) {
+      this.immersiveWeather.sample(this.skyEntry.context, w.weather, w.time);
+      this.activeSky.update(w.time);
+    }
     const R = this.gpuOn ? this.gpu : this.renderer;
-    this.refreshSkyAtlas(R);
-    const skip = R.isMirror && R.behind();
+    const skip = R.isMirror && R.behind(), universal = gfx.battleRealism === 'on', look = battlePrefs(gfx);
+    if (!skip) this.refreshSkyAtlas(R);
+    if (this.blastField) {
+      this.blastField.advance(dt);
+      if ((!universal && !look.litPuffs) || !this.blastField.events.length) this.blastField = null;
+    }
     R.autoClear = false;
-    const draw = eye => {
+    let nearShadow;
+    const draw = (eye, main = false) => {
       for (const d of this.sky.children) d.position.setFromMatrixPosition(eye.matrixWorld);
-      drawSky(R, this.sky, eye);
+      const fused = main && this.remasteredGround && this.activeSky?.sky === this.sky && R.renderWithBackdrop && !nearShadow && !eye.userData.plain;
+      if (!fused) {
+      const field=lighting.fieldLook.value, density=field.x, filter=field.z;
+      const mode=lighting.receiverMode.value,coord=lighting.receiverMap.value,skyMode=this.skyMode ||= new THREE.Vector4(),skyCoord=this.skyCoord ||= new THREE.Vector4();
+      skyMode.copy(mode);skyCoord.copy(coord);mode.set(0,0,0,0);coord.set(0,0,0,0);
+      field.x=field.z=0; // The backdrop supplies the environment; it does not receive it.
+      try { drawSky(R, this.sky, eye); } finally { field.x=density; field.z=filter;mode.copy(skyMode);coord.copy(skyCoord); }
       R.clearDepth();
-      R.render(this.scene, eye);
+      }
+      if (main && this.blastField) this.blastField.bind(blastLights, w, eye);
+      // Only the player's tactical colour draw. Reflections and sun maps should
+      // still see the real stand. Use the actual target, including supersampling.
+      const canopy = lighting.canopyView.value;
+      if (main && gfx.canopyFade > 0 && !this.shooter && !this.cine?.on && !this.tacticalCinematics?.on && !this.chase?.active) {
+        const target = R.getRenderTarget(), size = target || R.domElement;
+        canopy.set(2/size.width, 2/size.height, Math.max(1, Math.hypot(eye.position.x-v.x,eye.position.y-v.y,eye.position.z-z)), Math.min(1,gfx.canopyFade));
+      }
+      try {
+        if (fused) R.renderWithBackdrop(this.scene, eye, this.sky);
+        else if (main && nearShadow) this.closeShadow.renderScene(R, this.scene, eye, lighting);
+        else R.render(this.scene, eye);
+      } finally { canopy.w = 0; blastLights.blastCount.value = 0; }
     };
     cam.updateMatrixWorld();
     this.sendTextures();
     const B = this.noBatch ? null : (this.batches ||= new LandInstances(this.scene, this.renderer, this.camera));
+    const scenery = this.scenery ||= new LandScenery();
+    scenery.register(this.props, this.remasteredGround);
+    const displayHeight = this.renderer.domElement.clientHeight || cam.viewport?.height || innerHeight;
+    const detail = gfx.modelLod !== false ? (this.modelDetail ||= new ModelDetail()) : null;
+    scenery.detailEnabled = !!detail;
+    if (!B && scenery.active) for (const p of this.props || []) scenery.select(p.grp,cam,displayHeight);
     if (B) {
+      B.scenery = scenery.active ? scenery : null;
+      B.displayHeight = displayHeight;
+      B.detail = detail;
       B.poseNow ||= u => w.pose(u, 0);
       B.noGL = R === this.gpu;
     }
@@ -3395,6 +3691,13 @@ export class LandGame {
     const tumble = sh?.state === 'alive' && sh.body?.holder.visible && !sh.body.dead && sh.third && sh.P.dash && !sh.seatOf() && !sh.big &&
       !this.cine?.on && !this.tacticalCinematics?.on && (this.rollPose ||= new RollPose());
     if (tumble) tumble.apply(sh.body.holder, sh.P.dash, sh.eye / .9);
+    try {
+    if (!skip) this.infantryBlast?.apply(sh?.body);
+    const near = !skip && universal && (this.closeSubject ||= new CloseSubject()).pick(w, cam, this.flybySubject);
+    const groundStrategy=look.groundDaylight===true && !this.shooter && !this.cine?.on && !this.tacticalCinematics?.on;
+    nearShadow = !groundStrategy && near && gfx.shadows && (this.closeShadow ||= new HullShadow()).draw(R, near, null, lighting, depthMaterial);
+    if (!nearShadow && this.closeShadow?.focus) this.closeShadow.park();
+    if (!universal && this.closeSubject) this.closeSubject.last = null;
     if (B) {
       const loose = (this.looseList ||= []);
       loose.length = 0;
@@ -3406,25 +3709,80 @@ export class LandGame {
       this.scene.matrixWorldAutoUpdate = false;
     }
     if (!skip) {
+      const faces = universal && !look.groundDaylight ? landSkyFaces(this, R) : null;
+      if (faces) bindSkyFaces(lighting, faces);
+      // A ground battlefield has atmospheric fill. Never apply the vacuum exposure to it.
+      setBattleSurface(true, look, universal ? (faces ? 3 : 2) : 0, !!R.hdrPass);
+      const unitInterval = v => Math.max(0, Math.min(1, +v || 0));
+      lighting.landStyle.value.set(unitInterval(gfx.endorShade), unitInterval(gfx.endorMist), this.view.dist, unitInterval(gfx.landHighlightProtect));
       if (!this.shooter) this.extraBolts(cam);
-      this.castShadows();
+      const groundLight=look.groundDaylight===true;
+      if(look.aerialDepth && this.environmentFogEnabled!==false){
+        lighting.fieldLook.value.x=airDensity(this.map.environment?.fog,w.weather.level);
+        lighting.fieldLook.value.y=this.ground.userData.lowland;
+        lighting.fieldLook.value.w=this.map.environment?.fog?.start || 0;
+      }
+      if(this.fx.breeze)lighting.fieldWind.value.fromArray(this.fx.breeze);
+      const U=this.ground.material.uniforms, daylight=groundLight && this.ground.userData.stockDaylight;
+      const atlas=(look.mapReflections || daylight) && landFinish(this,R,look.mapReflections),cloud=look.cloudReceivers && !!this.terrain.clouds?.texture;
+      const grid=(look.localSoil || atlas) && (this.terrain.paint.soilGrid ||= this.ground.userData.makeSoilGrid());
+      lighting.receiverMap.value.set(U.cloudAt.value.x,U.cloudAt.value.y,cloud?U.cloudAt.value.z:0,look.localSoil?grid.scale:0);
+      lighting.receiverMode.value.set(look.litPuffs?(universal?1:2):0,+!!look.leafLight,atlas?-grid.scale:0,look.waterOptics?unitInterval(gfx.landWaterClarity):0);
+      if(cloud)lighting.fieldCloud.value=U.clouds.value;if(grid)lighting.fieldSoil.value=grid.tex;if(atlas)lighting.fieldSky.value=atlas;
+      if(daylight && this.landFinish?.sky===this.sky && this.landFinish.r===R && this.landFinish.daylight){
+        bindSkyFaces(lighting,this.landFinish.daylight); lighting.landProbeOn.value=1;
+      }
+      if(groundLight)lighting.landGround.value.set(...this.ground.userData.soil,1);
+      lighting.sceneryWet.value = this.ground.material.uniforms.groundWet.value;
+      const forestOn=this.ground.userData.endorLandscape?.active && gfx.endorWeather!==false;
+      const immersive = this.activeSky && this.immersiveWeather.bind(lighting);
+      if(forestOn)this.forestSky.begin(lighting,1,this.environmentFogEnabled!==false && gfx.texMip<2,look.rainSurfaces,!immersive);
+      try {
+      this.castShadows(groundStrategy && shadowSize()>=1024);
       if (this.water) this.water.userData.mirror(R, cam, eye => this.mirrorCards(() => draw(eye)));
-      const fx = this.shooter ? this.shooter.postFor(R) : this.extraPost(R),
-        off = fx ? fx.begin() : false;
+      const fx = this.shooter ? this.shooter.postFor(R) : this.extraPost(R);
+      // The first-person kit clears world depth; never shade the world from a weapon-only depth buffer.
+      if (fx) {
+        fx.terrainContactMask = true;
+        fx.compactGroundContact = this.remasteredGround;
+        fx.waterLevel = this.terrain.water?.mode === 1 ? this.terrain.water.level : null;
+        fx.contact = kit?.root ? 0 : look.contactShade;
+        fx.glare = look.lensStreaks;
+        fx.closeNear = !!near;
+        fx.fleetBattle = universal;
+      }
+      const off = fx ? fx.begin() : false;
       R.clear();
-      draw(cam);
+      // Only the offscreen main colour pass carries the heightfield coverage in alpha.
+      // Reflections, cast shadow maps and direct-to-canvas draws keep opaque ground.
+      U.terrainContactMask.value = off && fx.targets.scene.depthTexture ? 1 : 0;
+      try {
+        if (detail) {
+          if (!B) this.scene.updateMatrixWorld();
+          detail.draw(this.scene,cam,displayHeight,() => draw(cam,true));
+        } else draw(cam,true);
+      } finally { U.terrainContactMask.value = 0; }
       if (kit?.root) {
+        lighting.fieldLook.value.x=lighting.fieldLook.value.z=0;
+        lighting.receiverMap.value.set(0,0,0,0);lighting.receiverMode.value.set(0,0,0,0);
         R.clearDepth();
         R.render(kit.scene, cam);
       }
       if (off) fx.end(cam);
       if (R === this.gpu) R.endFrame();
       if (this.sameFrame) this.sameFrame(cam);
+      if(lighting.landGround.value.w>1.5){lighting.hullShadowParams.value.x=0;lighting.hullShadowMap.value=this.noShadow;}
+      } finally {
+        if(forestOn)this.forestSky.end(lighting);
+        if(immersive)this.immersiveWeather.end(lighting);
+        setBattleSurface(false);
+      }
     }
     if (B) {
       this.scene.matrixWorldAutoUpdate = true;
       B.restore();
     }
+    } finally { this.infantryBlast?.restore(); }
     if (tumble) tumble.restore();
     if (hiddenBody) hiddenBody.visible = true;
     if (!skip) {
@@ -3922,7 +4280,11 @@ export class LandGame {
   }
 
   extraPost(R) {
-    if (!extraFxOn()) return null;
+    const cinematic = extraFxOn(), look = battlePrefs(gfx);
+    if (!cinematic && gfx.battleRealism !== 'on' && !(look.lensStreaks > 0) && !(look.contactShade > 0) && !imagePostNeeded(gfx)) {
+      if (this.extraFx?.targets?.upInput || this.extraFx?.targets?.resolved) this.extraFx.resize(this.extraFx.w, this.extraFx.h);
+      return null;
+    }
     if (this.gpuOn && !this.extraGpu) {
       this.extraGpuLoad ||= Promise.all([import('../gpu/programs-space.js'), import('../gpu/programs-lens.js')]).then(
         () => (this.extraGpu = true),
@@ -3935,11 +4297,11 @@ export class LandGame {
       P = this.extraFx = new PostFX(R);
       P.strength = GRADE.bloom;
       P.mBright.uniforms.cutoff.value = GRADE.cutoff;
-      useGrade(P, true);
+      useGrade(P, cinematic);
       this.extraCompiled = !R.compileAsync || !!R.isMirror || R === this.gpu;
       if (!this.extraCompiled)
         (async () => {
-          for (const m of [P.mBright, P.mBlur, P.mCombine, P.extraLens]) {
+          for (const m of [P.mBright, P.mBlur, P.mCombine, P.extraLens].filter(Boolean)) {
             P.quad.material = m;
             await Promise.resolve(R.compileAsync(P.quad, P.quadCam, P.quadScene)).catch(() => {});
           }
@@ -3947,19 +4309,33 @@ export class LandGame {
         })();
     }
     if (!this.extraCompiled) return null;
+    useGrade(P, cinematic);
+    P.glare = look.lensStreaks;
     P.r = R;
     if (P.w !== innerWidth || P.h !== innerHeight || P.pr !== R.getPixelRatio()) {
       P.resize(innerWidth, innerHeight);
       P.pr = R.getPixelRatio();
     }
-    P.bloom = !!gfx.bloom;
+    P.bloom = cinematic && !!gfx.bloom;
     return P;
   }
 
-  castShadows() {
+  dropGroundShadow(){
+    const near=this.groundNear;if(!near)return;
+    near.renderer.releaseTarget?.(near.target);near.target.depthTexture.dispose();near.target.dispose();this.groundNear=null;
+  }
+  get remasteredGround() {
+    const data = this.ground?.userData;
+    return !!(data?.endorLandscape?.active || data?.reviewedLandscape?.active);
+  }
+  castShadows(fine=false) {
+    const backend=this.gpuOn ? this.gpu : this.renderer;
+    if(this.groundNear && (!fine || !gfx.shadows || this.groundNear.target.width!==Math.min(shadowSize(),1024) || this.groundNear.renderer!==backend))this.dropGroundShadow();
     this.castOn = !!gfx.shadows;
     if (this.ratioWas !== pixelRatio()) this.fit();
-    if (this.cast && this.cast.size !== shadowSize()) {
+    const wideSize=fine ? shadowSize()/2 : shadowSize();
+    if (this.cast && this.cast.size !== wideSize) {
+      backend.releaseTarget?.(this.cast.target);
       this.cast.target.depthTexture.dispose();
       this.cast.target.dispose();
       this.cast = null;
@@ -3972,14 +4348,14 @@ export class LandGame {
     }
     let S = this.cast;
     if (!S) {
-      const size = shadowSize(),
+      const size = wideSize,
         target = new THREE.WebGLRenderTarget(size, size, { depthBuffer: true });
       target.depthTexture = new THREE.DepthTexture(size, size);
       target.depthTexture.type = THREE.UnsignedIntType;
       target.depthTexture.compareFunction = THREE.LessEqualCompare;
       target.depthTexture.magFilter = target.depthTexture.minFilter = THREE.LinearFilter;
       S = this.cast = {
-        target,
+        target, renderer:backend,
         camera: new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 2),
         frame: 0,
         size,
@@ -3987,7 +4363,13 @@ export class LandGame {
       };
     }
     const box = this.shooter ? this.shooter.shadowBox(S.size) : null;
-    if (S.frame++ % 2 === 0 || box?.every) {
+    const remaster = this.remasteredGround, canopy = remaster || lighting.receiverMode.value.y > 0;
+    // A remaster streams replacement foliage alongside moving units. Both cascades must see
+    // the same pose as the colour frame, including when the active recipe changes mid-battle.
+    const changed = S.remaster !== remaster || S.fine !== fine || S.canopy !== canopy;
+    if (S.frame++ % 2 === 0 || remaster || changed || box?.every || (fine && !this.groundNear)) {
+      const refreshWide = remaster || changed || !fine || !this.groundNear || !S.wideMatrix || S.frame % 4 === 1;
+      S.remaster = remaster; S.fine = fine; S.canopy = canopy;
       const look = this.tacticalCinematics?.on ? this.tacticalCinematics.evaluate('target') : null,
         eye = this.camera.position;
       const v = look ? { x: look.x, y: look.y, dist: Math.hypot(eye.x - look.x, eye.y - look.y, eye.z - (look.z || 0)) } : this.view;
@@ -3999,8 +4381,8 @@ export class LandGame {
         far = half * 3,
         dir = box?.dir || lighting.sunDir.value,
         z0 = box && box.z !== undefined ? box.z : heightAt(this.terrain, cx, cy);
-      const dz = Math.max(0.3, dir.z),
-        k = 1 / Math.hypot(dir.x, dir.y, dz);
+      const dz = remaster ? dir.z : Math.max(fine ? .025 : .3, dir.z);
+      const k = 1 / (Math.hypot(dir.x, dir.y, dz) || 1);
       cam.left = cam.bottom = -half;
       cam.right = cam.top = half;
       cam.near = 1;
@@ -4011,14 +4393,22 @@ export class LandGame {
       cam.updateProjectionMatrix();
       cam.updateMatrixWorld();
       if (!box) fitShadowToView(this.camera, cam, cx, cy, z0, half);
+      if (!box && (remaster || lighting.landGround.value.w > 0)) snapGroundGrid(cam, S.size);
       const hidden = [],
         L = cam.layers,
         swapped = (this.depthSwaps ||= []);
-      const twin = o => {
+      const twin = (o, replacement = null) => {
         const m = o.material,
-          d = this.noDepthTwin || Array.isArray(m) ? null : depthMaterial(m);
+          d = replacement || (this.noDepthTwin || Array.isArray(m) ? null : depthMaterial(m));
         if (!d) return;
-        const st = d.userData,
+        // Compiling on GL tells us nothing about the active WebGPU pipeline. In particular,
+        // don't switch an animated unit to a cold depth program halfway through its movement.
+        if (remaster && R === this.gpu) {
+          swapped.push(o, m);
+          o.material = d;
+          return;
+        }
+        const st = Array.isArray(d) ? (d.depthReady ||= {}) : d.userData,
           kind = o.isInstancedMesh ? 'inst' : 'one';
         if (st[kind] === true) {
           o.material = d;
@@ -4042,7 +4432,15 @@ export class LandGame {
       const writes = o => {
         if (!o.visible) return 0;
         let n = 0;
-        if (
+        const leaf = canopy && o.isMesh && o.layers.test(L) && groundLeafDepth(o.material, remaster);
+        if (leaf) {
+          // GL's ready-only renderer compiles deferred draws. Start compilation while the
+          // temporary depth material is still attached, not after restoring the colour pass.
+          if (R === this.gpu) { swapped.push(o, o.material); o.material = leaf; }
+          else twin(o, leaf);
+          n++;
+        }
+        else if (
           o.isMesh &&
           o.layers.test(L) &&
           (Array.isArray(o.material) ? o.material.some(m => m.depthWrite !== false) : o.material.depthWrite !== false)
@@ -4053,8 +4451,11 @@ export class LandGame {
         for (const c of o.children) n += writes(c);
         return n;
       };
+      // Forest shadow proxies are never visible to the player, water reflection or picking.
+      const forestCasters=this.scene.children.find(c=>c.userData.forestCaster);
+      if(forestCasters)forestCasters.visible=true;
       for (const c of this.scene.children)
-        if (c.visible && (!c.userData.casts || !writes(c))) {
+        if (c.visible && (!c.userData.casts || (c!==forestCasters && !writes(c)))) {
           c.visible = false;
           hidden.push(c);
         }
@@ -4063,21 +4464,41 @@ export class LandGame {
       const was = R.getRenderTarget();
       try {
         this.shooter?.shadowPass(true);
-        R.setRenderTarget(S.target);
-        R.clear();
-        R.render(this.scene, cam);
-        R.setRenderTarget(was);
+        if (refreshWide) {
+          R.setRenderTarget(S.target);
+          R.clear();
+          R.render(this.scene, cam);
+          const pitch = Math.max(cam.right - cam.left, cam.top - cam.bottom) / S.size;
+          (S.wideParams ||= new THREE.Vector3()).set(pitch, pitch / (cam.far - cam.near), 1 / S.size);
+          (S.wideMatrix ||= new THREE.Matrix4()).copy(S.bias).multiply(cam.projectionMatrix).multiply(cam.matrixWorldInverse);
+        }
+        if(fine){
+          const layer=this.groundNear ||= nearGroundTarget(shadowSize());layer.renderer=R;
+          nearGroundFit(layer,cam,cx,cy,z0,S.bias,v.dist);
+          R.setRenderTarget(layer.target);R.clear();R.render(this.scene,layer.cam);
+        }
       } finally {
+        R.setRenderTarget(was);
         this.shooter?.shadowPass(false);
+        if(forestCasters)forestCasters.visible=false;
         for (let i = 0; i < swapped.length; i += 2) swapped[i].material = swapped[i + 1];
         swapped.length = 0;
+        for (const c of hidden) c.visible = true;
       }
-      for (const c of hidden) c.visible = true;
-      lighting.shadowMatrix.value.copy(S.bias).multiply(cam.projectionMatrix).multiply(cam.matrixWorldInverse);
+      lighting.shadowMatrix.value.copy(S.wideMatrix);
     }
+    // A constant fraction of the full depth range can exceed the height of an infantryman.
+    if (remaster || lighting.landGround.value.w > 0) lighting.wideShadow.value.copy(S.wideParams);
     lighting.shadowMap.value = S.target.depthTexture;
     lighting.shadowTexel.value = 1 / S.size;
     lighting.shadowOn.value = 1;
+    if (fine && this.groundNear) {
+      const n = this.groundNear;
+      lighting.landGround.value.w = remaster ? 3 : 2; // mode 3: filter on the actual receiving triangle
+      lighting.hullShadowMap.value = n.target.depthTexture;
+      lighting.hullShadowMatrix.value.copy(n.matrix);
+      lighting.hullShadowParams.value.copy(n.params);
+    }
   }
 
   canRetreat() {
@@ -4488,15 +4909,23 @@ export class LandGame {
       this.shadowQ = new THREE.Quaternion();
       this.shadowS = new THREE.Vector3();
       this.shadowP = new THREE.Vector3();
+      this.contactUp=new THREE.Vector3();this.contactTilt=new THREE.Quaternion();
     }
-    {
+    if (this.remasteredGround) {
+      // A flat blob at the simulation height cuts through the remaster's displaced ground.
+      // Let the rendered surface itself receive the unit silhouette; Shadows off leaves neither.
+      this.shadows.count = 0;
+    } else {
       const L = w.look,
         r2 = L ? Math.min(L.r, 1600) ** 2 : 1e12,
         Z = new THREE.Vector3(0, 0, 1);
+      const contact=!!(battlePrefs(gfx).groundDaylight && gfx.shadows && !this.shooter);
+      this.shadows.material.opacity=contact ? .46 : 1;
       let n = 0;
       for (const u of w.units) {
         if (n >= 600) break;
-        if (u.dead || u.structure || u.inside || u.seen === false || (L && (u.x - L.x) ** 2 + (u.y - L.y) ** 2 > r2)) continue;
+        if(contact && (u.air || u.scriptHidden || !u.holder?.visible || (u.lift||0)>3))continue;
+        if (u.dead || (!contact && u.structure) || u.inside || u.seen === false || (L && (u.x - L.x) ** 2 + (u.y - L.y) ** 2 > r2)) continue;
         if (u.shadow === undefined) {
           const sc = u.type
             .str('Blob_Shadow_Scale')
@@ -4507,11 +4936,21 @@ export class LandGame {
             ? [sc[0] * (u.foot ? 2 : 1), (sc[1] ?? sc[0]) * (u.foot ? 2 : 1)]
             : [u.foot ? 9 : u.body * 2, u.foot ? 9 : u.body * 2];
         }
-        this.shadowS.set(u.shadow[0], u.shadow[1], 1);
+        const footprint=u.structure ? Math.min(220,2.1*(u.hitRadius||u.body||12)) : u.foot ? 9 : 2*(u.body||12);
+        const width=contact ? Math.max(footprint,u.shadow[0]||0) : u.shadow[0],height=contact ? Math.max(footprint,u.shadow[1]||0) : u.shadow[1];
+        this.shadowS.set(width,height,1);
         this.shadowP.set(u.x, u.y, heightAt(this.terrain, u.x, u.y) + 0.5);
-        this.shadows.setMatrixAt(n++, this.shadowM.compose(this.shadowP, this.shadowQ.setFromAxisAngle(Z, u.heading), this.shadowS));
+        this.shadowQ.setFromAxisAngle(Z,u.heading);
+        if(contact){
+          // Follow the local ground plane; keep the soft patch short at a cliff or platform edge.
+          const d=Math.min(8,Math.max(2,width*.12)),h=this.shadowP.z-.5;
+          const up=this.contactUp.set(h-heightAt(this.terrain,u.x+d,u.y),h-heightAt(this.terrain,u.x,u.y+d),d).normalize();
+          if(up.z<.65)continue;
+          this.shadowQ.premultiply(this.contactTilt.setFromUnitVectors(Z,up));
+        }
+        this.shadows.setMatrixAt(n++, this.shadowM.compose(this.shadowP,this.shadowQ,this.shadowS));
       }
-      this.shadows.count = lighting.shadowOn.value > 0.5 ? 0 : n;
+      this.shadows.count = !contact && lighting.shadowOn.value > 0.5 ? 0 : n;
       this.shadows.instanceMatrix.needsUpdate = true;
     }
     this.beams ||= [];
@@ -4785,6 +5224,17 @@ export class LandGame {
         ih = Math.max(1, Math.round(rect.h * uiScale));
       g.drawImage(atlas, rect.x, rect.y, rect.w, rect.h, Math.round(x - wd / 2 - 1 - iw), Math.round(y + 1.5 - ih / 2), iw, ih);
     };
+    const vitals = (x, y, width, frac, side, shield = null) => {
+      const wd = width * prefs.barWidth, left = x - wd / 2;
+      g.fillStyle = 'rgba(0,0,0,.7)';
+      g.fillRect(left - 1, y - 1, wd + 2, shield === null ? 5 : 8);
+      g.fillStyle = w.ally(side, me) ? (frac > 0.5 ? '#35e04a' : frac > 0.25 ? '#e0c435' : '#e04535') : '#e04535';
+      g.fillRect(left, y, wd * frac, 3);
+      if (shield !== null) {
+        g.fillStyle = '#4aa8ff';
+        g.fillRect(left, y + 4, wd * shield, 2);
+      }
+    };
     const teamBars = new Set();
     for (const u of w.units) {
       if (u.dead || u.seen === false || u.inside) continue;
@@ -4792,37 +5242,33 @@ export class LandGame {
       if (tm) {
         if (teamBars.has(u.squad)) continue;
         teamBars.add(u.squad);
-        const f = u.squad.healthFrac;
-        if (!u.squad.selected && f >= 1) continue;
+        const f = u.squad.healthFrac, native = u.squad.selected || f < 1;
+        const show = showUnitVitals(native, u.squad.selected || this.ui.hover === u.squad, f < 1);
+        if (!native && !show) continue;
         const s = at(tm.x, tm.y, tm.z + tm.top * 2.2 + 8);
         if (!s) continue;
         const wd = 44;
-        g.fillStyle = 'rgba(0,0,0,.7)';
-        g.fillRect(s[0] - wd / 2 - 1, s[1] - 1, wd + 2, 5);
-        g.fillStyle = w.ally(u.side, me) ? (f > 0.5 ? '#35e04a' : f > 0.25 ? '#e0c435' : '#e04535') : '#e04535';
-        g.fillRect(s[0] - wd / 2, s[1], wd * f, 3);
-        surfaceMark(u.squad.members.find(m => !m.dead && m.surfaceIcon)?.surfaceIcon, s[0], s[1], wd);
-        abilityMark(u.squad, s[0], s[1]);
+        if (show) vitals(s[0], s[1], wd, f, u.side);
+        if (native) {
+          surfaceMark(u.squad.members.find(m => !m.dead && m.surfaceIcon)?.surfaceIcon, s[0], s[1], show ? wd * prefs.barWidth : wd);
+          abilityMark(u.squad, s[0], s[1]);
+        }
         continue;
       }
       const pips = u.slots > 0 && (u.squad.selected || this.ui.hover === u.squad);
-      if (!pips && !u.squad.selected && u.health >= u.maxHealth && u.shield >= u.maxShield) continue;
+      const damaged = !(u.health >= u.maxHealth && u.shield >= u.maxShield), native = u.squad.selected || damaged;
+      const show = showUnitVitals(native, u.squad.selected || this.ui.hover === u.squad, damaged);
+      if (!pips && !native && !show) continue;
       const s = at(u.x, u.y, u.z + u.aimZ * 2.2 + 4);
       if (!s) continue;
       if (pips) this.garrisonPips(g, u, s[0], s[1] - 2);
-      if (!u.squad.selected && u.health >= u.maxHealth && u.shield >= u.maxShield) continue;
-      const wd = u.structure ? 70 : u.maxHealth > 150 ? 44 : 22,
-        f = Math.max(0, u.health / u.maxHealth);
-      g.fillStyle = 'rgba(0,0,0,.7)';
-      g.fillRect(s[0] - wd / 2 - 1, s[1] - 1, wd + 2, u.maxShield ? 8 : 5);
-      g.fillStyle = w.ally(u.side, me) ? (f > 0.5 ? '#35e04a' : f > 0.25 ? '#e0c435' : '#e04535') : '#e04535';
-      g.fillRect(s[0] - wd / 2, s[1], wd * f, 3);
-      if (u.maxShield) {
-        g.fillStyle = '#4aa8ff';
-        g.fillRect(s[0] - wd / 2, s[1] + 4, wd * Math.max(0, u.shield / u.maxShield), 2);
+      const wd = u.structure ? 70 : u.maxHealth > 150 ? 44 : 22;
+      if (show) vitals(s[0], s[1], wd, Math.max(0, u.health / u.maxHealth), u.side,
+        u.maxShield && prefs.barShields ? Math.max(0, u.shield / u.maxShield) : null);
+      if (native) {
+        surfaceMark(u.surfaceIcon, s[0], s[1], show ? wd * prefs.barWidth : wd);
+        if (u.squad.members.find(m => !m.dead && !m.inside) === u) abilityMark(u.squad, s[0], s[1]);
       }
-      surfaceMark(u.surfaceIcon, s[0], s[1], wd);
-      if (u.squad.members.find(m => !m.dead && !m.inside) === u) abilityMark(u.squad, s[0], s[1]);
     }
     this.drawHeroIcons(g, at);
     const hv = this.ui.hover,
@@ -5009,10 +5455,14 @@ export class LandGame {
         g.roundRect(ix - 0.5, iy - 0.5, size + 1, size + 1, 3.5);
         g.stroke();
         const f = Math.max(0, Math.min(1, hp ?? u.health / u.maxHealth));
-        g.fillStyle = 'rgba(0,0,0,.7)';
-        g.fillRect(ix - 1, iy + size + 2, size + 2, 5);
-        g.fillStyle = enemy ? '#e04535' : f > 0.5 ? '#35e04a' : f > 0.25 ? '#e0c435' : '#e04535';
-        g.fillRect(ix, iy + size + 3, size * f, 3);
+        const focused = u.squad?.selected || this.ui.hover === u.squad || (host.squad && this.ui.hover === host.squad);
+        if (showUnitVitals(true, focused, f < 1 || u.shield < u.maxShield)) {
+          const width = Math.min(size * prefs.barWidth, list.length > 1 ? step - 2 : Infinity), left = ix + (size - width) / 2;
+          g.fillStyle = 'rgba(0,0,0,.7)';
+          g.fillRect(left - 1, iy + size + 2, width + 2, 5);
+          g.fillStyle = enemy ? '#e04535' : f > 0.5 ? '#35e04a' : f > 0.25 ? '#e0c435' : '#e04535';
+          g.fillRect(left, iy + size + 3, width * f, 3);
+        }
         hits.push({ x: cx, y: cy, r: size / 2 + 2, u: u.inside && !u.inside.away ? u.inside : u });
       });
     }

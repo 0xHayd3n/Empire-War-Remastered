@@ -5,7 +5,7 @@ import { isPlainObject } from './plainobject.js';
 
 export const REPLAY_FORMAT = 'sw-revival-replay';
 export const REPLAY_EXT = '.swrreplay';
-const REPLAY_VERSION = 1;
+const REPLAY_VERSION = 3; // v1: legacy, v2: ramming, v3: ordinary physical motion and projectile contacts
 const LOG_TIMEOUT_MS = 5000;
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
@@ -24,7 +24,7 @@ export function replayUnavailableReason(game) {
   if (game.setup?.campaign || game.setup?.linkedTactical) return 'campaign battles are not recorded';
   if (game.setup?.restore) return 'the battle was loaded from a save';
   if (!game.mirror) return 'the battle is not running on the battle thread';
-  if (!game.recording) return 'recording is switched off in Tweaks';
+  if (!game.recording) return 'space skirmish recording is switched off in Settings';
   return null;
 }
 

@@ -1,4 +1,5 @@
 // Add small rule/texture metadata to a private index without re-baking its art.
+import { campaignPresence } from './campaign-presence.mjs';
 import { parentPort, workerData } from 'node:worker_threads';
 import { openGame } from './megfs.mjs';
 import { loadPack } from './universal-library.mjs';
@@ -17,6 +18,7 @@ try {
   };
   const { campaigns } = await loadCampaignData();
   parentPort.postMessage({
+    presence: campaignPresence(campaigns,workerData.facts,workerData.targets),
     combat: combatCatalog(archive, pack, campaigns),
     payment: productionPayment(archive, pack),
     buildTime: constructionTime(archive, pack),

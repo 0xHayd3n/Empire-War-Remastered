@@ -1,0 +1,146 @@
+--- a/model.js
++++ b/model.js
+@@ -412,9 +412,4 @@
+ void main() {
+   vec4 base = texture2D(map, vUv);
+-#if defined(ALPHA) && !defined(UNLIT) && (defined(WIND_LEAVES) || defined(ENDOR_WOODLAND))
+-  // A hole in a leaf card needs neither normal mapping nor filtered sunlight.
+-  #define EARLY_LEAF_MASK
+-  if (base.a * opacity <= alphaRef) discard;
+-#endif
+ #if defined(WIND_LEAVES) || (defined(ENDOR_WOODLAND) && defined(ALPHA)) || defined(CANOPY_STEM)
+   ${canopyWindowShader(false)}
+@@ -733,7 +728,5 @@
+   if (mapShadow) col *= mix(shadowTint, vec3(1.0), shadowLit);
+   #ifdef ALPHA
+-  #ifndef EARLY_LEAF_MASK
+   if (base.a * opacity <= alphaRef) discard;
+-  #endif
+   gl_FragColor = vec4(col, base.a * opacity * ls.a);
+   #else
+--- a/gpu/programs.js
++++ b/gpu/programs.js
+@@ -318,5 +318,4 @@
+   let fc = v.pos.xy;
+   var base = textureSample(mapT, mapS, v.vUv);
+-  ${on('ALPHA') && !on('UNLIT') && (on('WIND_LEAVES') || on('ENDOR_WOODLAND')) ? 'if(base.a*D.opacity<=D.alphaRef){discard;}' : ''}
+   ${on('WIND_LEAVES') || (on('ENDOR_WOODLAND') && on('ALPHA')) || on('CANOPY_STEM') ? canopyWindowShader(true) : ''}
+   ${stable ? `let dx=dpdx(v.vUv);let dy=dpdy(v.vUv);let filterK=detailWidth(dx,dy,vec2f(textureDimensions(mapT,0)));
+@@ -505,6 +504,5 @@
+   col = mix(P.fogTint, col, haze(v.vWorldPos));
+   if (mapShadow) { col *= mix(P.shadowTint, vec3f(1.0), shadowLit); }
+-  ${on('ALPHA') && !(on('WIND_LEAVES') || on('ENDOR_WOODLAND')) ? 'if (base.a * D.opacity <= D.alphaRef) { discard; }' : ''}
+-  ${on('ALPHA') ? 'return vec4f(col, base.a * D.opacity * ls.a);' : 'return vec4f(col, D.opacity * ls.a);'}
++  ${on('ALPHA') ? 'if (base.a * D.opacity <= D.alphaRef) { discard; }\n  return vec4f(col, base.a * D.opacity * ls.a);' : 'return vec4f(col, D.opacity * ls.a);'}
+ }`);
+   return L.join('');
+@@ -649,5 +647,5 @@
+ }
+ ${groundFillShader(true)}
+-${nearGroundShader(true, true)}
++${nearGroundShader(true)}
+ fn remasteredReceiver()->bool { return ${mixed?'true':'T.forest.y>.5'}; }
+ fn sunlit(wp: vec3f, normal: vec3f) -> f32 {
+@@ -721,7 +719,7 @@
+   let cl = textureSample(cloudsT, cloudsS, (vWorld.xy + T.cloudAt.xy) / T.cloudAt.z).rgb;
+   let seen = textureSample(fogT, fogS, vWorld.xy / T.side.x).r;
+-  let vis=groundSun(vWorld,n); direct=P.sunColor;
++  let vis=sunlit(vWorld,n); direct=P.sunColor;
+   terrainSky=vec3f(1.);
+-  if(P.landGround.w>0.0 || remasteredReceiver()){direct*=cl*vis;}else if(P.receiverMap.z>0.0){direct*=cl;}
++  if(P.landGround.w>0.0){direct*=cl*groundSun(vWorld,n,vis);}else if(remasteredReceiver()){direct*=cl*vis;}else if(P.receiverMap.z>0.0){direct*=cl;}
+   ${woodGround(true)}
+   let Ly = v.vLayers;
+--- a/landlight.js
++++ b/landlight.js
+@@ -34,5 +34,5 @@
+ }
+ // Fine-map visibility fades to the existing wide map across a band, not a hard split.
+-export function nearGroundShader(wg, terrain = false) {
++export function nearGroundShader(wg) {
+   const p = wg ? 'P.' : '',
+     V = wg ? 'vec3f' : 'vec3',
+@@ -45,9 +45,6 @@
+     return wg ? `textureSampleCompareLevel(hullShadowMap,shadowS,q.xy+${offset},${depth})` : `texture(hullShadowMap,vec3(q.xy+${offset},${depth}))`;
+   };
+-  // Terrain has no separate use for wide visibility. Only sample it outside the
+-  // near cascade or in its blend band. Models can reuse their existing wide result.
+-  const wide = terrain ? 'sunlit(wp,n)' : 'wide';
+-  return `${wg ? `fn groundSun(wp:vec3f,n:vec3f${terrain?'':',wide:f32'})->f32` : `float groundSun(vec3 wp,vec3 n${terrain?'':',float wide'})`}{
+- if (${p}landGround.w<1.5){return ${wide};}
++  return `${wg ? 'fn groundSun(wp:vec3f,n:vec3f,wide:f32)->f32' : 'float groundSun(vec3 wp,vec3 n,float wide)'}{
++ if (${p}landGround.w<1.5){return wide;}
+  ${wg?'var':'vec2'} gradient=${v2}(0.0);
+  ${wg?'var':'vec3'} q=(${p}hullShadowMatrix*${v4}(wp+n*(0.48*${p}hullShadowParams.x),1.0)).xyz;
+@@ -63,18 +60,16 @@
+  }
+  ${c} edge=min(q,${V}(1.0)-q); ${f} w=smoothstep(0.0,0.08,min(edge.x,min(edge.y,edge.z)));
+- if(w<=0.0){return ${wide};}
++ if(w<=0.0){return wide;}
+  // Bilinear depth comparison touches up to one more texel beyond each tap.
+  ${f} d=q.z-0.42*${p}hullShadowParams.y-dot(abs(gradient),${v2}(${p}hullShadowParams.z)); ${f} o=0.68*${p}hullShadowParams.z;
+  // Compare at two depths towards the sun. Boots stay sharp; a high crown can
+  // subtend a wider penumbra. Keep the disk in light space (no screen noise).
+- ${wg?'var nearVis:f32':'float nearVis'};
+  if(${p}landProbeOn>0.0){
+    ${f} invDepth=${p}hullShadowParams.y/max(.001,${p}hullShadowParams.x);
+    ${f} blocker=18.*(1.-${tap('o','-o','d-12.*invDepth')})+83.*(1.-${tap('-o','o','d-75.*invDepth')});
+    ${f} r=min(5.0,.70+blocker*.006/max(.001,${p}hullShadowParams.x))*${p}hullShadowParams.z;
+-   nearVis=(${[[-.76,-.36],[.51,-.75],[.83,.25],[-.34,.81],[-.17,-.23],[.18,.27]].map(([x,y])=>tap(`${x}*r`,`${y}*r`)).join('+')})/6.;
+- } else { nearVis=0.25*(${tap('-o', '-o')}+${tap('o', '-o')}+${tap('-o', 'o')}+${tap('o', 'o')}); }
+- ${terrain?'if(w>=1.0){return nearVis;}':''}
+- return mix(${wide},nearVis,w);
++   return mix(wide,(${[[-.76,-.36],[.51,-.75],[.83,.25],[-.34,.81],[-.17,-.23],[.18,.27]].map(([x,y])=>tap(`${x}*r`,`${y}*r`)).join('+')})/6.,w);
++ }
++ return mix(wide,0.25*(${tap('-o', '-o')}+${tap('o', '-o')}+${tap('-o', 'o')}+${tap('o', 'o')}),w);
+  }`;
+ }
+--- a/game/terrain.js
++++ b/game/terrain.js
+@@ -60,4 +60,5 @@
+   ${orbitShader('glsl')}
+   ${groundFillShader(false)}
++  ${nearGroundShader(false)}
+   uniform float forestSlot, fullTerrain, terrainContactMask;
+   bool remasteredReceiver(){ return ${mixed?'true':'fullTerrain>.5'}; }
+@@ -71,5 +72,4 @@
+     return mix(1.0, (landGround.w>0.0 || remasteredReceiver()) ? s/5.0 : mix(0.5, 1.0, s / 5.0), smoothstep(0.0, 0.05, min(e.x, e.y)));
+   }
+-  ${nearGroundShader(false, true)}
+   in vec2 vCorner; in vec3 vNormal; in vec3 vWorld; in float vShade; flat in vec4 vLayers;
+   out vec4 outColor;
+@@ -132,8 +132,8 @@
+     nearK = max(detail * (1.0 - smoothstep(25.0,260.0,dist)),terrainLayers * 0.85 * (1.0 - smoothstep(160.0,1200.0,dist)));
+     soft = ambient + fillColor * max(dot(n, fillDir), 0.0) + fillColor2 * max(dot(n, fillDir2), 0.0);
+-    float vis=groundSun(vWorld,n); vec3 cl=texture(clouds,(vWorld.xy+cloudAt.xy)/cloudAt.z).rgb;
++    float vis=sunlit(vWorld,n); vec3 cl=texture(clouds,(vWorld.xy+cloudAt.xy)/cloudAt.z).rgb;
+     direct=sunColor;
+     terrainSky=vec3(1.);
+-    if(landGround.w>0.0 || remasteredReceiver()){direct*=cl*vis;}else if(receiverMap.z>0.0)direct*=cl;
++    if(landGround.w>0.0){direct*=cl*groundSun(vWorld,n,vis);}else if(remasteredReceiver()){direct*=cl*vis;}else if(receiverMap.z>0.0)direct*=cl;
+     ${woodGround(false)}
+     // Baked darkness is local sky shelter, not a black overlay on sun, fog, waterbed or emitters.
+--- a/game/endor-relief.js
++++ b/game/endor-relief.js
+@@ -88,9 +88,4 @@
+   });
+   const mesh = new T.Mesh(geo, mat);
+-  // The scan material ray-marches up to three donors per surface. Let opaque models
+-  // and alpha-tested leaves populate depth first, before shading hidden ground.
+-  // Stay in the opaque list, ahead of authored decals (order 1) and blended water.
+-  const originalOrder = ground.renderOrder;
+-  mesh.renderOrder = originalOrder + 0.5;
+   mesh.visible = false;
+   mesh.frustumCulled = false;
+@@ -131,5 +126,4 @@
+     lastShade = -1;
+   function update(v, on) {
+-    ground.renderOrder = on ? mesh.renderOrder : originalOrder;
+     if (!on || v.dist > 225) {
+       mesh.visible = false;
+@@ -364,5 +358,4 @@
+     },
+     dispose() {
+-      ground.renderOrder = originalOrder;
+       bounds.set(0, 0, 0, 0);
+       ground.remove(mesh);

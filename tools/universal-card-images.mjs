@@ -78,29 +78,36 @@ export function commandImages(archive) {
       );
     }
   let sheet;
-  return name => {
-    if (!name || !/^[-\w .]+$/.test(name)) return '';
-    const k = name.trim().toUpperCase();
-    if (cache.has(k)) return cache.get(k);
-    let uri = '';
-    const r = rects.get(k);
+  function readCrop(name, convert, maxLoosePixels) {
+    if (!name || !/^[-\w .]+$/.test(name)) return null;
+    const k = name.trim().toUpperCase(),
+      r = rects.get(k);
+    let uri = null;
     if (r) {
       try {
         if (sheet === undefined) {
           sheet = null;
           sheet = texture(archive, archive.resolve(dir + 'MT_CommandBar.tga'), 24 * 1024 ** 2);
         }
-        if (sheet) uri = thumb(sheet, r);
+        if (sheet) uri = convert(sheet, r);
       } catch {
         /* Missing/malformed art must not remove a campaign. */
       }
     }
     if (!uri)
       try {
-        const t = texture(archive, archive.resolve(dir + k), 2 * 1024 ** 2);
-        if (t) uri = thumb(t);
+        const t = texture(archive, archive.resolve(dir + k), maxLoosePixels);
+        if (t) uri = convert(t, { x: 0, y: 0, w: t.width, h: t.height });
       } catch {}
-    cache.set(k, uri);
     return uri;
+  }
+  const image = name => {
+    const k = name?.trim().toUpperCase();
+    if (!cache.has(k)) cache.set(k, readCrop(k, thumb, 2 * 1024 ** 2) || '');
+    return cache.get(k);
   };
+  // Heraldry uses full native pixels of vetted sources (never a stretched
+  // thumbnail). Keep the large sheet in the worker; publish just the contours.
+  image.native = name => readCrop(name, (src, rect) => ({ src, rect }), 16 * 1024 ** 2);
+  return image;
 }

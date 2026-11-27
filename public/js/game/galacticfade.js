@@ -8,7 +8,7 @@ export function galacticDistanceFade(distance, radius, near, excluded = false) {
 }
 
 export class GalacticModelFade {
-  constructor(inst, type, singleSided = false) {
+  constructor(inst, type, singleSided = false, orbitalAir = null) {
     this.inst = inst;
     this.excluded = type.bool('Exclude_From_Distance_Fade');
     this.entries = inst.model.meshes
@@ -47,6 +47,7 @@ export class GalacticModelFade {
           });
         material.uniforms = {
           ...source.uniforms,
+          ...(orbitalAir && source.uniforms.orbitalAir ? { orbitalAir } : {}),
           ...(source.uniforms.opacity ? { opacity: { value: source.uniforms.opacity.value } } : {}),
           ...(source.uniforms.lightScale ? { lightScale: { value: source.uniforms.lightScale.value.clone() } } : {})
         };

@@ -85,7 +85,7 @@ export function knownAnimations(names) {
 export function loadALA(name) {
   const key = name.toUpperCase();
   let a = anims.get(key);
-  if (a === undefined && known && !known.has(key)) {
+  if (a === undefined && known && !known.has(key) && !/^UXA(?:STOCK|\d+)_(?:STOCK|[A-F0-9]{64})__/.test(key)) {
     anims.set(key, null);
     return null;
   }
@@ -98,10 +98,12 @@ export function loadALA(name) {
         console.warn('animation', key, e.message);
       }
       if (anim) anim.name = key.replace(/\.ALA$/, '');
-      anims.set(key, anim);
+      if (!anim && /^UXA(?:STOCK|\d+)_/.test(key)) anims.delete(key);
+      else anims.set(key, anim);
       return anim;
     });
     anims.set(key, a);
+    if (/^UXA(?:STOCK|\d+)_/.test(key)) a.catch(() => { if (anims.get(key) === a) anims.delete(key); });
   }
   return a;
 }

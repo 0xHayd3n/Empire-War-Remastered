@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { openGame } from './megfs.mjs';
-let gameDir = fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url));
+let gameDir = process.env.SWR_GAME || fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url));
 for (let up = new URL('../../../', import.meta.url); !existsSync(gameDir) && up.pathname.split('/').length > 3; up = new URL('../', up))
   gameDir = fileURLToPath(new URL('Star Wars Empire at War', up));
 const archive = openGame(gameDir);

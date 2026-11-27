@@ -1,10 +1,13 @@
 import * as THREE from 'three';
 import { db, spawnList } from '../gamedata.js';
+import { boardBattlefront, matchRules } from './battlefrontrules.js';
+import { padAxis, loadShooterConfig, saveShooterPreferences, shooterFields } from './shooterpreferences.js';
 import { heightAt } from './terrain.js';
-import { buildsFor, costOf, inCategory, isUpgrade, missingFor, isHeroCompany, animReady, animClip, landHealth } from './land.js';
+import { costOf, inCategory, isUpgrade, missingFor, isHeroCompany, animReady, animClip, landHealth } from './land.js';
 import { AnimState } from '../ala.js';
 import { setParticleDepth } from '../particles.js';
 import { PostFX } from './post.js';
+import { gradeLens } from './extrafx.js';
 import { lensMaterial } from './lens.js';
 import { lighting, boltLights } from '../model.js';
 import { gfx } from '../gfx.js';
@@ -22,7 +25,7 @@ import { Overlord } from './overlord.js';
 import { ShuttleWaves } from './shuttle.js';
 import { vehicleRig, vehicleEye, chaseVehicle } from './vehicle-camera.js';
 import { FirstPersonKit } from './first-person-kit.js';
-import { BattleReadout, pinRadarPoint, spaceRimPins, kitIcon, cannonIcon, grenadeIcon, arrowRadius, facingArrow } from './combat-hud.js';
+import { BattleReadout, compassBearing, pinRadarPoint, spaceRimPins, kitIcon, cannonIcon, grenadeIcon, arrowRadius, facingArrow } from './combat-hud.js';
 import { factionBadge } from './faction-badges.js';
 import { CaptureDial } from './capture-dial.js';
 import { BattleReticle } from './battle-reticle.js';
@@ -42,7 +45,6 @@ const REACH = 1600,
   SENS = 0.0022,
   JUMP = 70,
   GRAVITY = 190,
-  RESPAWN = 5,
   DEATH_CAM = 3,
   CREW_REACH = 500,
   FOV = 70,
@@ -60,11 +62,11 @@ const REACH = 1600,
   FIELD_CAP = 50,
   HEAT = { burst: 3.5, cool: 0.55, delay: 0.3, unlock: 0.25, minShots: 6 },
   AMMO = { rocket: 6, grenade: 4, refill: 2.5, reload: 3 },
-  REGEN = { wait: 5, rate: 0.05, heal: 0.12, reach: 1.25, tick: 0.5 },
+  REGEN = { wait: 5, heal: 0.12, reach: 1.25, tick: 0.5 },
   KICK = { heat: 0.012, ammo: 0.05, yaw: 0.35, recover: 7 },
   BOB = { walk: 0.012, run: 0.02, rate: 0.055 },
   SPRINT_FOV = 8,
-  MARKERS = { fade: 140, names: 220, maxFeed: 5, feedLife: 6, feedNear: 700 },
+  MARKERS = { fade: 140, names: 220, maxFeed: 5, feedNear: 700 },
   COMPASS = { w: 460, h: 30, span: Math.PI * 0.9 },
   INTRO = { ms: 7000 },
   LOW_TICKETS = 0.2,
@@ -122,14 +124,13 @@ const REACH = 1600,
   LOCK = { cone: 0.09, time: 1.2, damage: 1.5, reach: 1.1 },
   SCOPE = { fov: 12, damage: 1.6, spread: 0.15, sens: 0.18 },
   HEAVY = { heat: 0.55 },
-  HERO = { points: 1500, drain: 1 / 150, kill: 0.08 },
-  SQUAD_SPAWN = { calm: 5, max: 4 },
+  HERO = { drain: 1 / 150, kill: 0.08 },
   AUDIO = { air: 300, airMin: 1800, muffle: 700, quiet: 0.55, occReach: 2500, hrtf: 1500, wetMax: 0.4, wetTick: 0.5, whiz: 35, whizGap: 120, stride: 15, stepReach: 150, stepMax: 6, fight: 900, verb: 1.6 },
   STEP_SFX = { grass: 'GRASS', snow: 'SNOW', ice: 'SNOW', water: 'WATER', concrete: 'CONCRETE', mud: 'MUD' },
   ENGAGE_SCAN = 0.4,
   FIGHT_HOLD = 12,
   FP_EYE = { back: 0.135, right: -0.077, up: 0.035 },
-  TICKETS = { start: 150, foot: 1, vehicle: 2, bleed: 5 },
+  START_TICKETS = 150,
   AIM_PITCH = { chest: 0.35, arms: 0.65, min: -1, max: 1.1 },
   SPREAD_OUT = { far: 120, min: 10, max: 55 },
   HOP = { min: 40, max: 70, every: [5, 8] },
@@ -164,18 +165,9 @@ function usePalette(safe) {
   r.setProperty('--sh-ret-ally', PAL.ally);
   r.setProperty('--sh-ret-enemy', PAL.enemy);
 }
-const CFG_KEY = 'swr-shooter-settings',
-  CFG_DEFAULT = { fov: 70, sens: 1, ads: 1, invert: false, aimMode: 'hold', view: 'third', vehicleView: 'chase', crosshair: 'ring', bob: true, colorblind: false, assist: true, shuttle: true };
-function loadCfg() {
-  let got = {};
-  try {
-    got = JSON.parse(localStorage.getItem(CFG_KEY) || '{}') || {};
-  } catch {}
-  return { ...CFG_DEFAULT, ...got };
-}
 const TIPS = [
   'Hold a command post to spawn there and to heal and restock.',
-  'Heroes unlock every 1500 points - captures and kills both count.',
+  'Captures and kills both earn points toward your next hero deployment.',
   'Troopers can hold the grenade key to see where a thermal detonator lands.',
   'Rocket troopers lock onto vehicles while aiming down the sights.',
   'Spawn on a squad leader who is out of combat to join the push.',
@@ -183,7 +175,7 @@ const TIPS = [
   'Bolts that pass close by suppress soldiers - keep the pressure on.',
   'Press the view key in a vehicle for the cockpit or gun view.'
 ];
-const PAD = { dead: 0.16, look: 2.8, adsLook: 0.5, assist: 0.45, cone: 0.07, trigger: 0.4 };
+const PAD = { look: 2.8, adsLook: 0.5, assist: 0.45, cone: 0.07, trigger: 0.4 };
 
 const LOWER_BONES = /ROOT|PELVIS|HIP|THIGH|CALF|SHIN|FOOT|TOE|LEG/i;
 
@@ -248,8 +240,8 @@ const SHOOTER_CSS = `
 .sh-card.hero::after { content: 'Hero'; }
 .sh-card.locked { opacity: .45; }
 .sh-set { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.55); }
-.sh-frame.sh-set-box { width: min(calc(580px * var(--eaw-k, 1)), 94vw); }
-.sh-set-body { padding: 8px 6px 4px; display: flex; flex-direction: column; gap: 7px; }
+.sh-frame.sh-set-box { width: min(calc(580px * var(--eaw-k, 1)), 94vw); max-height: 94vh; display: flex; flex-direction: column; box-sizing: border-box; }
+.sh-set-body { min-height: 0; overflow-y: auto; padding: 8px 6px 4px; display: flex; flex-direction: column; gap: 7px; }
 .sh-set-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: calc(24px * var(--eaw-k, 1)); font: 400 calc(12px * var(--eaw-k, 1)) var(--eaw-font); letter-spacing: .08em; color: var(--eaw-cream); }
 .sh-set-row .eaw-select { width: calc(200px * var(--eaw-k, 1)); }
 .sh-set-range { display: flex; align-items: center; gap: 10px; }
@@ -348,12 +340,13 @@ function shoulderPosition(cam, b, d, yaw, back, side, z) {
 
 export const shooterWanted = setup =>
   setup.mode === 'land' &&
+  !setup.instant &&
   !setup.net &&
   !setup.campaign?.linked &&
   !setup.restore &&
   (!setup.benchmark || new URLSearchParams(location.search).has('shooter')) &&
   !setup.spectate &&
-  (new URLSearchParams(location.search).has('shooter') || !!globalThis.shooterMode || !!setup.shooter);
+  (new URLSearchParams(location.search).has('shooter') || (boardBattlefront(setup) ?? (!!globalThis.shooterMode || !!setup.shooter)));
 
 export class Shooter {
   constructor(game) {
@@ -365,7 +358,8 @@ export class Shooter {
     this.state = 'deploy';
     this.deadAt = 0;
     this.readyAt = 0;
-    this.cfg = loadCfg();
+    this.cfg = loadShooterConfig();
+    this.rules = matchRules(game.setup);
     const ui = new URLSearchParams(location.search).get('deployUI');
     this.deployUI = (['original', '2005'].includes(ui) ? ui : this.cfg.deployUI) === 'original' ? 'original' : '2005';
     usePalette(this.cfg.colorblind);
@@ -410,7 +404,7 @@ export class Shooter {
     this.counted = new WeakSet();
     this.twist = { bone: null, arms: [], want: 0, pitch: 0, live: [], overlay: false, upper: null, muzzle: null, barrel: null, loose: [], fixYaw: 0, fixPitch: 0, kick: 0 };
     const tk = new URLSearchParams(location.search).get('tickets');
-    this.ticketStart = Math.max(1, parseInt(tk, 10) || (+globalThis.shooterTickets >= 50 ? Math.round(+globalThis.shooterTickets) : TICKETS.start));
+    this.ticketStart = Math.max(1, parseInt(tk, 10) || (+globalThis.shooterTickets >= 50 ? Math.round(+globalThis.shooterTickets) : START_TICKETS));
     this.tickets = game.setup.benchmark ? null : game.factions.map(() => this.ticketStart);
     this.conquest = game.setup.campaign ? { ready: false, pools: new Map(), byUnit: new WeakMap(), crewed: new WeakSet() } : null;
     this.bleedAt = 0;
@@ -482,7 +476,7 @@ export class Shooter {
     this.lockT = null;
     this.lockK = 0;
     this.scopedShots = new WeakSet();
-    this.heroAt = HERO.points;
+    this.heroAt = this.rules.heroPoints;
     this.heroSaid = false;
     this.squadSpots = new WeakMap();
     this.ear = { x: 0, y: 0, z: 0, ready: false };
@@ -733,7 +727,7 @@ export class Shooter {
       if (w.ally(p.side, side)) own++;
       else foe++;
     }
-    return own < foe ? CATCHUP.delay : BOT_RESPAWN.delay;
+    return (own < foe ? CATCHUP.delay : BOT_RESPAWN.delay) * this.rules.botDelayScale;
   }
 
   reachOfClass(c) {
@@ -2743,14 +2737,14 @@ export class Shooter {
   }
 
   saveCfg() {
-    try {
-      localStorage.setItem(CFG_KEY, JSON.stringify(this.cfg));
-    } catch {}
+    saveShooterPreferences(this.cfg);
   }
 
   setCfg(key, value) {
     const C = this.cfg;
     C[key] = value;
+    const node = shooterFields.find(f => f.key === key)?.node;
+    if (this[node]) this[node].style.visibility = value ? '' : 'hidden';
     if (key === 'deployUI') {
       this.deployUI = value;
       const url = new URL(location.href);
@@ -2759,9 +2753,15 @@ export class Shooter {
       this.buildDeployPanel();
       if (this.panel.style.display !== 'none') this.refreshDeploy(true);
     }
-    const select = this.setEl?.querySelector(`select[name="${key}"]`);
-    if (select) select.value = value;
+    const input = this.setEl?.querySelector(`[name="${key}"]`);
+    if (input) {
+      if (input.type === 'checkbox') input.checked = value;
+      else input.value = value;
+      if (input.type === 'range') input.nextElementSibling.textContent = shooterFields.find(f => f.key === key).format(value);
+    }
     if (key === 'aimMode') this.zoom = false;
+    if (key === 'feedScope') this.feedDirty = true;
+    if (key === 'scorePopups' && !value) this.hud?.querySelectorAll('.sh-pop').forEach(e => e.remove());
     if (key === 'colorblind') {
       usePalette(value);
       this.feedDirty = true;
@@ -2808,6 +2808,7 @@ export class Shooter {
       i.min = min;
       i.max = max;
       i.step = step;
+      i.name = key;
       i.value = C[key];
       v.textContent = fmt(C[key]);
       i.oninput = () => {
@@ -2823,7 +2824,7 @@ export class Shooter {
       i.className = 'eaw-check';
       i.checked = get();
       i.onchange = () => set(i.checked);
-      row(label, i);
+      return row(label, i);
     };
     const pick = (label, key, opts) => {
       const i = document.createElement('select');
@@ -2839,27 +2840,11 @@ export class Shooter {
       i.onchange = () => this.setCfg(key, i.value);
       row(label, i);
     };
-    range('Field of view', 'fov', 55, 100, 1, v => `${v} deg`);
-    range('Mouse sensitivity', 'sens', 0.3, 2.5, 0.05, v => `${v.toFixed(2)}x`);
-    range('Aiming sensitivity', 'ads', 0.3, 2, 0.05, v => `${v.toFixed(2)}x`);
-    check('Invert look', () => C.invert, v => this.setCfg('invert', v));
-    pick('Zoom input', 'aimMode', [['hold', 'Hold to zoom'], ['toggle', 'Toggle zoom']]);
-    pick('Vehicle view', 'vehicleView', [
-      ['chase', 'Chase camera'],
-      ['seat', 'Driver / gunner view']
-    ]);
-    pick('Infantry view', 'view', [
-      ['third', 'Third person'],
-      ['first', 'First person']
-    ]);
-    pick('Deployment screen', 'deployUI', [['2005', 'Battlefront 2005'], ['original', 'Browser original']]);
-    pick('Crosshair', 'crosshair', [
-      ['ring', 'Battlefront 2005'],
-      ['dot', 'Dot'],
-      ['cross', 'Cross']
-    ]);
-    check('Head bob', () => C.bob, v => this.setCfg('bob', v));
-    check('Shuttle deploys', () => C.shuttle !== false, v => this.setCfg('shuttle', v));
+    for (const f of shooterFields) {
+      if (f.range) range(f.label, f.key, ...f.range, f.format);
+      else if (f.choices) pick(f.label, f.key, f.choices);
+      else check(f.label, () => C[f.key], v => this.setCfg(f.key, v)).name = f.key;
+    }
     const level = (label, name, key, id) => {
       const wrapEl = document.createElement('div'),
         i = document.createElement('input'),
@@ -2889,8 +2874,6 @@ export class Shooter {
     };
     level('Aim focus blur', 'shooterFocus', 'swr-shooter-focus', 'optShooterFocus');
     level('Motion blur', 'shooterBlur', 'swr-shooter-blur', 'optShooterBlur');
-    check('Colourblind-safe markers', () => C.colorblind, v => this.setCfg('colorblind', v));
-    check('Gamepad aim assist', () => C.assist, v => this.setCfg('assist', v));
     E.querySelector('.sh-go').onclick = () => this.closeSettings();
     E.addEventListener('mousedown', e => e.stopPropagation());
     E.addEventListener('keydown', e => e.stopPropagation());
@@ -2908,16 +2891,13 @@ export class Shooter {
       was = this.padWas,
       down = i => B(i) && !was[i],
       up = i => !B(i) && was[i],
-      dz = v => (Math.abs(v) < PAD.dead ? 0 : Math.sign(v) * ((Math.abs(v) - PAD.dead) / (1 - PAD.dead)) ** 1.6),
-      ax = i => dz(gp.axes[i] || 0);
-    const lx = ax(0),
-      ly = ax(1),
-      rx = ax(2),
-      ry = ax(3);
+      ax = i => padAxis(gp.axes[i] || 0, this.cfg),
+      move = this.cfg.swapSticks ? 2 : 0, look = 2 - move;
+    const lx = ax(move), ly = ax(move + 1), rx = ax(look), ry = ax(look + 1);
     const any = lx || ly || rx || ry || gp.buttons.some(b => b && b.pressed);
     if (any && !this.padOn) {
       this.padOn = true;
-      this.note('Gamepad connected - left stick moves, right stick looks, triggers aim and fire');
+      this.note(`Gamepad connected - ${this.cfg.swapSticks ? 'right stick moves, left stick looks' : 'left stick moves, right stick looks'}, triggers aim and fire`);
     }
     if (this.state !== 'alive') {
       M.f = M.s = 0;
@@ -2946,7 +2926,7 @@ export class Shooter {
       if (down(10)) M.run = !M.run;
       if (Math.hypot(lx, ly) < 0.3) M.run = false;
       const C = this.cfg;
-      let rate = PAD.look * C.sens * real * (this.zoom ? PAD.adsLook * C.ads : 1);
+      let rate = PAD.look * C.sens * (C.padLook ?? 1) * real * (this.zoom ? PAD.adsLook * C.ads : 1);
       if (C.assist && (rx || ry) && this.assistTarget()) rate *= PAD.assist;
       this.yaw = wrap(this.yaw - rx * rate);
       this.pitch = Math.max(-1.4, Math.min(1.35, this.pitch - ry * rate * (C.invert ? -1 : 1)));
@@ -3024,8 +3004,8 @@ export class Shooter {
       E = document.createElement('div');
     E.className = 'sh-hints eaw-frame-s';
     const rows = [
-      ['Move', `${K('SCROLL_UP')} ${K('SCROLL_LEFT')} ${K('SCROLL_DOWN')} ${K('SCROLL_RIGHT')}`, 'Left stick'],
-      ['Look, fire, aim', 'Mouse, left and right button', 'Right stick, RT, LT'],
+      ['Move', `${K('SCROLL_UP')} ${K('SCROLL_LEFT')} ${K('SCROLL_DOWN')} ${K('SCROLL_RIGHT')}`, this.cfg.swapSticks ? 'Right stick' : 'Left stick'],
+      ['Look, fire, aim', 'Mouse, left and right button', this.cfg.swapSticks ? 'Left stick, RT, LT' : 'Right stick, RT, LT'],
       ['Sprint, crouch, jump', `${K('SHOOTER_SPRINT')}, ${K('SHOOTER_CROUCH')}, ${K('SHOOTER_JUMP')}`, 'L3, B, A'],
       ['Roll in movement direction', K('SHOOTER_DODGE'), 'RB'],
       ['Thermal detonator', `hold ${K('SHOOTER_GRENADE')}`, 'hold LB'],
@@ -3076,11 +3056,11 @@ export class Shooter {
       P.strength = GRADE.bloom;
       P.mBright.uniforms.cutoff.value = GRADE.cutoff;
       this.lens = lensMaterial();
-      P.finish = mid => {
+      P.finish = (mid, target) => {
         const u = this.lens.uniforms;
         u.map.value = mid.texture;
         u.texel.value.set(1 / mid.width, 1 / mid.height);
-        P.pass(this.lens, null);
+        P.pass(this.lens, target);
       };
       this.postCompiled = !R.compileAsync || !!R.isMirror || R === this.game.gpu;
       if (!this.postCompiled)
@@ -3099,20 +3079,14 @@ export class Shooter {
       P.pr = R.getPixelRatio();
     }
     P.bloom = !!gfx.bloom;
+    P.glare = gfx.lensStreaks;
     this.grade();
     return P;
   }
 
   grade() {
-    const u = this.lens.uniforms,
-      sc = lighting.sunColor.value,
-      top = Math.max(1e-3, sc.r, sc.g, sc.b),
-      k = GRADE.sun,
-      real = this.realDt || 0.016;
-    u.tint.value.setRGB(1 + (sc.r / top - 1) * k, 1 + (sc.g / top - 1) * k, 1 + (sc.b / top - 1) * k);
-    u.sat.value = GRADE.sat;
-    u.contrast.value = GRADE.contrast;
-    u.vignette.value = GRADE.vignette;
+    const u = this.lens.uniforms, real = this.realDt || 0.016;
+    gradeLens(u,GRADE);
     const focus = typeof globalThis.shooterFocus === 'number' ? globalThis.shooterFocus : globalThis.shooterFocus === false ? 0 : 1,
       aim = this.state === 'alive' && this.zoom && focus > 0 && !(this.role === 'scout' && !this.seatOf());
     this.focusK += ((aim ? focus : 0) - this.focusK) * Math.min(1, real * GRADE.focus);
@@ -3747,6 +3721,7 @@ export class Shooter {
   }
 
   popup(text, kind = '') {
+    if (this.cfg.scorePopups === false) return;
     const e = document.createElement('div');
     e.className = 'sh-pop' + (kind ? ' ' + kind : '');
     e.textContent = text;
@@ -3847,7 +3822,7 @@ export class Shooter {
           this.peerCredit(u, from, shot);
           if (u.side >= 0) this.losses[u.side] = (this.losses[u.side] || 0) + 1;
           if (this.tickets && u.side >= 0 && u.side < this.tickets.length && !u.structure)
-            this.spend(u.side, u.kind === 'INFANTRY' ? TICKETS.foot : TICKETS.vehicle, this.conquest?.ready ? u : null);
+            this.spend(u.side, u.kind === 'INFANTRY' ? this.rules.infantryCost : this.rules.vehicleCost, this.conquest?.ready ? u : null);
           if (from && this.mine(from) && u.side >= 0 && !w.ally(u.side, this.me) && u.kind !== 'INFANTRY' && !u.structure) this.stats.vehicles++;
           if (u.side >= 0 && !u.structure && u.side !== w.wild && !u.squad?.native) this.logKill(from, u);
           this.wrecked(u);
@@ -3921,8 +3896,8 @@ export class Shooter {
         w.order(c.squad, v.x, v.y);
       }
     }
-    if (this.tickets && w.time >= this.bleedAt) {
-      this.bleedAt = w.time + TICKETS.bleed;
+    if (this.tickets && this.rules.drainSeconds && w.time >= this.bleedAt) {
+      this.bleedAt = w.time + this.rules.drainSeconds;
       this.bleed();
     }
     if (w.time >= this.fxAt) {
@@ -4313,7 +4288,7 @@ export class Shooter {
     }
     for (const u of w.units) {
       if (u.dead || !u.structure || !w.ally(u.side, side)) continue;
-      for (const t of buildsFor(u.type, faction, w.campaign)) {
+      for (const t of w.productionFor(u, side)) {
         if (out.has(t.name) || isUpgrade(t) || !t.has('Company_Units') || isHeroCompany(t)) continue;
         const kinds = t
           .list('Company_Units')
@@ -5096,7 +5071,7 @@ export class Shooter {
       else r.vkills++;
     }
     const at = b || this.fellAt;
-    if (!mine && !me && at && Math.hypot(victim.x - at.x, victim.y - at.y) > MARKERS.feedNear) return;
+    if (!mine && !me && (this.cfg.feedScope === 'personal' || (at && Math.hypot(victim.x - at.x, victim.y - at.y) > MARKERS.feedNear))) return;
     this.feed.push({
       a: killer && killer.x !== undefined ? this.nameFor(killer) : '',
       as: killer ? killer.side : -1,
@@ -5730,7 +5705,7 @@ export class Shooter {
   }
 
   heroUsed() {
-    this.heroAt = this.matchScore + HERO.points;
+    this.heroAt = this.matchScore + this.rules.heroPoints;
     this.heroSaid = false;
     this.role = 'hero';
   }
@@ -5853,7 +5828,7 @@ export class Shooter {
     this.deaths++;
     this.state = 'dead';
     this.deadAt = w.time;
-    this.readyAt = w.time + RESPAWN;
+    this.readyAt = w.time + this.rules.playerDelay;
     if (this.body) this.body.pilot = undefined;
     this.body = null;
     this.fire = this.zoom = false;
@@ -6140,11 +6115,10 @@ export class Shooter {
   heroCards() {
     const w = this.world,
       side = this.me,
-      faction = this.game.factions[side],
       out = new Map();
     for (const u of w.units) {
       if (u.dead || !u.structure || !w.ally(u.side, side)) continue;
-      for (const t of buildsFor(u.type, faction, w.campaign)) {
+      for (const t of w.productionFor(u, side)) {
         if (out.has(t.name) || !isHeroCompany(t) || missingFor(w, side, t).length) continue;
         const k = db.type(t.list('Company_Units')[0] || '');
         if (!k || !/infantry/i.test(k.str('MovementClass')) || !k.str('Projectile_Types')) continue;
@@ -6213,11 +6187,12 @@ export class Shooter {
       now = w.time;
     let n = 0;
     for (const T of this.teams) {
-      if (T.side !== this.me || n >= SQUAD_SPAWN.max) continue;
+      if (n >= this.rules.squadSpawnMax) break;
+      if (T.side !== this.me) continue;
       const L = T.lead;
       if (!L || L.dead || L.inside) continue;
       const st = this.bots.get(L);
-      if ((st && st.mode === 'fight' && now < st.until) || now - (L.lastHit ?? -99) < SQUAD_SPAWN.calm) continue;
+      if ((st && st.mode === 'fight' && now < st.until) || now - (L.lastHit ?? -99) < this.rules.squadSpawnCalm) continue;
       let s = this.squadSpots.get(T);
       if (!s)
         this.squadSpots.set(
@@ -6635,7 +6610,7 @@ export class Shooter {
       if (u.dead || u.structure || u.inside || !u.foot || u.side < 0 || u.health >= u.maxHealth || (u === this.body && this.role === 'hero')) continue;
       let r = 0;
       if (this.inHealZone(u)) r = REGEN.heal;
-      else if (now - (u.lastHit ?? -99) > REGEN.wait) r = REGEN.rate;
+      else if (now - (u.lastHit ?? -99) > REGEN.wait) r = this.rules.fieldRegen / 100;
       if (!r) continue;
       u.health = Math.min(u.maxHealth, u.health + u.maxHealth * r * k);
       if (u === this.body && r === REGEN.heal) this.healing = true;
@@ -7121,7 +7096,7 @@ export class Shooter {
       d.lerp(V.d, e).normalize();
     } else if (this.artyView) this.artyView.fresh = true;
     if (this.shake > 0.01) {
-      const m = this.shake * (inner ? 1.4 : 2.5);
+      const m = this.shake * (inner ? 1.4 : 2.5) * (this.cfg.impactShake ?? 1);
       cam.position.x += (Math.random() - 0.5) * m;
       cam.position.y += (Math.random() - 0.5) * m;
       cam.position.z += (Math.random() - 0.5) * m;
@@ -7144,7 +7119,7 @@ export class Shooter {
     cam.lookAt(cam.position.x + d.x, cam.position.y + d.y, cam.position.z + d.z);
     {
       const boosting = !!seat && this.A.boost && this.rideQ && this.rideQ.members[0]?.pilot === this.A,
-        want = this.zoom && !(this.melee && !seat) ? (scoped ? SCOPE.fov : ZOOM_FOV * (this.cfg.fov / FOV)) : this.cfg.fov + (running ? SPRINT_FOV : 0) + (boosting ? BOOST.fov : 0);
+        want = this.zoom && !(this.melee && !seat) ? (scoped ? SCOPE.fov : ZOOM_FOV * (this.cfg.fov / FOV)) : this.cfg.fov + (this.cfg.speedFov === false ? 0 : (running ? SPRINT_FOV : 0) + (boosting ? BOOST.fov : 0));
       this.fovNow += (want - this.fovNow) * Math.min(1, real * 10);
       this.setFov(cam, Math.round(this.fovNow * 10) / 10, fp || inner ? 0.3 : 1);
     }
@@ -7162,9 +7137,10 @@ export class Shooter {
     this.pose(b);
     this.firstPerson = fp && !scoped;
     if (this.firstPerson) {
-      if (!this.viewKit || this.viewKit.model !== b.inst?.model || this.viewKit.weapon !== b.weapon) {
+      const livery = this.world.liveryFor?.(b.side) ?? null;
+      if (!this.viewKit || this.viewKit.model !== b.inst?.model || this.viewKit.weapon !== b.weapon || this.viewKit.livery !== livery) {
         this.viewKit?.dispose();
-        this.viewKit = new FirstPersonKit(b, animClip(b.type, 'ATTACKIDLE') || b.anims?.attack || b.anims?.idle, this.world.teamColorFor(b.side, b.type));
+        this.viewKit = new FirstPersonKit(b, animClip(b.type, 'ATTACKIDLE') || b.anims?.attack || b.anims?.idle, this.world.teamColorFor(b.side, b.type), livery);
       }
     }
     if (scoped) b.holder.visible = false;
@@ -7198,7 +7174,7 @@ export class Shooter {
     (this.lastCam ||= { p: new THREE.Vector3(), q: new THREE.Quaternion() }).p.copy(cam.position);
     this.lastCam.q.copy(cam.quaternion);
     this.drawHud();
-    this.drawTags(cam);
+    if (this.cfg.tagsVisible !== false) this.drawTags(cam);
   }
 
   pose(u) {
@@ -7494,6 +7470,7 @@ export class Shooter {
     this.abil.className = 'sh-hudtext';
     this.scoreEl = el('div', '');
     this.scoreEl.className = 'sh-board eaw-frame';
+    for (const {key,node} of shooterFields) if (node && this.cfg[key] === false) this[node].style.visibility = 'hidden';
     this.panel = el('div', '');
     this.panel.className = 'sh-deploy';
     this.panel.style.display = 'none';
@@ -7934,7 +7911,7 @@ export class Shooter {
       u = this.seatOf() || b;
     if (!u) return;
     const target = this.aimHit;
-    const targetMode = this.readout.aim(target, t => this.nameOf(t), target && target.side >= 0 && this.world.ally(target.side, this.me), target && (target.side < 0 || target.side === this.world.wild));
+    const targetMode = this.readout.aim(target, t => this.nameOf(t), target && target.side >= 0 && this.world.ally(target.side, this.me), target && (target.side < 0 || target.side === this.world.wild), now, this.cfg.targetHealth);
     this.bars.classList.toggle('mounted', !!(this.rideQ || this.gunQ || this.big));
     const tip = `<b>${this.keyText('SHOOTER_CONTROLS')}</b> Show controls`;
     if (this.controlsTip.innerHTML !== tip) this.controlsTip.innerHTML = tip;
@@ -7960,14 +7937,14 @@ export class Shooter {
       focal = innerHeight / 2 / Math.tan((cam.fov * Math.PI) / 360),
       size = ride ? 22 : Math.max(10, Math.min(120, 2 * Math.tan(this.spread) * focal + 8));
     const heatGun = !this.seatOf() && !this.big && !this.melee && this.gun.kind === 'heat';
-    const diameter = Math.round(Math.max(48, Math.min(innerHeight, innerWidth) * 0.14) + size * 0.30);
-    this.sight.draw(targetMode, (this.focusSight || (this.firstPerson && this.zoom)) ? 'focus' : this.cfg.crosshair, diameter, heatGun ? this.gun.heat : null, this.gun.hot);
+    const diameter = Math.round((Math.max(48, Math.min(innerHeight, innerWidth) * 0.14) + (this.cfg.sightSpread ? size : 10) * 0.30) * this.cfg.sightScale);
+    this.sight.draw(targetMode, (this.focusSight || (this.firstPerson && this.zoom)) ? 'focus' : this.cfg.crosshair, diameter, heatGun ? this.gun.heat : null, this.gun.hot, this.cfg.sightOpacity);
     const marks = this.hurtMarks;
     for (let i = 0; i < this.arcs.length; i++) {
       const m = marks[i],
         a = this.arcs[i],
         age = m ? (now - m.at) / 1000 : 9;
-      if (age > 1.2 || !m.from || m.from.x === undefined) {
+      if (!this.cfg.damageArcs || age > 1.2 || !m.from || m.from.x === undefined) {
         a.style.display = 'none';
         continue;
       }
@@ -7979,7 +7956,7 @@ export class Shooter {
     this.drawAbilities();
     this.drawWeapon(now, u);
     this.drawVehicleHud(now);
-    this.drawCompass(u);
+    if (this.cfg.compassVisible !== false) this.drawCompass(u);
     this.drawFeed(now);
     if (this.bigMap.style.display !== 'none' && now >= (this.bigAt || 0)) {
       this.bigAt = now + 100;
@@ -7988,7 +7965,7 @@ export class Shooter {
     this.drawCapture(u);
     if (now >= this.radarAt) {
       this.radarAt = now + 33;
-      this.drawRadar(u);
+      if (this.cfg.radarVisible !== false) this.drawRadar(u);
       if (this.scoreEl.style.display === 'block') this.drawBoard();
     }
     const locked = document.pointerLockElement === this.canvas();
@@ -8069,7 +8046,7 @@ export class Shooter {
       x.fillText(this.letterOf(p), px, py + dpr);
       x.font = `${10 * dpr}px Arial,sans-serif`;
       x.fillStyle = 'rgba(232,220,184,0.85)';
-      x.fillText(`${Math.round(d / 8)} m`, px, py + r + 9 * dpr);
+      if (this.cfg.pointDistance) x.fillText(`${Math.round(d / 8)} m`, px, py + r + 9 * dpr);
     }
     x.globalAlpha = 1;
     for (const T of this.teams) {
@@ -8243,7 +8220,7 @@ export class Shooter {
       const a = (deg * Math.PI) / 180,
         px = toX(a);
       if (px < 0 || px > W) continue;
-      const card = { 90: 'N', 0: 'E', 270: 'S', 180: 'W' }[deg];
+      const card = compassBearing(deg, this.cfg.compassLabels);
       if (card) {
         x.fillStyle = '#ffd76a';
         x.font = 'bold 13px "EmpireAtWar-Bold","Segoe UI",sans-serif';
@@ -8254,7 +8231,7 @@ export class Shooter {
       }
     }
     for (const p of w.points) {
-      if (!p.reinforce) continue;
+      if (!this.cfg.compassPosts || !p.reinforce) continue;
       const px = toX(Math.atan2(p.y - at.y, p.x - at.x));
       if (px < 8 || px > W - 8) continue;
       x.fillStyle = p.side < 0 ? '#bbb' : w.ally(p.side, this.me) ? PAL.ally : PAL.enemy;
@@ -8278,7 +8255,7 @@ export class Shooter {
   }
 
   drawFeed(now) {
-    const live = this.feed.filter(f => now - f.at < MARKERS.feedLife * 1000);
+    const live = this.feed.filter(f => now - f.at < this.cfg.feedSeconds * 1000 && (this.cfg.feedScope !== 'personal' || f.mine));
     if (live.length !== this.feed.length) {
       this.feed = live;
       this.feedDirty = true;
@@ -8358,10 +8335,11 @@ export class Shooter {
     const c = this.radar,
       x = c.getContext('2d'),
       S = RADAR.size,
-      R = RADAR.range,
+      R = RADAR.range / this.cfg.radarZoom,
       k = S / 2 / R,
       w = this.world,
-      rot = -this.yaw + Math.PI / 2,
+      rot = this.cfg.radarNorth ? 0 : Math.PI / 2 - this.yaw,
+      facing = this.cfg.radarNorth ? this.yaw : Math.PI / 2,
       cr = Math.cos(rot),
       sr = Math.sin(rot);
     x.setTransform(1, 0, 0, 1, 0, 0);
@@ -8370,12 +8348,12 @@ export class Shooter {
     x.beginPath();
     x.arc(S / 2, S / 2, S / 2 - 1, 0, Math.PI * 2);
     x.clip();
-    const ground = this.groundImage();
+    const ground = this.cfg.radarTerrain > 0 && this.groundImage();
     if (ground) {
       const C = 20,
         side = (this.game.terrain.size - 1) * C;
       x.setTransform(k * cr * C, -k * sr * C, k * sr * C, k * cr * C, S / 2 + k * (-cr * at.x - sr * (side - at.y)), S / 2 - k * (-sr * at.x + cr * (side - at.y)));
-      x.globalAlpha = 0.40;
+      x.globalAlpha = this.cfg.radarTerrain;
       x.imageSmoothingEnabled = true;
       x.drawImage(ground, 0, 0);
       x.globalAlpha = 1;
@@ -8388,17 +8366,18 @@ export class Shooter {
         dy = py - at.y;
       return [S / 2 + (dx * cr - dy * sr) * k, S / 2 - (dx * sr + dy * cr) * k];
     };
-    // Heading-up disc: the terrain and contacts rotate under a fixed view cone.
-    const mid = S / 2, cam = this.game.camera;
-    const halfFov = Math.atan(Math.tan(cam.fov * Math.PI / 360) * cam.aspect);
-    x.beginPath();
-    x.moveTo(mid, mid);
-    x.arc(mid, mid, mid - 1, -Math.PI / 2 - halfFov, -Math.PI / 2 + halfFov);
-    x.closePath();
-    x.fillStyle = 'rgba(233,243,248,.13)';
-    x.strokeStyle = 'rgba(235,244,245,.64)';
-    x.lineWidth = 1.4;
-    x.fill(); x.stroke();
+    const mid = S / 2;
+    if (this.cfg.radarCone) {
+      const cam = this.game.camera, halfFov = Math.atan(Math.tan(cam.fov * Math.PI / 360) * cam.aspect);
+      x.beginPath();
+      x.moveTo(mid, mid);
+      x.arc(mid, mid, mid - 1, -facing - halfFov, -facing + halfFov);
+      x.closePath();
+      x.fillStyle = 'rgba(233,243,248,.13)';
+      x.strokeStyle = 'rgba(235,244,245,.64)';
+      x.lineWidth = 1.4;
+      x.fill(); x.stroke();
+    }
     const defenses = defenseMarks(w, this.me), person = arrowRadius(c, S, 4.8);
     for (const u of w.units) {
       if (u.dead || u.gone || u.inside || u === this.body || u === at || u.side < 0 || defenses.has(u) || (u.structure && u.seen === false)) continue;
@@ -8461,8 +8440,10 @@ export class Shooter {
       // Only command posts are long-range objectives. EaW also puts dozens of
       // ordinary build pads in points; those belong on the local terrain only.
       else if (p.reinforce) {
-        const bearing = Math.atan2(y1 - mid, x1 - mid);
-        pins.push({ p, bearing, angle: bearing });
+        if (this.cfg.radarPins) {
+          const bearing = Math.atan2(y1 - mid, x1 - mid);
+          pins.push({ p, bearing, angle: bearing });
+        } else if (Math.hypot(x0 - mid, y0 - mid) <= mid) drawPost(p, x0, y0);
       }
     }
     spaceRimPins(pins, rim);
@@ -8474,7 +8455,7 @@ export class Shooter {
       drawPost(pin.p, px, py);
     }
     x.restore();
-    facingArrow(x, mid, mid, Math.PI/2, person*1.85, '#fff8e9');
+    facingArrow(x, mid, mid, facing, person*1.85, '#fff8e9');
   }
 
   drawBoard() {

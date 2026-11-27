@@ -1,0 +1,235 @@
+{
+  "job": "03c5994c8a8ae367ceabbc3fab0af4b6c29df55f35e8d464a85b1c3a3b14a434",
+  "pack": "geonosis-ground",
+  "policy": "polyhaven-2k",
+  "families": [
+    {
+      "id": "alluvial-grit",
+      "asset": "gravelly_sand",
+      "role": "sand",
+      "tileMeters": 2.48,
+      "regular": false,
+      "use": "natural",
+      "slots": [
+        0,
+        3,
+        4,
+        5,
+        17,
+        27
+      ],
+      "why": "Fine warm mineral grains give the open wash a little more body in the orange light without importing dune ripples or scattering large stones everywhere.",
+      "reuse": "tatooine-ground",
+      "evidence": "58aa62becd3087f4c4a748e404b98b3dd5d63f76b3eec3bcfb60658f6f61e45f"
+    },
+    {
+      "id": "scoured-crust",
+      "asset": "cracked_red_ground",
+      "role": "soil",
+      "tileMeters": 2,
+      "regular": false,
+      "use": "natural",
+      "slots": [
+        13,
+        58
+      ],
+      "why": "Firm red-brown earth interrupts the coarser open floor in shallow runnels without changing into another hue of rock.",
+      "evidence": "58aa62becd3087f4c4a748e404b98b3dd5d63f76b3eec3bcfb60658f6f61e45f"
+    },
+    {
+      "id": "fan-gravel",
+      "asset": "dry_ground_rocks",
+      "role": "soil",
+      "tileMeters": 4,
+      "regular": false,
+      "use": "natural",
+      "slots": [
+        2,
+        7,
+        8,
+        9,
+        11,
+        12,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        31,
+        57,
+        59
+      ],
+      "why": "The light stone fragments belong in localized eroded fans and the toe of a scarp. They gave the open plain a visible repeating mark when used as its primary floor.",
+      "levelTangent": true,
+      "evidence": "58aa62becd3087f4c4a748e404b98b3dd5d63f76b3eec3bcfb60658f6f61e45f"
+    },
+    {
+      "id": "mineral-skin",
+      "asset": "mud_cracked_dry_03",
+      "role": "mud",
+      "tileMeters": 1.5,
+      "regular": false,
+      "use": "natural",
+      "slots": [
+        28
+      ],
+      "why": "Paler fines contract into small plates in a dry basin. Limit their share to the mapped mineral channels rather than copying a bright river through the board.",
+      "levelTangent": true,
+      "evidence": "58aa62becd3087f4c4a748e404b98b3dd5d63f76b3eec3bcfb60658f6f61e45f"
+    },
+    {
+      "id": "scarp-stone",
+      "asset": "tiger_rock",
+      "role": "rock",
+      "tileMeters": 2.55,
+      "regular": false,
+      "use": "natural",
+      "slots": [
+        1,
+        6,
+        15,
+        25,
+        29,
+        30
+      ],
+      "why": "Dark inclusions and irregular pale breaks read as rock on the steep tilted projections. The tower source is not a permit to paint buildings.",
+      "evidence": "58aa62becd3087f4c4a748e404b98b3dd5d63f76b3eec3bcfb60658f6f61e45f"
+    },
+    {
+      "id": "concrete",
+      "asset": "concrete_floor_02",
+      "role": "concrete",
+      "tileMeters": 2,
+      "regular": true,
+      "use": "built",
+      "slots": [
+        62
+      ],
+      "why": "Reserve the aligned manufactured substrate for an actual construction footprint. The hive buttresses meet natural ground at game start.",
+      "reuse": "endor-terrain",
+      "evidence": "58aa62becd3087f4c4a748e404b98b3dd5d63f76b3eec3bcfb60658f6f61e45f"
+    }
+  ],
+  "composition": {
+    "kind": "eroded-badlands",
+    "channels": [
+      5,
+      13,
+      2,
+      28,
+      25,
+      1,
+      6
+    ],
+    "deposition": {
+      "seed": 1621,
+      "heading": -0.64,
+      "length": 196,
+      "width": 83
+    },
+    "channelHints": [
+      13,
+      28,
+      31,
+      58
+    ],
+    "saltHints": [
+      28
+    ],
+    "rockHints": [
+      0,
+      1,
+      2,
+      6,
+      7,
+      8,
+      9,
+      11,
+      12,
+      15,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      29,
+      30,
+      57,
+      59
+    ],
+    "design": "Dry washes gather firm sediment and mineral traces at the toes of eroded scarps. Coarser lag occupies shoulders. Tower swatches describe projected rock faces, not widespread paving; real spires and fissures remain authored.",
+    "variation": {
+      "pair": [
+        5,
+        13
+      ],
+      "minSpan": 0.2,
+      "process": "Fine ochre wash deposits interrupt exposed hardpan at two irregular scales. Weathered crust is more frequent in surveyed shallow beds and hollows; salt can interrupt only mapped dry channels.",
+      "preserve": "Rock projections belong to slopes. Preserve dry channel shoulders and tower bases; reserve aligned concrete strictly for live construction."
+    },
+    "regions": [
+      {
+        "name": "Western muster wash",
+        "view": "command",
+        "grid": [
+          26,
+          211,
+          35,
+          32
+        ],
+        "maxBoundary": 0.19,
+        "maxSmallShare": 0.055,
+        "maxJump": 0.045
+      },
+      {
+        "name": "Eastern hive approach",
+        "view": "eastern-wash",
+        "grid": [
+          231,
+          130,
+          34,
+          32
+        ],
+        "maxBoundary": 0.19,
+        "maxSmallShare": 0.055,
+        "maxJump": 0.045
+      }
+    ],
+    "evidence": [
+      "58aa62becd3087f4c4a748e404b98b3dd5d63f76b3eec3bcfb60658f6f61e45f",
+      "62882a56ffcbbcdf0d4921b07d67525ec13ab772a97618992f4a98482817198a",
+      "57cf94e85ee59467e598a7012e023d0a3d04299d61603a682df330c4bb92dfab",
+      "2b2f4d504b443dac53c6865dac6d175d2a38cff0c68d81a9723dff6b5579849b",
+      "10a79cd76674ee30060498d6d6b688d3d6f2fe641eb5948c4831525fc598e6f9",
+      "a5eba9e9ebc862cd0f5cf43689ad7eaa3d88dbcd36d339bf7971cb88e2b8f6e8",
+      "9f0bc7d1398bc647390b8b254b1424d45100688ebb00dba06185c804c12b1f7a"
+    ]
+  },
+  "zones": [
+    {
+      "slot": 62,
+      "natural": 5,
+      "construction": true,
+      "aprons": [],
+      "evidence": "58aa62becd3087f4c4a748e404b98b3dd5d63f76b3eec3bcfb60658f6f61e45f"
+    }
+  ],
+  "binding": {
+    "key": "geonosis",
+    "seed": 1621,
+    "retainedPlants": {},
+    "nonLivingProps": [
+      "W_GEONOSIS_ROCKFORM00.ALO",
+      "W_GEONOSIS_ROCKFORM01.ALO",
+      "W_GEONOSIS_TOWER02.ALO",
+      "W_GEONOSIS_TOWER03.ALO",
+      "W_GEO_CRACKSTEAM.ALO",
+      "W_GEO_ROCKCRACK01.ALO",
+      "W_ROCKCLSTR02.ALO",
+      "W_ROCKCLSTR03.ALO"
+    ]
+  }
+}

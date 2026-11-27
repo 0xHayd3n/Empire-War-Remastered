@@ -1,6 +1,12 @@
-# Galactic Conquest preview switching
+# Universal setup previews
 
-The current browser benchmark reports `bodies` (detailed foreground portraits), `complete` (the requested native map is drawn on consecutive frames), and `settled` (the incoming fades and camera motion have also finished). A visible loading starfield is **not** a ready map. `tools/test-universal-motion.cjs` separately holds the catalog fetch, checks actual opening pixels, samples wheel motion and cursor anchoring, checks close-up text and reduced motion, and releases an obsolete worker result during a map change. The older times below predate these cosmetic transitions.
+The mounted title window prepares the opening conquest, story and shared battlefield charts while the menu is loading. It renders preview stills, decodes planet sheets and prepares the tactical list; it does not construct a campaign or battle. A click that beats the preload joins that work with Play still on screen. The stills are tied to the catalog, opening choice and actual board dimensions. The two tactical selectors intentionally open without choosing a battlefield for the player.
+
+`npm run test:universal-first-map` checks all four entries and Escape/re-entry on the mounted host (`BASE_URL`, default `http://127.0.0.1:8590/`). It times from click, samples the first visible chart on animation frames, and checks its painted foreground, planet identities, detailed portraits and route count against the installed catalog. Use `WIDTH=390 MOTION=reduce` for narrow/reduced-motion coverage. This is separate from pressing Start: `tools/check-universal-deployment.cjs` exercises campaign presentation and `tools/check-universal-planet-launch.cjs` exercises both battle domains.
+
+## Historical Galactic Conquest switch benchmarks
+
+The current browser benchmark reports `bodies` (detailed foreground portraits), `complete` (the requested native map is drawn on consecutive frames), and `settled` (the incoming fades and camera motion have also finished). A visible loading starfield is **not** a ready map. `tools/test-universal-motion.cjs` separately holds the catalog fetch and checks that Play stays visible instead of a partial chart, samples wheel motion and cursor anchoring, checks close-up text and reduced motion, and releases an obsolete worker result during a map change. The older times below predate these cosmetic transitions.
 
 ## Overlap lane rendering with in-story map changes
 

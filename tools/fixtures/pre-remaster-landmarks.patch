@@ -1,0 +1,49 @@
+--- a/game/endor-thicket.js
++++ b/game/endor-thicket.js
+@@ -225,9 +225,8 @@
+       g.quad(...vs);
+     }
+-    const tiers=near?5:3, spokes=near?6:4;
+-    for (let j = 0; j < tiers; j++) {
+-      const t = j / (tiers-1);
+-      for (let i = 0; i < spokes; i++) {
+-        const a = (i * TAU) / spokes + 1.22 * j;
++    for (let j = 0; j < 5; j++) {
++      const t = j / 4;
++      for (let i = 0; i < 6; i++) {
++        const a = (i * TAU) / 6 + 1.22 * j;
+         fan(g, 0, 0, 7 + t * 39, a, 7 + t * 4, 16 * (1 - t * 0.85), 16 * (1 - t * 0.8), 3, 0.18);
+       }
+@@ -338,11 +337,4 @@
+     function plantMap() {
+       layout = forestPlan(t, ids, safe);
+-      // Beyond the detail neighbourhood only landmarks, not the dense fern carpet.
+-      for (const c of layout.chunks) {
+-        c.landmarks=c.plants.filter(p=>['redwood','hemlock','log','stone'].includes(p.kind));
+-        c.bounds=new T.Box3();
+-        for(const p of c.landmarks)c.bounds.expandByPoint(trans.position.set(p.x,p.y,p.z));
+-        if(c.landmarks.length){c.bounds.expandByScalar(65);c.bounds.max.z+=240;}
+-      }
+       stats.total = layout.totals;
+       stats.quadrants = layout.quadrants;
+@@ -398,5 +390,5 @@
+       const order = layout.chunks
+         .map(c => [c, (c.x - x) ** 2 + (c.y - y) ** 2])
+-        .filter(([c, d]) => d < (canopyReach + CHUNK) ** 2 || (c.landmarks.length && frustum.intersectsBox(c.bounds)))
++        .filter(([, d]) => d < (canopyReach + CHUNK) ** 2)
+         .sort((a, b) => a[1] - b[1]);
+       const focusZ =
+@@ -408,10 +400,10 @@
+         az = focusZ - eye.z,
+         ds = Math.max(1, ax * ax + ay * ay);
+-      for (const [c, dist2] of order)
+-        for (const p of dist2 < (canopyReach+CHUNK)**2 ? c.plants : c.landmarks) {
++      for (const [c] of order)
++        for (const p of c.plants) {
+           const d = (p.x - x) ** 2 + (p.y - y) ** 2,
+             tree = p.kind === 'redwood',
+             mid = p.kind === 'hemlock';
+-          if (!tree && !mid && p.kind!=='stone' && p.kind!=='log' && d > brushReach ** 2) continue;
++          if (d > (tree ? canopyReach : mid ? brushReach * 1.45 : brushReach) ** 2) continue;
+           const height=(tree?196:mid?57:p.kind==='log'?46:21)*p.s;
+           sphere.center.set(p.x,p.y,p.z+(p.kind==='log'?0:height*.5));sphere.radius=height*.65+42;

@@ -1,0 +1,196 @@
+{
+  "protocol": "Mounted Universal, fixed camera, stationary render, enabled / disabled / disabled / enabled. FPS from animation-frame intervals; saved is main-pass triangles avoided per measured batch frame vs its own original geometry. Timings varied with warm-up/system load; do not infer a universal FPS gain.",
+  "cases": [
+    {
+      "route": "land",
+      "backend": "webgpu",
+      "pack": "http://127.0.0.1:8591",
+      "legs": [
+        {
+          "enabled": true,
+          "saved": 73990,
+          "count": 398,
+          "skins": 68,
+          "fps": 172.31641122354222,
+          "p95": 5.805000000000291
+        },
+        {
+          "enabled": false,
+          "saved": 0,
+          "count": 0,
+          "skins": 0,
+          "fps": 180.0360072014404,
+          "p95": 5.684999999999491
+        },
+        {
+          "enabled": false,
+          "saved": 0,
+          "count": 0,
+          "skins": 0,
+          "fps": 180.0027000405005,
+          "p95": 5.665000000000873
+        },
+        {
+          "enabled": true,
+          "saved": 73990,
+          "count": 398,
+          "skins": 68,
+          "fps": 179.98200179982027,
+          "p95": 5.6599999999998545
+        }
+      ],
+      "zoom": [
+        1476,
+        958,
+        1476
+      ]
+    },
+    {
+      "route": "land",
+      "backend": "webgpu",
+      "pack": "http://127.0.0.1:8593",
+      "legs": [
+        {
+          "enabled": true,
+          "saved": 868668,
+          "count": 912,
+          "skins": 39,
+          "fps": 76.77772422294544,
+          "p95": 22.1200000000008
+        },
+        {
+          "enabled": false,
+          "saved": 0,
+          "count": 0,
+          "skins": 0,
+          "fps": 127.06031835668658,
+          "p95": 11.215000000000146
+        },
+        {
+          "enabled": false,
+          "saved": 0,
+          "count": 0,
+          "skins": 0,
+          "fps": 139.05251163599158,
+          "p95": 11.159999999999854
+        },
+        {
+          "enabled": true,
+          "saved": 868668,
+          "count": 912,
+          "skins": 39,
+          "fps": 152.1041068108837,
+          "p95": 11.12999999999738
+        }
+      ],
+      "zoom": [
+        4777,
+        2701,
+        4777
+      ]
+    },
+    {
+      "route": "land",
+      "backend": "webgl",
+      "pack": "http://127.0.0.1:8591",
+      "legs": [
+        {
+          "enabled": true,
+          "saved": 73990,
+          "count": 398,
+          "skins": 68,
+          "fps": 63.155983437343345,
+          "p95": 16.824999999999818
+        },
+        {
+          "enabled": false,
+          "saved": 0,
+          "count": 0,
+          "skins": 0,
+          "fps": 64.28723536762259,
+          "p95": 16.80500000000029
+        },
+        {
+          "enabled": false,
+          "saved": 0,
+          "count": 0,
+          "skins": 0,
+          "fps": 66.65972294552651,
+          "p95": 16.795000000000073
+        },
+        {
+          "enabled": true,
+          "saved": 73990,
+          "count": 398,
+          "skins": 68,
+          "fps": 68.89543395511461,
+          "p95": 16.735000000000582
+        }
+      ],
+      "zoom": [
+        1476,
+        958,
+        1476
+      ]
+    },
+    {
+      "meta": {
+        "pool": 1742,
+        "min": 3.3178466027730784,
+        "poolLow": 698,
+        "direct": 98
+      },
+      "batches": 208,
+      "drawn": 871,
+      "hyper": 0,
+      "units": 536,
+      "route": "space",
+      "backend": "webgpu",
+      "pack": "http://127.0.0.1:8591",
+      "legs": [
+        {
+          "enabled": true,
+          "saved": 248666,
+          "count": 349,
+          "skins": 0,
+          "fps": 171.42857142857142,
+          "p95": 5.830000000001746
+        },
+        {
+          "enabled": false,
+          "saved": 0,
+          "count": 0,
+          "skins": 0,
+          "fps": 180.00585019013107,
+          "p95": 5.625
+        },
+        {
+          "enabled": false,
+          "saved": 0,
+          "count": 0,
+          "skins": 0,
+          "fps": 179.99370022049263,
+          "p95": 5.595000000001164
+        },
+        {
+          "enabled": true,
+          "saved": 248666,
+          "count": 349,
+          "skins": 0,
+          "fps": 180.00990054452967,
+          "p95": 5.5900000000001455
+        }
+      ],
+      "zoom": [
+        3814,
+        762,
+        3814
+      ]
+    },
+    {
+      "campaign": "Sandbox_Heart_Of_The_Maw_Underworld",
+      "saved": 6208,
+      "calls": 16
+    }
+  ]
+}

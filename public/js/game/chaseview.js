@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { viewOptions as prefs } from './viewpreferences.js';
 import { keysOf, keyName } from './keybinds.js';
 
 const BLEND = 0.9;
@@ -86,8 +87,9 @@ export class ChaseView {
 
   look(dx, dy) {
     if (!this.on) return;
-    this.yaw -= dx * LOOK;
-    this.pitch = Math.min(PITCH_HI, Math.max(PITCH_LO, this.pitch + dy * LOOK));
+    const k = LOOK * prefs.orbitLook;
+    this.yaw -= dx * k;
+    this.pitch = Math.min(PITCH_HI, Math.max(PITCH_LO, this.pitch + dy * k * (prefs.orbitInvert ? -1 : 1)));
   }
 
   wheel(notches) {
@@ -98,7 +100,9 @@ export class ChaseView {
     const now = performance.now(),
       real = this.last ? Math.min(0.1, (now - this.last) / 1000) : 0;
     this.last = now;
-    this.k = Math.min(1, Math.max(0, this.k + (this.on ? real : -real) / BLEND));
+    const blend = BLEND * prefs.chaseBlend;
+    this.k = blend ? Math.min(1, Math.max(0, this.k + (this.on ? real : -real) / blend)) : Number(this.on);
+    if (this.on) this.refreshOverlay();
     if (this.k <= 0 && !this.on) {
       this.last = 0;
       return;
@@ -133,6 +137,15 @@ export class ChaseView {
     if (this.reticle) this.reticle.dataset.state = state || 'out';
   }
 
+  refreshOverlay() {
+    if (!this.reticle) return;
+    if (this.sightScale !== prefs.chaseReticle) {
+      this.sightScale = prefs.chaseReticle;
+      this.reticle.style.transform = `scale(${this.sightScale})`;
+    }
+    if (this.note.hidden === prefs.chaseTip) this.note.hidden = !prefs.chaseTip;
+  }
+
   showReticle(on) {
     if (!this.reticle) {
       const st = document.createElement('style');
@@ -140,6 +153,7 @@ export class ChaseView {
 .chase-reticle { position: fixed; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; z-index: 50; pointer-events: none; color: #d8e6f4; }
 .chase-reticle[data-state="in"] { color: #ff7a3a; }
 .chase-reticle svg { width: 100%; height: 100%; filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 2px #000); }
+.chase-note[hidden] { display: none !important; }
 .chase-note { position: fixed; left: 50%; top: 104px; transform: translateX(-50%); z-index: 50; pointer-events: none; font: 12px "Segoe UI", sans-serif; color: #ffd76a; text-shadow: 0 0 3px #000, 0 0 3px #000; }`;
       document.head.appendChild(st);
       const r = (this.reticle = document.createElement('div'));
@@ -153,6 +167,7 @@ export class ChaseView {
     const key = keyName(keysOf('DIRECT_VIEW')[0] || null);
     this.note.textContent = `Mouse to look, wheel to zoom, left button fires at the reticle, ${key} for the battle view`;
     this.reticle.style.display = this.note.style.display = on ? 'block' : 'none';
+    if (on) this.refreshOverlay();
     document.body.classList.toggle('chase-view', on);
   }
 

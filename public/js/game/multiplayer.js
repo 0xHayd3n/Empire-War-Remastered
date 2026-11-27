@@ -461,6 +461,10 @@ export async function openPlaylist(args) {
   }
 }
 
+import { painterEntry } from './painter-entry.js';
+import { activeLivery } from './liveries.js';
+import { readyPaint, launchPaint } from './liverytransport.js';
+
 export async function openMultiplayer({
   maps,
   landMaps = [],
@@ -478,6 +482,7 @@ export async function openMultiplayer({
   const K = KINDS[kind] || KINDS.internet;
   const dlg = await openDialog(K.lobby, { ...SCREEN, modal: false });
   if (!dlg) return false;
+  painterEntry(dlg.veil);
   const data = dataFingerprint();
   const def = id => dlg.def.controls.find(c => c.id === id);
   {
@@ -1110,6 +1115,8 @@ async function openStaging(args) {
     });
   st.invitable = host && !password && !rules;
   const campaign = () => st.type === 'campaign';
+  const paintFaction = s => campaign() ? campaignOf(st.mapFile)?.menu || s?.faction : st.teamFactions[s?.team];
+  const paintFor = s => launchPaint(s, paintFaction(s), s.peer === net.id);
   const SLOTS = rowsOf(dlg) || ROWS;
   let slots = Array.from({ length: SLOTS }, (_, i) => ({
     kind: i === 0 ? 'human' : i === 1 ? 'open' : 'closed',
@@ -1312,7 +1319,9 @@ async function openStaging(args) {
         unready();
         publish();
       } else if (m.k === 'ready') {
-        slots[i].ready = !!m.on;
+        const s = slots[i], faction = paintFaction(s);
+        s.ready = !!m.on && (m.faction === undefined || m.faction === faction);
+        readyPaint(s, m, faction);
         publish();
       } else if (m.k === 'chat') {
         const text = String(m.text || '').slice(0, 200);
@@ -1498,8 +1507,8 @@ async function openStaging(args) {
       const p = { ...(base.players[i] || {}) };
       for (const k of ['peer', 'peers', 'name', 'left', 'difficulty']) delete p[k];
       return s.kind === 'human'
-        ? { ...p, human: true, peer: s.peer, name: s.name, color: s.color, auto: false }
-        : { ...p, human: false, difficulty: s.kind, color: s.color, auto: false };
+        ? { ...p, human: true, peer: s.peer, name: s.name, color: s.color, auto: false, livery: paintFor(s) }
+        : { ...p, human: false, difficulty: s.kind, color: s.color, auto: false, livery: null };
     });
     const setup = {
       ...base,
@@ -1519,6 +1528,11 @@ async function openStaging(args) {
   let fillMaps = () => {};
 
   const mine = () => slots.findIndex(s => s.kind === 'human' && s.peer === net.id);
+  painterEntry(dlg.veil, () => {
+    const slot = slots[mine()];
+    if (!host && slot?.ready) net.send(0, { k: 'ready', on: false });
+    return campaign() ? slot?.faction : st.teamFactions[slot?.team];
+  });
   const previews = new Map();
   const seeds = seedBar({
     get: () => st.mapFile,
@@ -1854,7 +1868,8 @@ async function openStaging(args) {
   dlg.on(K.start, () => {
     if (!host) {
       const s = slots[mine()];
-      net.send(0, { k: 'ready', on: !(s && s.ready) });
+      const on = !!s && !s.ready, faction = paintFaction(s);
+      net.send(0, { k: 'ready', on, faction, livery: on && faction ? activeLivery(faction) : null });
       return;
     }
     if (!st.mapFile || (rules && humans().length !== 2)) return;
@@ -1913,7 +1928,7 @@ async function openStaging(args) {
         options: { credits: st.credits, tech: st.tech, maxTech: st.maxTech, autoResolve: st.autoResolve, randomEvents: !!st.randomEvents },
         players: players.map(s =>
           s.kind === 'human'
-            ? { human: true, peer: s.peer, name: s.name, faction: entry.menu || s.faction, color: s.color }
+            ? { human: true, peer: s.peer, name: s.name, faction: entry.menu || s.faction, color: s.color, livery: paintFor(s) }
             : { human: false, faction: s.faction, difficulty: s.kind, color: s.color }
         )
       };
@@ -1949,7 +1964,7 @@ async function openStaging(args) {
       ...(isLand(st.mapFile) && st.shooter ? { shooter: true } : {}),
       players: fighters.map(s =>
         s.kind === 'human'
-          ? { human: true, peer: s.peer, name: s.name, team: used.indexOf(s.team), color: s.color, auto: false }
+          ? { human: true, peer: s.peer, name: s.name, team: used.indexOf(s.team), color: s.color, auto: false, livery: paintFor(s) }
           : { human: false, team: used.indexOf(s.team), difficulty: s.kind, color: s.color, auto: false }
       ),
       ...(watchers.length ? { spectators: watchers.map(s => s.peer), spectatorNames: watchers.map(s => s.name) } : {})

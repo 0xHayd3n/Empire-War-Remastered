@@ -153,6 +153,8 @@
   background: #11222cee;
   font-size: 0.88rem;
 }
+.workshop-exchange .wx-mounted { margin-block: .5rem; overflow-wrap: anywhere; }
+.workshop-exchange .wx-mounted summary { cursor: pointer; }
 .workshop-exchange .wx-status {
   font: max(12px, 0.8rem) / 1.4 var(--body);
   color: #d1e0e4;

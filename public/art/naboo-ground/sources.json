@@ -1,0 +1,269 @@
+{
+  "forrest_ground_01": {
+    "page": "https://polyhaven.com/a/forrest_ground_01",
+    "license": "https://polyhaven.com/license",
+    "api": "https://api.polyhaven.com/files/forrest_ground_01",
+    "authors": [
+      "Rob Tuytel"
+    ],
+    "dimensionsMm": [
+      2000,
+      2000
+    ],
+    "inputs": {
+      "color": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/forrest_ground_01/forrest_ground_01_diff_2k.jpg",
+        "size": 3077552,
+        "md5": "18fa30c294be21805159ca6e73a5e5fa",
+        "sha256": "e4d557ff61a0b42712a58e8a2e91c6010738977d4e172b7af47abd7d406ae735"
+      },
+      "normal": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/forrest_ground_01/forrest_ground_01_nor_gl_2k.jpg",
+        "size": 5551101,
+        "md5": "7bb5186bd63bef99f6d21316718896f2",
+        "sha256": "aa23fa930c6303490f842f7c016c19d838263e8e4538d42508a9332e3fd76b69"
+      },
+      "roughness": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/forrest_ground_01/forrest_ground_01_rough_2k.jpg",
+        "size": 920422,
+        "md5": "a4c7ecc9cef47f5d097d4553e421ed6a",
+        "sha256": "e09258c7f055156a7607f1b21dccf38c7efd847e7d030271d5ffcc4a722df37d"
+      },
+      "height": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/forrest_ground_01/forrest_ground_01_disp_2k.png",
+        "size": 8254943,
+        "md5": "a5450e0b6a21239a8cc37faac9ad641c",
+        "sha256": "1d8cb8bbe9039ee2cd22068d457617a1748170405aacd49d33fcf637e08bb12b"
+      }
+    }
+  },
+  "grass_path_3": {
+    "api": "https://api.polyhaven.com/files/grass_path_3",
+    "authors": [
+      "Rob Tuytel"
+    ],
+    "dimensionsMm": [
+      1000,
+      1000
+    ],
+    "inputs": {
+      "color": {
+        "md5": "f4c27b0cacfc087823601d49d02c868b",
+        "sha256": "5b2cdd95e744e90981c9a2d0e172d72495aeb9a00bfe0cfcfdd53c244c487b26",
+        "size": 2567895,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grass_path_3/grass_path_3_diff_2k.jpg"
+      },
+      "height": {
+        "md5": "f12186c2ffc4d47b1e469c6accbf7028",
+        "sha256": "5578a8e3263aa2dc5965b855dada8c4b01633d12d404081987295939af5b2f53",
+        "size": 7363908,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/grass_path_3/grass_path_3_disp_2k.png"
+      },
+      "normal": {
+        "md5": "e4443750063b6ecdbbae6b60feb09580",
+        "sha256": "c44519f000e9ad573520c393cffd7965bcd907228c42e2813514444222446a06",
+        "size": 2328291,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grass_path_3/grass_path_3_nor_gl_2k.jpg"
+      },
+      "roughness": {
+        "md5": "1baae3e47138ec1ba7daf6d0b071a3d7",
+        "sha256": "9adb59dad22c51e262da41ce93d01f7056d544d2dca05202d956fcb3524e5d91",
+        "size": 2297183,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grass_path_3/grass_path_3_rough_2k.jpg"
+      }
+    },
+    "license": "https://polyhaven.com/license",
+    "page": "https://polyhaven.com/a/grass_path_3"
+  },
+  "gravel_floor_02": {
+    "page": "https://polyhaven.com/a/gravel_floor_02",
+    "license": "https://polyhaven.com/license",
+    "api": "https://api.polyhaven.com/files/gravel_floor_02",
+    "authors": [
+      "Jenelle van Heerden",
+      "Dimitrios Savva"
+    ],
+    "dimensionsMm": [
+      2000,
+      2000
+    ],
+    "inputs": {
+      "color": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/gravel_floor_02/gravel_floor_02_diff_2k.jpg",
+        "size": 4698557,
+        "md5": "db7865191e53523b2b9eabc85a7f73c3",
+        "sha256": "27c8953655dd2f289106106bb2c2c4845f77152bf1621b3d7091bd43b5083ffc"
+      },
+      "normal": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/gravel_floor_02/gravel_floor_02_nor_gl_2k.jpg",
+        "size": 5894173,
+        "md5": "6d1c9823f61e798fe15388e99668be7a",
+        "sha256": "90f2f22016142f5ad725f8fc5540d8c9ad347db233b7540e2ab33f25ba9298e4"
+      },
+      "roughness": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/gravel_floor_02/gravel_floor_02_rough_2k.jpg",
+        "size": 2698006,
+        "md5": "e523a3ce827dc5dee008d8ff7f318246",
+        "sha256": "76f84ef27c72cffb1b1906c6a5b06cb06db664d2d6cb6c0ba2ee996c04e2607d"
+      },
+      "height": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/gravel_floor_02/gravel_floor_02_disp_2k.png",
+        "size": 7098121,
+        "md5": "68ed8323e660e7857378688882d4e5ff",
+        "sha256": "432de6f47719a7ea251222c7be9ffc815fa43e4ba0a0beef10b1d330bd9cdc54"
+      }
+    }
+  },
+  "mossy_rock": {
+    "page": "https://polyhaven.com/a/mossy_rock",
+    "license": "https://polyhaven.com/license",
+    "api": "https://api.polyhaven.com/files/mossy_rock",
+    "authors": [
+      "Rob Tuytel"
+    ],
+    "dimensionsMm": [
+      3000,
+      3000
+    ],
+    "inputs": {
+      "color": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/mossy_rock/mossy_rock_diff_2k.png",
+        "size": 9204163,
+        "md5": "8df6ca9f9ca64ab7279c52618a5ebc04",
+        "sha256": "7a5cf7886fb46f71ff76d822939b0eb4169f7d29ef504918fe7526f948511302"
+      },
+      "normal": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/mossy_rock/mossy_rock_nor_gl_2k.png",
+        "size": 8716359,
+        "md5": "b5385cc9f6239f4720a43e0acbed6015",
+        "sha256": "b72a20fb7101bd962150c1061cd1d798c2b2d77815092543593eb23d3f0f1735"
+      },
+      "roughness": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/mossy_rock/mossy_rock_rough_2k.png",
+        "size": 3022971,
+        "md5": "97add42f4d4314103082668313420a1f",
+        "sha256": "4a47fba6710e48e7ef2cfac2dd32e2e900e5d4bdf0c2b372b3d5d599831681c6"
+      },
+      "height": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/mossy_rock/mossy_rock_disp_2k.png",
+        "size": 6906485,
+        "md5": "2ec6243afcf5345fd329ee7b3535fd1d",
+        "sha256": "3ee19ec26fa8ecf27b1fc961902e0656321d37f3d66a5c4fd809303db858ff7c"
+      }
+    }
+  },
+  "brown_mud_leaves_01": {
+    "page": "https://polyhaven.com/a/brown_mud_leaves_01",
+    "license": "https://polyhaven.com/license",
+    "api": "https://api.polyhaven.com/files/brown_mud_leaves_01",
+    "authors": [
+      "Rob Tuytel"
+    ],
+    "dimensionsMm": [
+      1299.9998331069946,
+      1299.9998331069946
+    ],
+    "inputs": {
+      "color": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/brown_mud_leaves_01/brown_mud_leaves_01_diff_2k.jpg",
+        "size": 4539452,
+        "md5": "e8b45aee8e00a253eb3a2b08cea89776",
+        "sha256": "29c997d77f56e4ea16d3e998a306be0c17fddb28ab4822657c7cd8249040ffda"
+      },
+      "normal": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/brown_mud_leaves_01/brown_mud_leaves_01_nor_gl_2k.jpg",
+        "size": 5688696,
+        "md5": "eb2c704d2889e1e5a53148dc6a2ebdf4",
+        "sha256": "b6ec386e00d9d2a1c3a1da6a98a67066b0dfaa88ddb779341df29700cf081bdf"
+      },
+      "roughness": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/brown_mud_leaves_01/brown_mud_leaves_01_rough_2k.jpg",
+        "size": 2421908,
+        "md5": "3e7209ff00204174c5bd013df3945b22",
+        "sha256": "9556215f5fef905c37cdf19c77aef7822f124890f8fb7dcce65d57c5eafc0ca5"
+      },
+      "height": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/brown_mud_leaves_01/brown_mud_leaves_01_disp_2k.png",
+        "size": 6888729,
+        "md5": "5b89fee9ce8ca0bab40a8e049b70ab6a",
+        "sha256": "a6d41eee4c01717b7b0b71e6fbd9a46b903312ee440c3ada3d3c013cafc65263"
+      }
+    }
+  },
+  "concrete_floor_02": {
+    "page": "https://polyhaven.com/a/concrete_floor_02",
+    "license": "https://polyhaven.com/license",
+    "api": "https://api.polyhaven.com/files/concrete_floor_02",
+    "authors": [
+      "Rob Tuytel"
+    ],
+    "dimensionsMm": [
+      2000,
+      2000
+    ],
+    "inputs": {
+      "color": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/concrete_floor_02/concrete_floor_02_diff_2k.png",
+        "size": 10037331,
+        "md5": "e6328911fe7cd3a74f11486f06a5ad60",
+        "sha256": "c438815b55874b9bbab5befa559c9ef2b635f674ebf9415c7341f6865156b03b"
+      },
+      "normal": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/concrete_floor_02/concrete_floor_02_nor_gl_2k.png",
+        "size": 25222001,
+        "md5": "e7bbae9a0ec85c590b82ccdf5788c46d",
+        "sha256": "0b13102bbf79daef40b7230c20aaca402620b618e043413f1ff677c47acc2861"
+      },
+      "roughness": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/concrete_floor_02/concrete_floor_02_rough_2k.png",
+        "size": 7596762,
+        "md5": "130e55c56d8f1db1c1ed0cd7d160fa78",
+        "sha256": "255fdd0bc8c2e6cdfafa4fd6697b6eadca4b906ed72375ef0a791de4a33151ed"
+      },
+      "height": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/concrete_floor_02/concrete_floor_02_disp_2k.png",
+        "size": 6794442,
+        "md5": "73f54017bc0fc5b6c85807f694624c62",
+        "sha256": "3fb045cf1f939bd88dceec52592c417e7c2685a5c78edd7fef09adf0a6f2d082"
+      }
+    }
+  },
+  "cobblestone_05": {
+    "api": "https://api.polyhaven.com/files/cobblestone_05",
+    "authors": [
+      "Rob Tuytel"
+    ],
+    "dimensionsMm": [
+      2400.0000953674316,
+      2400.0000953674316
+    ],
+    "inputs": {
+      "color": {
+        "md5": "c14877c8d6094db274505e49f73bf4ad",
+        "sha256": "999675e08545b44c8b863544480da9bc88b0457c3ab196d36004d098734e4ffb",
+        "size": 1906318,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/cobblestone_05/cobblestone_05_diff_2k.jpg"
+      },
+      "height": {
+        "md5": "638481c23d24da254fa41a374b1a907e",
+        "sha256": "4b0572723533ed32bcb90e96bf64cc561684a460dd98516aeeab2ba7ed6ff727",
+        "size": 6677717,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/cobblestone_05/cobblestone_05_disp_2k.png"
+      },
+      "normal": {
+        "md5": "60341ea93ecffe1fd64d9d434550a0f5",
+        "sha256": "ac0d3bb8d36412d507603017d7377846ea80e24301bd0c86ff77ec0411f581ab",
+        "size": 1539195,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/cobblestone_05/cobblestone_05_nor_gl_2k.jpg"
+      },
+      "roughness": {
+        "md5": "16d672e14a8f03b3ad65f8dc2b7f61c1",
+        "sha256": "856a87df33a5cbd64b62e1899206c5494e98e70c7c0154c1422167c911fba6ae",
+        "size": 648100,
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/cobblestone_05/cobblestone_05_rough_2k.jpg"
+      }
+    },
+    "license": "https://polyhaven.com/license",
+    "page": "https://polyhaven.com/a/cobblestone_05"
+  }
+}

@@ -75,7 +75,7 @@ function tuckSleeve(arm, wrist, tip, forward, eyeDistance) {
 }
 
 export class FirstPersonKit {
-  constructor(unit, clip, color) {
+  constructor(unit, clip, color, livery = null) {
     this.scene = new THREE.Scene();
     this.mount = new THREE.Group();
     this.scene.add(this.mount);
@@ -83,8 +83,9 @@ export class FirstPersonKit {
     this.stride = this.sprint = this.phase = 0;
     this.model = unit.inst?.model;
     this.weapon = unit.weapon;
+    this.livery = livery;
     if (!this.model) return;
-    const inst = buildModel(unit.inst.model, { teamColor: color, fresh: true });
+    const inst = buildModel(unit.inst.model, { teamColor: color, livery, fresh: true });
     if (clip) new AnimState(inst, clip).pose();
     inst.root.updateMatrixWorld(true);
     let muzzle = inst.bone(unit.weapon?.muzzles?.[0]?.bone?.name) || inst.bones.find(b => /^MUZZLE/i.test(b.name));

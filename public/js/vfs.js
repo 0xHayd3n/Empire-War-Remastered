@@ -1,5 +1,6 @@
 import { openOverlay, openStep } from './mods.js';
 import { languageId } from './language.js';
+import { matchTexture, showcaseBytes } from './texture-showcase/store.js';
 import { expansion } from './edition.js';
 import { isLua50Chunk, lua50ToSource } from './lua50.js';
 
@@ -24,6 +25,8 @@ const base = () => globalThis.SWR_BASE || '';
 
 const GAME = expansion() ? '' : 'game=eaw';
 function url(path, language) {
+  const scoped=/^Data\/Art\/(Models|Textures)\/UXA(stock|\d+)_(stock|[0-9a-f]{64})__(.+)$/i.exec(path);
+  if(scoped)return base()+'api/universal/art/'+scoped[2].toLowerCase()+'/'+scoped[3].toLowerCase()+'/asset/Data/Art/'+scoped[1]+'/'+encodeURIComponent(scoped[4]);
   const q = [language === undefined ? '' : 'language=' + language, GAME].filter(Boolean).join('&');
   return base() + 'asset/' + String(path).replace(/[\\/]+/g, '/').split('/').map(encodeURIComponent).join('/') + (q ? '?' + q : '');
 }
@@ -96,6 +99,8 @@ export function fetchBinary(path, { language, keep = true } = {}) {
   if (!p) {
     const own = () => fetchOff(url(path, language));
     p = overlay.then(o => (o ? o.read(keyOf(path), language) : undefined)).then(b => (b !== undefined ? b : own()));
+    const recipe = matchTexture(path);
+    if (recipe) p = p.then(bytes => showcaseBytes(recipe, bytes));
     cache.set(key, p);
     open.add(path);
     p.finally(() => open.delete(path)).catch(() => {});
@@ -112,6 +117,7 @@ export function fetchBinary(path, { language, keep = true } = {}) {
 }
 
 export async function fetchHead(path, bytes) {
+  if (matchTexture(path)) return (await fetchBinary(path, { keep: false }))?.slice(0, bytes) ?? null;
   const o = await overlay;
   const mine = o ? await o.read(keyOf(path), undefined, bytes) : undefined;
   if (mine !== undefined) return mine ? mine.slice(0, bytes) : null;
@@ -122,6 +128,7 @@ export async function fetchHead(path, bytes) {
 }
 
 export async function fetchPart(path, from, length) {
+  if (matchTexture(path)) return (await fetchBinary(path, { keep: false }))?.slice(from, from + length) ?? null;
   const local = await overlay;
   if (local) {
     const mine = local.readPart
@@ -137,7 +144,9 @@ export async function fetchPart(path, from, length) {
 }
 
 export async function fetchText(path) {
-  const buf = await fetchBinary(path);
+  return decodeFileText(path, await fetchBinary(path));
+}
+export function decodeFileText(path, buf) {
   if (!buf) return null;
   if (/\.lua$/i.test(path) && isLua50Chunk(buf)) return lua50ToSource(buf);
   return new TextDecoder('windows-1252').decode(buf);

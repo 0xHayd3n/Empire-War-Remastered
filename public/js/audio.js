@@ -1,10 +1,12 @@
 import { diag } from './diag.js';
 import { playableWave } from './wavadpcm.js';
+import { viewOptions as prefs } from './game/viewpreferences.js';
 import { db } from './gamedata.js';
 import { fetchBinary, fetchText, mediaUrl } from './vfs.js';
 import { SpeechPlayer } from './speech.js';
 import { activeLanguage } from './language.js';
 import { localizedAudioFile } from './localizedmedia.js';
+import { MusicEnvelope } from './musicenvelope.js';
 
 const POSITIONAL_VOICES = 32;
 const FLAT_VOICES = 24;
@@ -12,6 +14,9 @@ const STOLEN_FADE_SECONDS = 0.03;
 const MAX_HEARING_DISTANCE = 15000;
 const HEADPHONES_KEY = 'swr-audio-headphones';
 const VOICE_SATURATION = 1000;
+export const voiceChannels = { ambient: 'Ambient chatter', hud: 'HUD announcements', unit: 'Unit responses' };
+const VOICE_KEY = 'swr-voice-channels';
+export const mixOptions = { gui:'Interface sounds', duck:'Lower effects during spoken dialogue' };
 const VOICE_FLOOR = 0.2;
 
 const storedHeadphones = () => {
@@ -22,15 +27,10 @@ const storedHeadphones = () => {
   }
 };
 
-const release = el => {
-  el.pause();
-  el.src = '';
-  el.node?.disconnect();
-};
-
 export class Audio {
   constructor() {
     this.ctx = null;
+    this.musicMix = new MusicEnvelope();
     this.buffers = new Map();
     this.instances = new Map();
     this.positional = new Set();
@@ -67,6 +67,24 @@ export class Audio {
     this.ear = { x: 0, y: 0, z: 0, rightX: 1, rightY: 0, rightZ: 0, placed: false };
     this.heightAt = null;
     this.headphones = storedHeadphones();
+    this.mixOptions = {gui:true,duck:true};
+    try {const saved=JSON.parse(localStorage.getItem('swr-sound-mix')); for(const k of Object.keys(mixOptions)) if(saved?.[k]===false)this.mixOptions[k]=false;} catch {}
+    this.voiceChannels = {};
+    try {
+      const saved = JSON.parse(localStorage.getItem(VOICE_KEY));
+      for (const key of Object.keys(voiceChannels)) if (saved?.[key] === false) this.voiceChannels[key] = false;
+    } catch {}
+  }
+
+  setMixOption(key,on){
+    if(!Object.hasOwn(mixOptions,key))return;
+    this.mixOptions[key]=!!on;
+    try{localStorage.setItem('swr-sound-mix',JSON.stringify(this.mixOptions));}catch{}
+  }
+  setVoiceChannel(channel, on) {
+    if (!Object.hasOwn(voiceChannels, channel)) return;
+    this.voiceChannels[channel] = !!on;
+    try { localStorage.setItem(VOICE_KEY, JSON.stringify(this.voiceChannels)); } catch {}
   }
 
   setHeadphones(on) {
@@ -241,7 +259,7 @@ export class Audio {
 
   ducked(v) {
     const r = this.speech?.queue?.[0];
-    return r && r.state === 'playing' && !this.movieUp ? Math.min(v, 0.3) : v;
+    return this.mixOptions.duck && r && r.state === 'playing' && !this.movieUp ? Math.min(v, prefs.duckLevel) : v;
   }
 
   get voiceVolume() {
@@ -250,6 +268,7 @@ export class Audio {
   set voiceVolume(value) {
     this._voiceVolume = value;
     this.speech?.setVolume();
+    this.refreshMusicSpeech();
   }
 
   unlock() {
@@ -368,9 +387,11 @@ export class Audio {
       boost = this.boostNext || 1;
     this.forceNext = false;
     this.boostNext = 0;
-    if (this.ambientVOOff && ev.bool('Is_Ambient_VO')) return true;
-    if (this.hudVOOff && ev.bool('Is_HUD_VO')) return true;
-    if (this.unitResponseOff && ev.bool('Is_Unit_Response_VO')) return true;
+    if (!this.mixOptions.gui && /^GUI_/i.test(key)) return true;
+    // Mission scripts and player preferences can independently silence a category.
+    if ((this.ambientVOOff || this.voiceChannels.ambient === false) && ev.bool('Is_Ambient_VO')) return true;
+    if ((this.hudVOOff || this.voiceChannels.hud === false) && ev.bool('Is_HUD_VO')) return true;
+    if ((this.unitResponseOff || this.voiceChannels.unit === false) && ev.bool('Is_Unit_Response_VO')) return true;
     if (this.localizedOff && ev.bool('Localize')) return true;
     const prob = ev.num('Probability', 100);
     if (prob < 100 && Math.random() * 100 > prob) return true;
@@ -416,7 +437,10 @@ export class Audio {
       pan = h.pan;
       if (gain * far < 0.02) return true;
     }
-    const level = (voice ? gain * this.voiceVolume : this.ducked(gain * this.sfxVolume)) * boost;
+    // Apply the quietest matching channel when a mounted event has overlapping voice flags.
+    const channel = Math.min(/^GUI_/i.test(key) ? prefs.guiGain : 1, reply ? prefs.replyGain : 1, hud ? prefs.hudGain : 1,
+      ev.bool('Is_Ambient_VO') ? prefs.ambientGain : 1);
+    const level = (voice ? gain * this.voiceVolume : this.ducked(gain * this.sfxVolume)) * boost * channel;
     gain = level * (placed && !spoken ? 1 : far);
     let file;
     if (ev.bool('Play_Sequentially')) {
@@ -721,7 +745,7 @@ export class Audio {
     }
     let at = 0;
     try {
-      at = +(sessionStorage.getItem('swr.music.' + name) || 0) || 0;
+      if (prefs.musicResume) at = +(sessionStorage.getItem('swr.music.' + name) || 0) || 0;
     } catch {}
     this.playlist = files.slice();
     this.playIndex = at % files.length;
@@ -735,21 +759,26 @@ export class Audio {
     return true;
   }
   advanceMusicPlace() {
-    if (!this.musicEvent) return;
+    if (!this.musicEvent || !prefs.musicResume) return;
     try {
       sessionStorage.setItem('swr.music.' + this.musicEvent, String(this.playIndex % Math.max(1, this.playlist.length)));
     } catch {}
+  }
+  refreshMusicSpeech() {
+    const r = this.speech?.queue?.[0];
+    this.musicMix.duck(r?.state === 'playing' && r.source && r.event?.volume > 0 && this.voiceVolume > 0 ? prefs.speechMusic : 1);
   }
   musicLevel() {
     return this.musicVolume * this.masterVolume * this.musicGain;
   }
 
   nextTrack(fade = false) {
+    fade = fade && prefs.musicFade;
     const missing = this.missingMusic || (this.missingMusic = new Set());
     if (!this.playlist.some(f => !missing.has(f.toUpperCase()))) {
       if (this.music) {
         this.music.onended = this.music.onerror = null;
-        release(this.music);
+        this.musicMix.release(this.music);
         this.music = null;
       }
       return;
@@ -762,29 +791,28 @@ export class Audio {
     if (old) {
       old.onended = old.onerror = null;
       if (fade && this.musicEvent && this.fadeOut > 0) {
-        const from = old.volume,
+        const from = this.musicMix.levels.get(old),
           start = performance.now(),
           span = this.fadeOut * 1000;
         const step = () => {
+          if (!this.musicMix.levels.has(old)) return;
           const k = Math.min(1, (performance.now() - start) / span);
-          old.volume = from * (1 - k);
+          this.musicMix.write(old, from * (1 - k));
           if (k < 1) setTimeout(step, 50);
-          else {
-            release(old);
-          }
+          else this.musicMix.release(old);
         };
         step();
       } else if (fade) {
         const step = () => {
-          old.volume = Math.max(0, old.volume - 0.04 * Math.max(0.2, this.musicVolume));
-          if (old.volume > 0.01) setTimeout(step, 80);
-          else {
-            release(old);
-          }
+          if (!this.musicMix.levels.has(old)) return;
+          const level = Math.max(0, this.musicMix.levels.get(old) - 0.04 * Math.max(0.2, this.musicVolume));
+          this.musicMix.write(old, level);
+          if (level > 0.01) setTimeout(step, 80);
+          else this.musicMix.release(old);
         };
         step();
       } else {
-        release(old);
+        this.musicMix.release(old);
       }
     }
     const el = new window.Audio();
@@ -796,21 +824,22 @@ export class Audio {
         el.node = null;
       }
     }
-    el.volume = this.musicLevel();
-    if (this.musicEvent && this.fadeIn > 0) {
+    this.musicMix.write(el, this.musicLevel());
+    if (prefs.musicFade && this.musicEvent && this.fadeIn > 0) {
       const start = performance.now(),
         span = this.fadeIn * 1000;
-      el.volume = 0;
+      this.musicMix.write(el, 0);
       const step = () => {
         if (this.music !== el) return;
         const k = Math.min(1, (performance.now() - start) / span);
-        el.volume = this.musicLevel() * k;
+        this.musicMix.write(el, this.musicLevel() * k);
         if (k < 1) setTimeout(step, 50);
       };
       el.addEventListener('playing', step, { once: true });
     }
     el.onended = () => {
       if (this.once) {
+        this.musicMix.release(el);
         if (this.music === el) {
           this.music = null;
           this.musicEvent = null;
@@ -834,7 +863,7 @@ export class Audio {
 
   setMusicVolume(v) {
     this.musicVolume = v;
-    if (this.music) this.music.volume = this.musicLevel();
+    if (this.music) this.musicMix.write(this.music, this.musicLevel());
   }
   allowVO(kind, on = true) {
     this[kind] = !on;
@@ -860,14 +889,11 @@ export class Audio {
   setMasterVolume(v) {
     this.masterVolume = v;
     if (this.master) this.master.gain.value = v;
-    if (this.music) this.music.volume = this.musicLevel();
+    if (this.music) this.musicMix.write(this.music, this.musicLevel());
   }
   stopMusic() {
-    if (this.music) {
-      this.music.pause();
-      this.music.node?.disconnect();
-      this.music = null;
-    }
+    for (const track of this.musicMix.levels.keys()) this.musicMix.release(track);
+    this.music = null;
     this.playlist = [];
     this.musicMode = -1;
     this.musicEvent = null;

@@ -1,0 +1,327 @@
+{
+  "meta": {
+    "profile": "1125571106",
+    "map": "_MOD_SPACE_GENERIC_MOUNTAIN_01_LOW_AN.ted",
+    "roster": [
+      64,
+      64
+    ],
+    "units": 699,
+    "backend": "webgpu",
+    "types": [
+      "Skirmish_Imperial_I_Star_Destroyer",
+      "Skirmish_Crusader",
+      "Skirmish_IPV1",
+      "Skirmish_Lancer_Frigate",
+      "Skirmish_Patrol_Nebulon_B",
+      "Skirmish_NR_Imperial_I_Star_Destroyer",
+      "Skirmish_Agave_Corvette",
+      "Skirmish_CR90",
+      "Skirmish_DP20",
+      "Skirmish_Warrior_Gunship"
+    ],
+    "chrome": "158.0.8127.38",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700KF"
+  },
+  "result": {
+    "gpu": [
+      "nvidia",
+      "ampere",
+      ""
+    ],
+    "viewport": [
+      1280,
+      720
+    ],
+    "losses": [
+      "Skirmish_Imperial_I_Star_Destroyer",
+      "Skirmish_Imperial_I_Star_Destroyer",
+      "Skirmish_Imperial_I_Star_Destroyer",
+      "Skirmish_Imperial_I_Star_Destroyer",
+      "Skirmish_Imperial_I_Star_Destroyer",
+      "Skirmish_Imperial_I_Star_Destroyer",
+      "Skirmish_Imperial_I_Star_Destroyer",
+      "Skirmish_Imperial_I_Star_Destroyer",
+      "Skirmish_Imperial_I_Star_Destroyer",
+      "Skirmish_Imperial_I_Star_Destroyer"
+    ],
+    "captured": 10,
+    "bodies": 20,
+    "maxStartError": 0,
+    "legs": [
+      {
+        "engine": "jolt",
+        "mode": "controlled",
+        "bodies": 20,
+        "onCamera": 18,
+        "submittedDuringWarmup": 472,
+        "liveUnits": 689,
+        "gameSeconds": 0,
+        "frameMs": {
+          "n": 240,
+          "median": 5.555,
+          "p95": 5.635,
+          "max": 11.105
+        },
+        "solverMs": {
+          "n": 240,
+          "median": 0.065,
+          "p95": 0.105,
+          "max": 0.17
+        },
+        "wreckStepAndSyncMs": {
+          "n": 240,
+          "median": 0.09,
+          "p95": 0.16,
+          "max": 0.375
+        },
+        "underGround": 0,
+        "minCenterClearance": null,
+        "maxVelocityChange": 0,
+        "driftError": 0.098,
+        "minTravel": 38.15,
+        "maxSpeed": 38,
+        "tumbled": 20
+      },
+      {
+        "engine": "rapier",
+        "mode": "controlled",
+        "bodies": 20,
+        "onCamera": 18,
+        "submittedDuringWarmup": 472,
+        "liveUnits": 689,
+        "gameSeconds": 0,
+        "frameMs": {
+          "n": 240,
+          "median": 5.555,
+          "p95": 5.645,
+          "max": 11.205
+        },
+        "solverMs": {
+          "n": 240,
+          "median": 0.07,
+          "p95": 0.12,
+          "max": 0.34
+        },
+        "wreckStepAndSyncMs": {
+          "n": 240,
+          "median": 0.1,
+          "p95": 0.21,
+          "max": 0.675
+        },
+        "underGround": 0,
+        "minCenterClearance": null,
+        "maxVelocityChange": 0,
+        "driftError": 0.2316,
+        "minTravel": 38.29,
+        "maxSpeed": 38,
+        "tumbled": 20
+      },
+      {
+        "engine": "rapier",
+        "mode": "controlled",
+        "bodies": 20,
+        "onCamera": 18,
+        "submittedDuringWarmup": 472,
+        "liveUnits": 689,
+        "gameSeconds": 0,
+        "frameMs": {
+          "n": 240,
+          "median": 5.555,
+          "p95": 11.13,
+          "max": 16.685
+        },
+        "solverMs": {
+          "n": 240,
+          "median": 0.08,
+          "p95": 0.115,
+          "max": 0.28
+        },
+        "wreckStepAndSyncMs": {
+          "n": 240,
+          "median": 0.11,
+          "p95": 0.175,
+          "max": 0.31
+        },
+        "underGround": 0,
+        "minCenterClearance": null,
+        "maxVelocityChange": 0,
+        "driftError": 0.2316,
+        "minTravel": 38.29,
+        "maxSpeed": 38,
+        "tumbled": 20
+      },
+      {
+        "engine": "jolt",
+        "mode": "controlled",
+        "bodies": 20,
+        "onCamera": 18,
+        "submittedDuringWarmup": 472,
+        "liveUnits": 689,
+        "gameSeconds": 0,
+        "frameMs": {
+          "n": 240,
+          "median": 5.555,
+          "p95": 11.1,
+          "max": 11.165
+        },
+        "solverMs": {
+          "n": 240,
+          "median": 0.065,
+          "p95": 0.105,
+          "max": 0.31
+        },
+        "wreckStepAndSyncMs": {
+          "n": 240,
+          "median": 0.085,
+          "p95": 0.145,
+          "max": 0.355
+        },
+        "underGround": 0,
+        "minCenterClearance": null,
+        "maxVelocityChange": 0,
+        "driftError": 0.098,
+        "minTravel": 38.15,
+        "maxSpeed": 38,
+        "tumbled": 20
+      },
+      {
+        "engine": "jolt",
+        "mode": "live",
+        "bodies": 20,
+        "onCamera": 18,
+        "submittedDuringWarmup": 472,
+        "liveUnits": 689,
+        "gameSeconds": 1.6,
+        "frameMs": {
+          "n": 240,
+          "median": 5.565,
+          "p95": 11.145,
+          "max": 11.205
+        },
+        "solverMs": {
+          "n": 240,
+          "median": 0.06,
+          "p95": 0.085,
+          "max": 0.255
+        },
+        "wreckStepAndSyncMs": {
+          "n": 240,
+          "median": 0.085,
+          "p95": 0.13,
+          "max": 0.285
+        },
+        "underGround": 0,
+        "minCenterClearance": null,
+        "maxVelocityChange": 0,
+        "driftError": 0.098,
+        "minTravel": 38.15,
+        "maxSpeed": 38,
+        "tumbled": 20
+      },
+      {
+        "engine": "rapier",
+        "mode": "live",
+        "bodies": 20,
+        "onCamera": 16,
+        "submittedDuringWarmup": 480,
+        "liveUnits": 689,
+        "gameSeconds": 1.4,
+        "frameMs": {
+          "n": 240,
+          "median": 5.555,
+          "p95": 5.66,
+          "max": 27.72
+        },
+        "solverMs": {
+          "n": 240,
+          "median": 0.065,
+          "p95": 0.095,
+          "max": 0.165
+        },
+        "wreckStepAndSyncMs": {
+          "n": 240,
+          "median": 0.09,
+          "p95": 0.13,
+          "max": 0.555
+        },
+        "underGround": 0,
+        "minCenterClearance": null,
+        "maxVelocityChange": 0,
+        "driftError": 0.2316,
+        "minTravel": 38.29,
+        "maxSpeed": 38,
+        "tumbled": 20
+      },
+      {
+        "engine": "rapier",
+        "mode": "live",
+        "bodies": 20,
+        "onCamera": 16,
+        "submittedDuringWarmup": 424,
+        "liveUnits": 689,
+        "gameSeconds": 1.33,
+        "frameMs": {
+          "n": 240,
+          "median": 5.555,
+          "p95": 5.62,
+          "max": 5.7
+        },
+        "solverMs": {
+          "n": 240,
+          "median": 0.06,
+          "p95": 0.09,
+          "max": 0.265
+        },
+        "wreckStepAndSyncMs": {
+          "n": 240,
+          "median": 0.085,
+          "p95": 0.13,
+          "max": 0.3
+        },
+        "underGround": 0,
+        "minCenterClearance": null,
+        "maxVelocityChange": 0,
+        "driftError": 0.2316,
+        "minTravel": 38.29,
+        "maxSpeed": 38,
+        "tumbled": 20
+      },
+      {
+        "engine": "jolt",
+        "mode": "live",
+        "bodies": 20,
+        "onCamera": 16,
+        "submittedDuringWarmup": 424,
+        "liveUnits": 791,
+        "gameSeconds": 1.33,
+        "frameMs": {
+          "n": 240,
+          "median": 5.555,
+          "p95": 5.61,
+          "max": 5.825
+        },
+        "solverMs": {
+          "n": 240,
+          "median": 0.06,
+          "p95": 0.085,
+          "max": 0.135
+        },
+        "wreckStepAndSyncMs": {
+          "n": 240,
+          "median": 0.08,
+          "p95": 0.12,
+          "max": 0.17
+        },
+        "underGround": 0,
+        "minCenterClearance": null,
+        "maxVelocityChange": 0,
+        "driftError": 0.098,
+        "minTravel": 38.15,
+        "maxSpeed": 38,
+        "tumbled": 20
+      }
+    ]
+  },
+  "errors": []
+}

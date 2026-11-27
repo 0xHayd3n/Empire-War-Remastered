@@ -1,5 +1,21 @@
+import { viewOptions } from './viewpreferences.js';
+import { spaceBattleLook } from '../battlelook.js';
+import { battlePrefs } from '../battlerealism.js';
+import { CloseSubject } from './close-subject.js';
+import { planetDisk, bindPlanetDisk } from './planetdisk.js';
+import { bindOrbitProbe, clearOrbitProbes, finishProbe } from './orbitprobe.js';
+import { DestroyerLook } from './destroyer-look.js';
+import { HullShadow } from './hullshadow.js';
+import { HullWorkshop } from './hullworkshop.js';
+import { HullDamage } from './hulldamage.js';
+import { ArmorDamage } from './armor-geometry.js';
+import { SpaceWrecks } from './space-wrecks.js';
+import { releaseTime } from './wreck-skin.js';
+import { loadWreckPhysics } from './rapier-runtime.js';
+import { BlastField } from './blastfield.js';
+import { SpaceBackdrop } from './spacebackdrop.js';
 import * as THREE from 'three';
-import { setPlanetEnvironment, lighting, getModelData, buildModel, updateBillboards, planetClock, programSources } from '../model.js';
+import { setPlanetEnvironment, setBattleSurface, tacticalPlanetColumn, depthMaterial, lighting, blastLights, getModelData, buildModel, updateBillboards, planetClock, programSources } from '../model.js';
 import { env as gpuEnv, wantGPU } from '../gpu/env.js';
 import { diag } from '../diag.js';
 import { ParticleManager, particleReach } from '../particles.js';
@@ -10,7 +26,8 @@ import { getALA, animName, AnimState } from '../ala.js';
 import { loadTexture, whiteTexture, loadTextureCanvas } from '../dds.js';
 import { fetchText, fetchBinary } from '../vfs.js';
 import { parseXML } from '../xml.js';
-import { gfx, pixelRatio, shadowSize, shadowReach, gammaOn } from '../gfx.js';
+import { gfx, livePlanetAir, pixelRatio, shadowSize, shadowReach, gammaOn } from '../gfx.js';
+import { ModelDetail } from './model-detail.js';
 import { Instances } from './instances.js';
 import { fitShadowToView } from './shadowfit.js';
 import { ShotModels } from './shotmodels.js';
@@ -285,8 +302,8 @@ export class CameraRig {
     let sx = 0,
       sy = 0;
     if (this.shake > 0.01) {
-      sx = (Math.random() - 0.5) * this.shake;
-      sy = (Math.random() - 0.5) * this.shake;
+      sx = (Math.random() - 0.5) * this.shake * viewOptions.spaceShake;
+      sy = (Math.random() - 0.5) * this.shake * viewOptions.spaceShake;
       this.shake *= Math.exp(-dt * 5);
     }
     c.position.set(
@@ -639,6 +656,7 @@ export class Renderer {
     this.particles = [];
     this.texts = [];
     this.skydomes = [];
+    this.spaceBackdrop = new SpaceBackdrop();
     this.rings = null;
     this.shadows = null;
     this.shadowsOn = false;
@@ -649,7 +667,25 @@ export class Renderer {
     addEventListener('resize', this.onResize);
   }
 
+  enableDestruction() {
+    this.armorDamage = new ArmorDamage();
+    const owner = this.armorDamage;
+    return loadWreckPhysics().then(R => {
+      if (this.armorDamage === owner) { this.spaceWrecks = new SpaceWrecks(R, this.scene); return R; }
+    }).catch(e => console.warn('Using authored space deaths:',e));
+  }
+
   dispose(keep = false) {
+    this.armorDamage?.clear(); this.armorDamage = null;
+    this.spaceWrecks?.dispose(); this.spaceWrecks = null;
+    this.modelDetail?.dispose();
+    this.planetLight=null;
+    this.spaceBackdrop.dispose();
+    this.destroyerLook?.dispose();
+    this.hullWorkshop?.dispose();
+    this.hullDamage?.clear();
+    this.closeShadow?.dispose();
+    clearOrbitProbes(this);
     removeEventListener('resize', this.onResize);
     this.post.resize(1, 1);
     if (this.shadows) {
@@ -936,7 +972,7 @@ export class Renderer {
     if (world)
       for (const u of world.units) {
         if (u.dead || !u.casters || !u.obj.visible) continue;
-        for (const m of u.casters) {
+        for (const m of this.destroyerLook?.casters.get(u) || u.casters) {
           let b = batches.get(m.geometry);
           if (!b) batches.set(m.geometry, (b = { n: 0, im: null }));
           if (!b.im || b.n === b.im.instanceMatrix.count) {
@@ -999,7 +1035,16 @@ export class Renderer {
   }
 
   setEnvironment(env) {
+    this.planetLight=null;
+    this.closeSubject = null;
+    this.blastField = null;
+    this.blasts = null;
+    this.hullDamage?.clear();
     if (!env) return;
+    clearOrbitProbes(this);
+    this.destroyerLook?.clear();
+    this.hullWorkshop?.clear();
+    this.spaceBackdrop.dispose();
     for (const s of this.skydomes) this.bgScene.remove(s.root);
     this.skydomes = [];
     this.skyFar = 0;
@@ -1030,9 +1075,11 @@ export class Renderer {
         o.material = src.clone();
         o.material.uniforms.map.value = src.uniforms.map.value;
         if (src.uniforms.time) o.material.uniforms.time = src.uniforms.time;
+        if (src.uniforms.orbitalAir) { o.material.uniforms.orbitalAir = livePlanetAir; o.material.uniforms.planetColumn = tacticalPlanetColumn; }
         o.material.depthTest = false;
         o.material.depthWrite = false;
         o.frustumCulled = false;
+        this.spaceBackdrop.add(o);
       });
       inst.root.updateMatrixWorld(true);
       inst.root.traverse(o => {
@@ -1262,13 +1309,24 @@ export class Renderer {
     spin = spin && speed > 0 && T > 0;
     const per = type.num('Death_Persistence_Duration', 0),
       limit = spin ? T : per < 0 ? Infinity : (anim ? anim.duration : 0) + per + (end ? 0 : type.num('Death_Fade_Time', 0));
+    const flight = {x:vx,y:vy,z:vz};
+    const debris = this.spaceWrecks && u.world?.viewerSees(u) && !u.hyper && !u.scriptHidden && !u.cloaked;
+    // Launch ejecta at the confirmed death, not at the end of a mod's (possibly
+    // indefinite) clone animation. The clone and its actual breakup sections still run.
+    if (debris && u.obj?.visible !== false) this.spaceWrecks.residue.emit(u, flight);
     const kept = spin || ((!!anim || !type.bool('Remove_Upon_Death')) && limit > 0);
     if (!kept || !data || !u.obj.visible || this.clones.length >= 24) {
+      // No authored clone will play on this branch. If the model is visible,
+      // its existing geometry can still supply sections without a clone slot.
+      if (debris && u.obj.visible && !type.bool('Remove_Upon_Death')) this.spaceWrecks.spawn(u.obj, flight, u.visualRadius, u.model);
       if (rolled) this.explosion(u.x, u.y, u.z, size, false, boom);
       if (end && u.obj.visible) this.explosion(u.x, u.y, u.z, size, false, this.particleOf(end));
       return;
     }
-    const inst = buildModel(data, { teamColor: u.player && u.player.id >= 0 ? u.player.color : null });
+    const inst = buildModel(data, {
+      teamColor: u.player && u.player.id >= 0 ? u.player.color : null,
+      livery: u.player && u.player.id >= 0 ? u.player.livery || null : null
+    });
     const holder = new THREE.Group();
     u.syncObj();
     holder.position.copy(u.obj.position);
@@ -1326,7 +1384,7 @@ export class Renderer {
       };
       u.wreck = { x: u.x, y: u.y, gone: false };
     }
-    this.clones.push({ holder, inst, state, proxies, age: 0, limit, path, wreck: u.wreck || null, end: end ? this.particleOf(end) : '', size: size || 40 });
+    this.clones.push({ holder, inst, state, proxies, age: 0, limit, path, flight: debris ? flight : null, releaseAt:debris ? releaseTime(state) : Infinity, radius:u.visualRadius, wreck: u.wreck || null, end: end ? this.particleOf(end) : '', size: size || 40 });
   }
 
   particleOf(name) {
@@ -1547,7 +1605,9 @@ export class Renderer {
 
   explosion(x, y, z, size, big = false, file = '') {
     if (x === undefined) return;
-    if (extraFxOn()) {
+    const prefs = battlePrefs(gfx);
+    if (prefs.hullBlastLight || prefs.litPuffs) (this.blastField ||= new BlastField()).emit(x, y, z, size, big);
+    if (!prefs.hullBlastLight && extraFxOn()) {
       const list = (this.blasts ||= []);
       list.push({ x, y, z, r: Math.max(SPACE_BOLT.blastMin, size * SPACE_BOLT.blastScale), until: performance.now() + SPACE_BOLT.blastTime * 1000 });
       if (list.length > 12) list.shift();
@@ -1667,8 +1727,13 @@ export class Renderer {
     });
   }
 
-  hit(x, y, z, size, file = '') {
+  hit(x, y, z, size, file = '', receiver = null, part = -1) {
     if (x === undefined) return;
+    if (receiver && battlePrefs(gfx).hullDamageMarks === true) {
+      (this.hullDamage ||= new HullDamage(this.scene)).hit(receiver,x,y,z,size,false,part);
+      if (receiver.obj && !receiver.hyper && !receiver.scriptHidden && !receiver.cloaked && !receiver.hardpoints?.[part]?.decal?.visible)
+        this.armorDamage?.hit(receiver,receiver.obj,x,y,z,Math.max(.5,Math.min(receiver.visualRadius*.13,size*.52)),size>=18,receiver.world.time);
+    }
     if (file && this.fxParticles.systems.length < 450 && this.fxParticles.state(file) === 'ready') {
       this.fxParticles.burst(file, x, y, z);
       return;
@@ -1686,7 +1751,8 @@ export class Renderer {
       this.fxParticles.burst(file, x, y, z);
       return;
     }
-    this.spawnParticle(x, y, z + 4, 0, 0, 0, 10, 40, 0.2, 0.35, 0.6, 1, target.shieldMesh ? 0.5 : 0.9);
+    if (battlePrefs(gfx).hullDamageMarks === true && target && (this.hullDamage ||= new HullDamage(this.scene)).hit(target,x,y,z,40,true)) return;
+    this.spawnParticle(x, y, z + 4, 0, 0, 0, 10, 40, 0.2, 0.35, 0.6, 1, target?.shieldMesh ? 0.5 : 0.9);
   }
 
   flash(x, y, z, size, color) {
@@ -1745,6 +1811,9 @@ export class Renderer {
     for (const c of this.clones) {
       c.age += dt;
       if (c.state) c.state.step(dt);
+      if (c.flight && !c.path && Number.isFinite(c.limit)) {
+        c.holder.position.x += c.flight.x*dt; c.holder.position.y += c.flight.y*dt; c.holder.position.z += c.flight.z*dt;
+      }
       const flying = !c.path || this.spinStep(c, dt);
       if (c.wreck) {
         c.wreck.x = c.holder.position.x;
@@ -1785,12 +1854,17 @@ export class Renderer {
         }
         p.on = on;
       }
+      if (c.flight && !c.path && !c.detached && Number.isFinite(c.limit) && c.age >= c.releaseAt) {
+        c.detached=true;
+        if(this.spaceWrecks?.spawn(c.holder,c.flight,c.radius,c.inst)) c.holder.visible=false;
+      }
       if (!flying || c.age > c.limit) {
         const h = c.holder.position;
         if (c.path) this.explosion(h.x, h.y, h.z, c.path.size, false, c.path.boom);
         if (c.end) this.explosion(h.x, h.y, h.z, c.size, false, c.end);
         if (c.wreck) c.wreck.gone = true;
         for (const p of c.proxies) if (p.sys) p.sys.release();
+        if (c.flight && !c.detached) this.spaceWrecks?.spawn(c.holder,c.flight,c.radius,c.inst);
         this.scene.remove(c.holder);
         continue;
       }
@@ -1893,6 +1967,7 @@ export class Renderer {
         _sphere.radius = u.visualRadius;
         if (_frustum.intersectsSphere(_sphere)) hulls.push(u.x, u.y, u.z || 0, u.visualRadius);
       }
+      if (gfx.hullBlastLight === true) this.blasts = null;
       if (this.blasts) {
         const now = performance.now();
         this.blasts = this.blasts.filter(b => now < b.until);
@@ -2049,6 +2124,10 @@ export class Renderer {
     for (const a of this.idlers) a.step(dt);
     for (const inst of this.sceneryBillboards) updateBillboards(inst, cam);
     if (this.clones.length) this.updateClones(dt);
+    this.spaceWrecks?.step(dt,world);
+    if (this.armorDamage?.rows.size) {
+      if(battlePrefs(gfx).hullDamageMarks === true)this.armorDamage.update();else this.armorDamage.clear();
+    }
     const pulls = (this.pulls ||= []);
     pulls.length = 0;
     if (world)
@@ -2101,6 +2180,10 @@ export class Renderer {
     diag.lap('fog');
     for (const sky of this.skydomes) sky.root.position.copy(cam.position);
     this.draw(world, this.renderer, dt);
+    if (this.blastField) {
+      this.blastField.advance(dt);
+      if (!world || !this.blastField.events.length) this.blastField = null;
+    }
 
     const g = this.ctx;
     g.clearRect(0, 0, this.width, this.height);
@@ -2127,10 +2210,35 @@ export class Renderer {
   draw(world, r, dt) {
     const cam = this.camera;
     r.autoClear = false;
+    const prefs = battlePrefs(gfx), universal = gfx.battleRealism === 'on';
+    const look = world ? spaceBattleLook(prefs) : prefs;
+    const stage = look.orbitStage || 0;
+    this.spaceBackdrop.use(stage === 4);
+    const disk = world && prefs.orbitalLighting === 'bounce' ? planetDisk(this,r,world) : null;
+    this.separatePlanet=disk?.source.mesh;
+    if (stage >= 3) bindOrbitProbe(this, r, lighting, stage === 4);
+    if (world && (prefs.destroyerDetail === 'detail' || prefs.destroyerDetail === 'finish'))
+      (this.destroyerLook ||= new DestroyerLook(this)).update(world,r,prefs.destroyerDetail,stage===4);
+    else if(this.destroyerLook?.slots.size)this.destroyerLook.clear();
+    const workshop = world && ['finish','orbit'].includes(prefs.destroyerSurface) ? (this.hullWorkshop ||= new HullWorkshop()) : null;
+    const surfaces = workshop?.prepare(this,world,r,prefs.destroyerSurface,stage,lighting);
+    if (!workshop && this.hullWorkshop?.roster) this.hullWorkshop.clear();
+    setBattleSurface(!!world, look, stage, !!r.hdrPass);
+    const finish=world && prefs.mapReflections && finishProbe(this,r,stage===4)?.texture;
     this.updateShadows(world, r);
+    if (!universal && this.closeSubject) this.closeSubject.last = null;
+    const lead = universal && world ? (this.closeSubject ||= new CloseSubject()).pick(world, cam, this.flybySubject) : this.destroyerLook?.lead;
+    const close = prefs.closeHullShadows === true && this.shadowsOn && world && lead &&
+      (this.closeShadow ||= new HullShadow()).draw(r,lead,this.destroyerLook?.slots.get(lead),lighting,depthMaterial);
+    if (!close && this.closeShadow?.focus) this.closeShadow.park();
     diag.lap('shadows');
     const post = this.post;
     post.r = r;
+    post.battleImage = !!world;
+    post.fleetBattle = post.spaceBattle = !!world;
+    post.closeNear = !!(world && lead);
+    post.glare = world ? look.lensStreaks : 0;
+    post.contact = world ? (universal ? prefs.contactShade : look.contactShade) : 0;
     useGrade(post, !!world && extraFxOn());
     const offscreen = post.begin();
     r.clear();
@@ -2143,23 +2251,48 @@ export class Renderer {
       cam.updateProjectionMatrix();
     } else r.render(this.bgScene, cam);
     r.clearDepth();
-    if (world && !NO_INSTANCING) {
+    if(finish){lighting.fieldSky.value=finish;lighting.receiverMode.value.z=1;}
+    if (world && (prefs.hullDamageMarks || this.hullDamage)) (this.hullDamage ||= new HullDamage(this.scene)).update(world,prefs.hullDamageMarks === true);
+    else if (this.hullDamage?.roster) this.hullDamage.clear();
+    const batch = world && !NO_INSTANCING;
+    const detail = world && gfx.modelLod !== false ? (this.modelDetail ||= new ModelDetail()) : null;
+    const displayHeight = r.domElement.clientHeight || this.height || innerHeight;
+    if (batch) {
       for (const o of this.scene.children) if (!o.userData.ship) o.updateMatrixWorld();
       this.instances ||= new Instances(this.scene);
       this.instances.gpu = r === this.gpu ? r : null;
       this.instances.renderer = r;
       this.instances.camera = cam;
-      this.instances.collect(world.units, cam);
+      this.instances.detail = detail;
+      this.instances.displayHeight = displayHeight;
+      this.instances.collect(world.units, cam, surfaces);
       this.instances.hidden = this.instances.put.length;
       this.scene.matrixWorldAutoUpdate = false;
-      r.render(this.scene, cam);
-      this.scene.matrixWorldAutoUpdate = true;
-      this.instances.restore();
-    } else r.render(this.scene, cam);
+    }
+    try {
+      workshop?.bindLoose(batch ? this.instances : null);
+      gpuEnv.refitOrbit = !!workshop?.probe?.texture;
+      // Scope incident light to the tactical scene, never the sky, environment probes or HUD.
+      if (world && prefs.litPuffs) lighting.receiverMode.value.x = prefs.hullBlastLight ? 1 : 2;
+      if (world && this.blastField && (prefs.hullBlastLight || prefs.litPuffs)) this.blastField.bind(blastLights, world, cam);
+      if (disk) bindPlanetDisk(disk,lighting);
+      const color = () => close ? this.closeShadow.renderScene(r,this.scene,cam,lighting) : r.render(this.scene,cam);
+      if (detail && this.instances?.fleetLod !== false) {
+        if (!batch) this.scene.updateMatrixWorld();
+        detail.draw(this.scene,cam,displayHeight,color);
+      } else color();
+    } finally {
+      workshop?.restore();
+      gpuEnv.refitOrbit = false;
+      blastLights.blastCount.value = 0;
+      lighting.planetDisk.value.w = 0;
+      if (batch) { this.scene.matrixWorldAutoUpdate = true; this.instances.restore(); }
+    }
     diag.lap('draw');
-    if (offscreen) post.end(cam);
+    if (offscreen) post.end(cam, stage ? look.bloomScale : 1, stage === 4);
     if (post.flare) post.drawFlare(cam, this.sunPoint(cam), this.sunBlocked(world, cam), dt || 0.016);
     if (r.endFrame) r.endFrame();
+    setBattleSurface(false);
     diag.lap('post');
   }
 

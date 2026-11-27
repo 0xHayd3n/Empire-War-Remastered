@@ -1,0 +1,110 @@
+{
+  "jacaranda_tree": {
+    "model.gltf": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/jacaranda_tree/jacaranda_tree_1k.gltf",
+      "md5": "8fed93ff7cbdaac0f5c199ef1fd0f694",
+      "size": 9526
+    },
+    "textures/jacaranda_tree_branches_diff_1k.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/jacaranda_tree/jacaranda_tree_branches_diff_1k.jpg",
+      "md5": "e5bacbfd3e7ce397bdd34b0bac6669ca",
+      "size": 531544
+    },
+    "textures/jacaranda_tree_trunk_diff_1k.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/jacaranda_tree/jacaranda_tree_trunk_diff_1k.jpg",
+      "md5": "c3edc2e76157023e7a5c35cd13867498",
+      "size": 896938
+    },
+    "textures/jacaranda_tree_leaves_diff_1k.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/jacaranda_tree/jacaranda_tree_leaves_diff_1k.jpg",
+      "md5": "8ae91737f39567629768a255817d80be",
+      "size": 533896
+    },
+    "jacaranda_tree.bin": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/jacaranda_tree/jacaranda_tree.bin",
+      "md5": "ae25eacd5e67ea2e9bbbaa2854b6ed99",
+      "size": 208307808
+    },
+    "alpha.png": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/jacaranda_tree/jacaranda_tree_leaves_alpha_1k.png",
+      "md5": "740214de7b900e30737009ff4ee2c01a",
+      "size": 506043
+    }
+  },
+  "anthurium_botany_01": {
+    "model.gltf": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/anthurium_botany_01/anthurium_botany_01_1k.gltf",
+      "md5": "2a55f9ff4645ec45971e4796acad5d1f",
+      "size": 10675
+    },
+    "textures/anthurium_botany_01_nor_gl_1k.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/anthurium_botany_01/anthurium_botany_01_nor_gl_1k.jpg",
+      "md5": "b9f023a3bf6f30ed293a35722ab14f06",
+      "size": 494107
+    },
+    "textures/anthurium_botany_01_arm_1k.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/anthurium_botany_01/anthurium_botany_01_arm_1k.jpg",
+      "md5": "2c48d7e4b92b422a68c2ce579351de50",
+      "size": 542795
+    },
+    "anthurium_botany_01.bin": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/anthurium_botany_01/anthurium_botany_01.bin",
+      "md5": "121f1e490c98ea71ebb1a61a2246c585",
+      "size": 1744256
+    },
+    "textures/anthurium_botany_01_diff_1k.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/anthurium_botany_01/anthurium_botany_01_diff_1k.jpg",
+      "md5": "b78dfe5b3c265e5d9290c0f75a2801f3",
+      "size": 448508
+    },
+    "alpha.png": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/anthurium_botany_01/anthurium_botany_01_alpha_1k.png",
+      "md5": "2eeff7ab974784e30a9efa30abea8f3d",
+      "size": 45560
+    }
+  },
+  "mud_forest": {
+    "color.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/mud_forest/mud_forest_diff_2k.jpg",
+      "md5": "e78c6eae192daae3d00a677a588d1739",
+      "size": 3683329
+    },
+    "normal.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/mud_forest/mud_forest_nor_gl_2k.jpg",
+      "md5": "17635ab324ff50542465d7a4284502e3",
+      "size": 5909919
+    },
+    "rough.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/mud_forest/mud_forest_rough_2k.jpg",
+      "md5": "f7feab5e66a7eabb63116bad875fc4c5",
+      "size": 1106194
+    },
+    "height.png": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/mud_forest/mud_forest_disp_2k.png",
+      "md5": "70a9f1e1d2dfd59153a31cb5780bf711",
+      "size": 9369270
+    }
+  },
+  "leaves_forest_ground": {
+    "color.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/leaves_forest_ground/leaves_forest_ground_diff_2k.jpg",
+      "md5": "9adf3721c2a5ce011e1184762e8c1a8d",
+      "size": 4253470
+    },
+    "normal.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/leaves_forest_ground/leaves_forest_ground_nor_gl_2k.jpg",
+      "md5": "da3f3f6762cc0e95bd1e5919d2c38d68",
+      "size": 5273836
+    },
+    "rough.jpg": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/leaves_forest_ground/leaves_forest_ground_rough_2k.jpg",
+      "md5": "b961849445499cd5c37361e766f778d1",
+      "size": 2096339
+    },
+    "height.png": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/leaves_forest_ground/leaves_forest_ground_disp_2k.png",
+      "md5": "41a02eb810717457529ffd6b47ad217f",
+      "size": 6626263
+    }
+  }
+}

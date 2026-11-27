@@ -3,8 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openGame } from './tools/megfs.mjs';
+import { mountedMapHeaders } from './tools/mounted-map-headers.mjs';
+import { mountedGalacticSources } from './tools/mounted-galactic-sources.mjs';
 import { mediaFile } from './tools/workshop-media.mjs';
 import { NativeFonts } from './tools/native-fonts.mjs';
+import { commandLandArt } from './tools/command-land-art.mjs';
 import { artRoot, campaignOrbit, photoStore, stackKey } from './tools/workshop-battle-art.mjs';
 import zlib from 'node:zlib';
 
@@ -155,6 +158,11 @@ const server = http.createServer(async (req, res) => {
         return bytes ? send(res, 200, bytes, 'image/png', {'Cache-Control':'private, max-age=31536000, immutable'}) : send(res,404,'Unknown preview sheet.');
       } catch { return send(res,404,'Preview sheet unavailable.'); }
     }
+    if(session.atlas && p.startsWith('/api/universal/emblems/')) {
+      const key=/^\/api\/universal\/emblems\/((?:reference|stock|\d+)\/[a-f0-9]{64})\.svg$/.exec(p)?.[1];
+      const bytes=req.method==='GET' && key && session.atlas.emblem(key);
+      return bytes?send(res,200,bytes,'image/svg+xml',{'Content-Encoding':'gzip','Cache-Control':'private, max-age=31536000, immutable','Content-Security-Policy':"default-src 'none'; sandbox"}):send(res,404,'Unknown emblem.');
+    }
     if (session.atlas && p.startsWith('/api/universal/art/')) {
       const match = /^\/api\/universal\/art\/(stock|\d+)\/(stock|[a-f0-9]{64})\/asset\/(.+)$/i.exec(p);
       if (req.method!=='GET'||!match) return send(res,404,'Unknown preview asset.');
@@ -164,6 +172,14 @@ const server = http.createServer(async (req, res) => {
     if (session.atlas && p.startsWith('/api/universal/atlas')) {
       const hdr = { 'Cache-Control': 'no-store' };
       try {
+        if (p === '/api/universal/atlas/roster' && req.method === 'GET') {
+          const q=url.searchParams, kit=await session.atlas.roster(q.get('profile'),q.get('revision'),q.get('faction'),q.get('domain'),q.get('language')||0);
+          return kit ? send(res,200,zlib.gzipSync(JSON.stringify(kit)),MIME['.json'],{...hdr,'Content-Encoding':'gzip'}) : send(res,404,'Roster unavailable.');
+        }
+        if (p === '/api/universal/atlas/operations' && req.method === 'GET') {
+          const {bytes}=await session.atlas.operations(url.searchParams.get('language') || 0);
+          return send(res,200,bytes,MIME['.json'],{...hdr,'Content-Encoding':'gzip'});
+        }
         if (p === '/api/universal/atlas' && req.method === 'GET') {
           const { bytes } = await session.atlas.get(url.searchParams.get('language') || 0);
           return send(res, 200, bytes, MIME['.json'], { ...hdr, 'Content-Encoding': 'gzip' });
@@ -191,7 +207,7 @@ const server = http.createServer(async (req, res) => {
       res.setHeader('Cross-Origin-Resource-Policy','cross-origin');
       res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${session.library}`);
       const html = fs.readFileSync(path.join(PUBLIC, 'play.html'), 'utf8')
-        .replace('</head>', `<meta name="swr-universal" content="${session.library}"><script defer src="js/universallaunch.js"></script><link rel="stylesheet" href="universal-modes.css">${session.pack ? `<meta name="swr-pack-revision" content="${session.pack.mounted.workshop}:${session.pack.revision}">` : ''}</head>`);
+        .replace('</head>', `<meta name="swr-universal" content="${session.library}"><meta name="swr-mounted-index" content="1"><script defer src="js/universallaunch.js"></script><link rel="stylesheet" href="universal-modes.css">${session.pack ? `<meta name="swr-pack-revision" content="${session.pack.mounted.workshop}:${session.pack.revision}">` : ''}</head>`);
       return send(res, 200, html, MIME['.html'], { 'Cache-Control':'no-store', 'Document-Policy':'js-profiling' });
     }
     if (req.method === 'GET' && p.startsWith('/api/title-art/')) {
@@ -204,6 +220,10 @@ const server = http.createServer(async (req, res) => {
     if (game && req.method === 'GET' && p === '/api/title-orbit.jpg') {
       const bytes = await campaignOrbit();
       return send(res, bytes ? 200 : 204, bytes || '', 'image/jpeg', { 'Cache-Control': 'private, no-cache' });
+    }
+    if (session.atlas && p.startsWith('/api/command-land/') && req.method === 'GET') {
+      const bytes = await commandLandArt(p.slice('/api/command-land/'.length));
+      return send(res, bytes ? 200 : 204, bytes || '', 'image/jpeg', { 'Cache-Control': bytes ? 'private, max-age=86400' : 'no-store' });
     }
     if (p === '/api/battle-photo') {
       res.setHeader('Cache-Control', 'no-store');
@@ -243,6 +263,18 @@ const server = http.createServer(async (req, res) => {
         });
       }
       return send(res, 200, assets.read(key), mime(key), { 'Accept-Ranges': 'bytes', 'Cache-Control': assetCache });
+    }
+    if (session.library && req.method === 'GET' && p === '/api/universal/galactic-sources') {
+      try {
+        const bytes = mountedGalacticSources(gameFor(url).game);
+        return send(res, bytes ? 200 : 204, bytes || '', 'application/octet-stream', { 'Cache-Control': 'no-store' });
+      } catch { return send(res, 503, 'Source library unavailable.'); }
+    }
+    if (session.library && req.method === 'GET' && p === '/api/universal/map-headers') {
+      // Use the same resolved edition/pack as /asset. Do not persist headers
+      // across mounts; loose files and rebuilt profiles may have changed.
+      try { return send(res, 200, JSON.stringify(mountedMapHeaders(gameFor(url).game)), MIME['.json'], { 'Cache-Control': 'no-store' }); }
+      catch { return send(res, 503, 'Map list unavailable.'); }
     }
     if (p === '/api/find') {
       if (!game) return send(res, 404, 'no game mounted');

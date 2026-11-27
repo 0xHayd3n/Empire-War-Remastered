@@ -1,0 +1,47 @@
+[
+  {
+    "pack": "tatooine-ground",
+    "id": "alluvial-grit",
+    "asset": "gravelly_sand",
+    "role": "sand",
+    "tileMeters": 2.48,
+    "colorHash": "f7fd12f3481ae06ae6fb7a938131c0916fac7b271fc63bdb8b3c6cd3e5492cad",
+    "surfaceHash": "ef5f9b9f6b03a57fc5d8832594198dcd4929b14841193385af1ccf7d536a0526"
+  },
+  {
+    "pack": "tatooine-ground",
+    "id": "wind-plain",
+    "asset": "aerial_beach_01",
+    "role": "soil",
+    "tileMeters": 30,
+    "colorHash": "6fde92054ba68273c3b8f6839e2f419f8f836fa3bee4e81df107a71b3c44e754",
+    "surfaceHash": "c96983f87922d8cac8a587ceb744528e1d8f0d02cb27dcb9a51cf4d3049320c6"
+  },
+  {
+    "pack": "tatooine-ground",
+    "id": "sun-crust",
+    "asset": "sandstone_cracks",
+    "role": "rock",
+    "tileMeters": 2,
+    "colorHash": "37093616f55861bfb883c972d5cabb1e93c4af1c9ad7f533d722ff3e3ec6d8e0",
+    "surfaceHash": "4ecfba2c3b7b8d1cd522bc7c935f0a1655dfa1880df862836829529f7e09ff23"
+  },
+  {
+    "pack": "tatooine-ground",
+    "id": "broken-ledge",
+    "asset": "rock_face_03",
+    "role": "rock",
+    "tileMeters": 2.7,
+    "colorHash": "bf01a2bf91b10eb908918a85687004b511344133293cd392b0857d6dcae7b267",
+    "surfaceHash": "df09f43c6a236fefe09f3a393914b8653ab9d51027717a4951af4c93efb221f2"
+  },
+  {
+    "pack": "tatooine-ground",
+    "id": "drift-fines",
+    "asset": "sand_01",
+    "role": "sand",
+    "tileMeters": 1.5,
+    "colorHash": "c25cd51b975e18efe743ca04d6961e20999f3201cd436ce950b3017b85c4ed37",
+    "surfaceHash": "89712f92587d4b1b8508d79f592de5494e34a8ee332d8f5379f6af65521f98aa"
+  }
+]

@@ -3,6 +3,9 @@ import * as THREE from 'three';
 import { ChunkReader, fetchBinary } from './vfs.js';
 import { loadTexture } from './dds.js';
 import { gfx } from './gfx.js';
+import { puffShader } from './fieldreceivers.js';
+import { dustSpriteShader } from './immersive-weather.js';
+import { lighting, blastLights } from './model.js';
 import { FRAME, PARTICLE_CAP } from './particlesim.js';
 
 const TAU = Math.PI * 2;
@@ -391,7 +394,7 @@ const _frustum = new THREE.Frustum(),
   _near = new THREE.Sphere();
 
 class Batch {
-  constructor(texture, additive, noDepth, heat, frames) {
+  constructor(texture, additive, noDepth, heat, frames, dustAir) {
     this.cap = 256;
     this.count = 0;
     this.additive = additive;
@@ -399,13 +402,15 @@ class Batch {
     this.heat = !!heat;
     liveBatches.add(this);
     if (heat) additive = false;
+    const dust = dustAir && !additive && !heat;
     this.material = new THREE.ShaderMaterial({
-      uniforms: { map: { value: texture }, frames },
+      uniforms: { map: { value: texture }, frames, ...(dust ? { dustAir } : {}), receiverMode:lighting.receiverMode,sunDir:lighting.sunDir,sunColor:lighting.sunColor,...blastLights },
       vertexShader: `attribute vec4 center; attribute vec4 tint; attribute vec4 cell; attribute float slot; attribute vec4 dir;
         uniform highp sampler2D frames;
-        varying vec2 vUv; varying vec4 vTint;
-        void main() { vTint = tint;
-          vUv = (cell.xy + vec2(position.x * 0.5 + 0.5, 0.5 - position.y * 0.5)) * cell.z;
+        uniform vec4 receiverMode,blastSource[4],blastEnergy[4]; uniform vec3 sunDir,sunColor; uniform float blastCount;
+        varying vec2 vUv; varying vec4 vTint; ${dust ? 'varying float dustMask;' : ''}
+        void main() { vTint = tint; ${dust ? 'dustMask = cell.z < 0. ? 1. : 0.;' : ''}
+          vUv = (cell.xy + vec2(position.x * 0.5 + 0.5, 0.5 - position.y * 0.5)) * abs(cell.z);
           float c = cos(cell.w), s = sin(cell.w);
           vec2 corner = vec2(position.x * c - position.y * s, position.x * s + position.y * c) * center.w;
           vec3 at = center.xyz;
@@ -430,6 +435,7 @@ class Batch {
               }
             }
           }
+          ${!heat && !additive?puffShader(false):''}
           mv.xy += corner;
           gl_Position = projectionMatrix * mv; }`,
       fragmentShader: heat
@@ -439,7 +445,8 @@ class Batch {
           ? `uniform sampler2D map; varying vec2 vUv; varying vec4 vTint;
            void main() { gl_FragColor = vec4(texture2D(map, vUv).rgb * vTint.rgb, 1.0); }`
           : `uniform sampler2D map; varying vec2 vUv; varying vec4 vTint;
-           void main() { gl_FragColor = texture2D(map, vUv) * vTint; }`,
+           ${dust ? 'uniform vec4 dustAir; varying float dustMask;' + dustSpriteShader(false) : ''}
+           void main() { vec4 raw = texture2D(map, vUv) * vTint; gl_FragColor = ${dust ? 'dustSprite(raw,dustAir,dustMask)' : 'raw'}; }`,
       transparent: true,
       depthWrite: false,
       depthTest: (!noDepth || depthAlways) && !heat,
@@ -522,8 +529,9 @@ class Handle {
 }
 
 export class ParticleManager {
-  constructor(scene) {
+  constructor(scene, dustAir = null) {
     this.scene = scene;
+    this.dustAir = dustAir;
     this.systems = [];
     this.batches = new Map();
     this.total = 0;
@@ -535,6 +543,7 @@ export class ParticleManager {
     this.busy = false;
     this.owedDt = 0;
     this.wind = null;
+    this.breeze = null;
     this.frameData = new Float32Array(SLOTS * 8);
     const tex = (this.frameTex = new THREE.DataTexture(this.frameData, 2, SLOTS, THREE.RGBAFormat, THREE.FloatType));
     tex.minFilter = tex.magFilter = THREE.NearestFilter;
@@ -556,7 +565,7 @@ export class ParticleManager {
       [false, false],
       [true, false],
       [false, true]
-    ].map(([additive, heat]) => new Batch(tex, additive, false, heat, this.frames));
+    ].map(([additive, heat]) => new Batch(tex, additive, false, heat, this.frames, this.dustAir));
     const g = new THREE.Group();
     for (const b of this.kept) {
       b.mesh.visible = true;
@@ -580,7 +589,7 @@ export class ParticleManager {
       if (!b) {
         if (!o.desc) continue;
         const d = o.desc;
-        b = new Batch(loadTexture(d.texture, { repeat: false }), d.additive, d.noDepth, d.heat, this.frames);
+        b = new Batch(loadTexture(d.texture, { repeat: false }), d.additive, d.noDepth, d.heat, this.frames, this.dustAir);
         this.batches.set(o.key, b);
         (d.heat && this.heatScene ? this.heatScene : this.scene).add(b.mesh);
       }
@@ -644,6 +653,7 @@ export class ParticleManager {
         basis: opts.basis || null,
         scale: opts.scale || 1,
         maxEmit: opts.maxEmit ?? Infinity,
+        forecastDust: opts.forecastDust === true,
         slot: h.slot
       }
     });
@@ -749,6 +759,7 @@ export class ParticleManager {
           frames: frames.subarray(0, k),
           detail: Math.max(0.1, Math.min(1, +gfx.particle)),
           cap,
+          breeze: this.breeze || null,
           wind: this.wind && this.wind.length ? Float32Array.from(this.wind) : null,
           heatOn: this.heatOn,
           heatScene: !!this.heatScene,

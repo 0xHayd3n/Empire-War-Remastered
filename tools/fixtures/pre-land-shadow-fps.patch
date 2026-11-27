@@ -1,0 +1,282 @@
+--- a/model.js
++++ b/model.js
+@@ -929,5 +929,5 @@
+ void main() {
+ #ifdef LEAF_CASTER
+-  if(texture2D(map,vUv).a*opacity<=alphaRef) discard;
++  if(texture2D(map,vUv,0.45).a*opacity<max(0.42,alphaRef)) discard;
+ #endif
+ #ifndef UNLIT
+--- a/gpu/programs.js
++++ b/gpu/programs.js
+@@ -250,5 +250,5 @@
+     L.push(`
+ @fragment fn fs(v: VOut) -> @location(0) vec4f {
+-  ${on('LEAF_CASTER')?'if(textureSample(mapT,mapS,v.vUv).a*D.opacity<=D.alphaRef){discard;}':''}
++  ${on('LEAF_CASTER')?'if(textureSampleBias(mapT,mapS,v.vUv,0.45).a*D.opacity<max(0.42,D.alphaRef)){discard;}':''}
+   ${
+     on('UNLIT')
+@@ -648,5 +648,4 @@
+ ${groundFillShader(true)}
+ ${nearGroundShader(true)}
+-fn remasteredReceiver()->bool { return ${mixed?'true':'T.forest.y>.5'}; }
+ fn sunlit(wp: vec3f, normal: vec3f) -> f32 {
+   if (P.shadowOn < 0.5) { return 1.0; }
+@@ -657,5 +656,5 @@
+   s += textureSampleCompareLevel(shadowMap, shadowS, p.xy + vec2f(-o, -o), d) + textureSampleCompareLevel(shadowMap, shadowS, p.xy + vec2f(o, -o), d) + textureSampleCompareLevel(shadowMap, shadowS, p.xy + vec2f(-o, o), d) + textureSampleCompareLevel(shadowMap, shadowS, p.xy + vec2f(o, o), d);
+   let e = min(p.xy, 1.0 - p.xy);
+-  return mix(1.0, select(mix(0.5,1.0,s/5.0),s/5.0,P.landGround.w>0.0 || remasteredReceiver()), smoothstep(0.0, 0.05, min(e.x, e.y)));
++  return mix(1.0, select(mix(0.5,1.0,s/5.0),s/5.0,P.landGround.w>0.0), smoothstep(0.0, 0.05, min(e.x, e.y)));
+ }
+ var<private> n: vec3f;
+@@ -721,5 +720,5 @@
+   let vis=sunlit(vWorld,n); direct=P.sunColor;
+   terrainSky=vec3f(1.);
+-  if(P.landGround.w>0.0){direct*=cl*groundSun(vWorld,n,vis);}else if(remasteredReceiver()){direct*=cl*vis;}else if(P.receiverMap.z>0.0){direct*=cl;}
++  if(P.landGround.w>0.0){direct*=cl*groundSun(vWorld,n,vis);}else if(P.receiverMap.z>0.0){direct*=cl;}
+   ${woodGround(true)}
+   let Ly = v.vLayers;
+@@ -746,5 +745,5 @@
+   if(bank>0. && bank<1.){c=mix(c,layer(63.),bank);}
+   ${mixed?'c=orbitEncode(c);':'if(T.forest.y>.5){c=orbitEncode(c);}'}
+-  if(P.landGround.w<0.5 && !remasteredReceiver()){if(P.receiverMap.z>0.0){c*=vis;}else{c*=cl*vis;}}
++  if(P.landGround.w<0.5){if(P.receiverMap.z>0.0){c*=vis;}else{c*=cl*vis;}}
+   var glow = vec3f(0.0);
+   for (var i = 0; i < 8; i++) {
+--- a/game/terrain.js
++++ b/game/terrain.js
+@@ -61,6 +61,4 @@
+   ${groundFillShader(false)}
+   ${nearGroundShader(false)}
+-  uniform float forestSlot, fullTerrain, terrainContactMask;
+-  bool remasteredReceiver(){ return ${mixed?'true':'fullTerrain>.5'}; }
+   float sunlit(vec3 wp,vec3 normal) {
+     if (shadowOn < 0.5) return 1.0;
+@@ -70,5 +68,5 @@
+     s += texture(shadowMap, vec3(p.xy + vec2(-o, -o), d)) + texture(shadowMap, vec3(p.xy + vec2(o, -o), d)) + texture(shadowMap, vec3(p.xy + vec2(-o, o), d)) + texture(shadowMap, vec3(p.xy + vec2(o, o), d));
+     vec2 e = min(p.xy, 1.0 - p.xy);
+-    return mix(1.0, (landGround.w>0.0 || remasteredReceiver()) ? s/5.0 : mix(0.5, 1.0, s / 5.0), smoothstep(0.0, 0.05, min(e.x, e.y)));
++    return mix(1.0, landGround.w>0.0 ? s/5.0 : mix(0.5, 1.0, s / 5.0), smoothstep(0.0, 0.05, min(e.x, e.y)));
+   }
+   in vec2 vCorner; in vec3 vNormal; in vec3 vWorld; in float vShade; flat in vec4 vLayers;
+@@ -77,4 +75,5 @@
+   ${terrainSurfaceShader(false)}
+   float nearK;
++  uniform float forestSlot, fullTerrain, terrainContactMask;
+   uniform sampler2D canopyMap;
+   uniform vec4 landStyle;
+@@ -135,5 +134,5 @@
+     direct=sunColor;
+     terrainSky=vec3(1.);
+-    if(landGround.w>0.0){direct*=cl*groundSun(vWorld,n,vis);}else if(remasteredReceiver()){direct*=cl*vis;}else if(receiverMap.z>0.0)direct*=cl;
++    if(landGround.w>0.0){direct*=cl*groundSun(vWorld,n,vis);}else if(receiverMap.z>0.0)direct*=cl;
+     ${woodGround(false)}
+     // Baked darkness is local sky shelter, not a black overlay on sun, fog, waterbed or emitters.
+@@ -163,5 +162,5 @@
+ #endif
+     ${mixed?'c=orbitEncode(c);':'if(fullTerrain>.5)c=orbitEncode(c);'}
+-    if(landGround.w<0.5 && !remasteredReceiver()){if(receiverMap.z>0.0)c*=vis;else c*=cl*vis;}
++    if(landGround.w<0.5){if(receiverMap.z>0.0)c*=vis;else c*=cl*vis;}
+     vec3 glow = vec3(0.0);
+     for (int i = 0; i < 8; i++) {
+--- a/game/landgame.js
++++ b/game/landgame.js
+@@ -297,5 +297,5 @@
+   for (let i = 0; i < material.length; i++) {
+     const leaf = leafShadowMaterial(material[i]);
+-    slots[i] = leaf || (material[i]?.visible && depthMaterial(material[i])) || material[i];
++    slots[i] = leaf || material[i];
+     if (leaf) any = true;
+   }
+--- a/game/endor-thicket.js
++++ b/game/endor-thicket.js
+@@ -3,5 +3,4 @@
+ import * as T from 'three';
+ import { textureFromBytes } from '../dds.js';
+-import { gfx } from '../gfx.js';
+ import { randomAt, habitat } from './endor-grove.js';
+ import {depthMaterial,leafShadowMaterial} from '../model.js';
+@@ -270,5 +269,4 @@
+     version = -1,
+     last = '',
+-    lastCasters = '',
+     rank = Math.min(2, tier),
+     lightMap;
+@@ -335,18 +333,22 @@
+       shadows[kind]={im,cap};shadowGroup.add(im);
+     }
++    const skyDir = new T.Vector3(), sun = game.ground.material.uniforms.sunDir;
++    function projectLight() {
++      skyDir.copy(sun.value);
++      const pixels = forestCover(layout, skyDir);
++      if (lightMap) lightMap.image.data = pixels;
++      else {
++        lightMap = own(new T.DataTexture(pixels, 512, 512));
++        lightMap.minFilter = lightMap.magFilter = T.LinearFilter;
++      }
++      lightMap.needsUpdate = true;
++    }
+     function plantMap() {
+       layout = forestPlan(t, ids, safe);
+       stats.total = layout.totals;
+       stats.quadrants = layout.quadrants;
+-      version = t.paint.paintRevision || 0;
+-      const pixels = forestCover(layout);
+-      if (lightMap) lightMap.image.data = pixels;
+-      else {
+-        lightMap = own(new T.DataTexture(pixels, 512, 512));
+-        lightMap.minFilter = lightMap.magFilter = T.LinearFilter;
+-      }
+-      lightMap.needsUpdate = true;
+-      t.paint.soilGrid?.refreshCover?.();
+-      last = lastCasters = '';
++      version = t.paint.paintRevision||0;
++      projectLight();t.paint.soilGrid?.refreshCover?.();
++      last = '';
+     }
+     plantMap();
+@@ -360,12 +362,11 @@
+     }
+     function update(on) {
+-      group.visible = on;
+-      const cast = on && gfx.shadows;
+-      shadowGroup.userData.forestCaster = cast;
++      group.visible = on;shadowGroup.userData.forestCaster=on;
+       if (!on) {
+-        last = lastCasters = '';
++        last = '';
+         return;
+       }
+       if (version !== (t.paint.paintRevision||0)) plantMap();
++      else if (skyDir.distanceToSquared(sun.value) > .0001) projectLight();
+       const v = game.view,
+         x = Math.floor(v.x / 24) * 24,
+@@ -374,11 +375,6 @@
+         eye = game.camera.position,
+         key = [x, y, band, Math.round(eye.x / 8), Math.round(eye.y / 8), Math.round(eye.z / 10)].join('/');
+-      // The sun-view list depends on the focus and reach, not on the player's eye or cutaway.
+-      // Keep its instance buffers resident while orbiting; units still render at the current pose.
+-      const casterKey = cast ? `${x}/${y}/${band}` : 'off';
+-      const rebuildCasters = casterKey !== lastCasters;
+-      if (last === key && !rebuildCasters) return;
++      if (last === key) return;
+       last = key;
+-      lastCasters = casterKey;
+       game.camera.updateMatrixWorld();frustum.setFromProjectionMatrix(pm.multiplyMatrices(game.camera.projectionMatrix,game.camera.matrixWorldInverse));
+       const near = [180, 235, 310][Math.min(2, Math.floor(v.dist / 250))],
+@@ -386,6 +382,6 @@
+         brushReach = Math.min(920, 470 + v.dist * 0.8);
+       for (const rows of Object.values(batches)) for (const b of rows) b.im.count = 0;
+-      if (rebuildCasters) for (const {im} of Object.values(shadows)) im.count = 0;
+-      const reach=Math.min(1150,Math.max(340,(band * 60 + 30)*1.25));
++      for(const {im} of Object.values(shadows))im.count=0;
++      const reach=Math.min(1150,Math.max(340,v.dist*1.25));
+       const order = layout.chunks
+         .map(c => [c, (c.x - x) ** 2 + (c.y - y) ** 2])
+@@ -409,5 +405,5 @@
+           sphere.center.set(p.x,p.y,p.z+(p.kind==='log'?0:height*.5));sphere.radius=height*.65+42;
+           const halo=tree?190*p.s:mid?52*p.s:14*p.s;
+-          const casts = cast && rebuildCasters && d < (reach + halo) ** 2 && (tree || mid || d < Math.min(300,reach) ** 2);
++          const casts=d<(reach+halo)**2 && (tree||mid||d<Math.min(300,reach)**2);
+           const shown=frustum.intersectsSphere(sphere);
+           if(!shown && !casts)continue;
+@@ -465,12 +461,6 @@
+         stats.drawn[k] = n;
+       }
+-      if (rebuildCasters) {
+-        stats.shadowInstances = 0;
+-        for (const {im} of Object.values(shadows)) {
+-          im.visible = im.count > 0;
+-          publish(im.instanceMatrix, im.count);
+-          stats.shadowInstances += im.count;
+-        }
+-      }
++      stats.shadowInstances=0;
++      for(const {im} of Object.values(shadows)){im.visible=im.count>0;publish(im.instanceMatrix,im.count);stats.shadowInstances+=im.count;}
+       stats.triangles = tris;
+     }
+--- a/game/endor-cover.js
++++ b/game/endor-cover.js
+@@ -1,5 +1,5 @@
+ // Static habitat/shelter only: G = sky occlusion overhead, B = root contact, A = litter.
+ // Direct sunlight comes from the depth maps; changing sky must not replant/re-upload this field.
+-export function forestCover(plan, n=512){
++export function forestCover(plan, sun, n=512){
+   const w=plan.width/n,h=plan.height/n, field=new Float32Array(n*n*4), pixels=new Uint8Array(n*n*4);
+   function stamp(px,py,size,k,channel){
+@@ -9,7 +9,9 @@
+     }
+   }
++  const z=Math.max(.54,sun?.z??1), dx=(sun?.x??0)/z,dy=(sun?.y??0)/z;
+   for(const c of plan.chunks)for(const p of c.plants){
+     const big=p.kind==='redwood',tree=big||p.kind==='hemlock';
+-    if(tree){const r=(big?43:14)*p.s;
++    if(tree){const height=(big?112:27)*p.s,r=(big?43:14)*p.s;
++      stamp(p.x-dx*height,p.y-dy*height,r,1.65,0);
+       stamp(p.x,p.y,r*1.26,1.35,1);
+     }
+@@ -17,5 +19,5 @@
+     if(big||p.kind==='stone'||p.kind==='log')stamp(p.x,p.y,(big?18:12)*p.s,1.7,2);
+   }
+-  for(let i=0;i<n*n;i++){for(let k=1;k<4;k++)pixels[i*4+k]=Math.round(255*(-Math.expm1(-field[i*4+k])));}
++  for(let i=0;i<n*n;i++){for(let k=0;k<4;k++)pixels[i*4+k]=Math.round(255*(-Math.expm1(-field[i*4+k])));}
+   return pixels;
+ }
+--- a/woodland-light.js
++++ b/woodland-light.js
+@@ -2,10 +2,15 @@
+ // is already filtered by the sun's shadow maps for terrain, foliage, and moving models.
+ export function woodFunctions(wg) {
+-  const v=wg?'vec3f':'vec3';
+-  return `${wg?'fn woodFill(cover:vec3f,k:f32)->vec3f':'vec3 woodFill(vec3 cover,float k)'} {
++  const d=wg?'let':'float', v=wg?'vec3f':'vec3', sig=(name,args,t,gl)=>wg?`fn ${name}(${args})->${t}`:`${t} ${name}(${gl})`;
++  return `${sig('woodWindow','p:vec2f',''+(wg?'f32':'float'),'vec2 p')} {
++    ${d} a=sin(dot(p,${wg?'vec2f':'vec2'}(.116,.062))+1.48*sin(p.y*.055));
++    ${d} b=sin(dot(p,${wg?'vec2f':'vec2'}(-.082,.159))+1.82*sin(p.x*.047));
++    return .63+.30*smoothstep(-.50,.62,a*.6+b*.4);
++  }
++  ${sig('woodFill',`cover:${wg?'vec3f':'vec3'},k:f32`,v,'vec3 cover,float k')} {
+     return ${v}(1.)-k*(${v}(.41,.32,.24)*cover.g+${v}(.24)*cover.b);
+   }`;
+ }
+-export function woodGround(wg){const field=wg?'T.forest.y':'fullTerrain', sample=wg?'textureSampleLevel(canopyT,canopyS,vWorld.xy/T.side.x,0.0)':'texture(canopyMap,vWorld.xy/side)',k=wg?'P.landStyle.x':'landStyle.x';return `if(${field}>.5){${wg?'let':'vec3'} cover=${sample}.rgb;terrainSky=woodFill(cover,${k});soft*=terrainSky;}`;}
++export function woodGround(wg){const field=wg?'T.forest.y':'fullTerrain', sample=wg?'textureSampleLevel(canopyT,canopyS,vWorld.xy/T.side.x,0.0)':'texture(canopyMap,vWorld.xy/side)',k=wg?'P.landStyle.x':'landStyle.x';return `if(${field}>.5){${wg?'let':'vec3'} cover=${sample}.rgb;direct*=1.0-${k}*(1.-.72*${wg?'P.':''}forestWeather.x)*cover.r*woodWindow(vWorld.xy);terrainSky=woodFill(cover,${k});soft*=terrainSky;}`;}
+ export function woodMist(wg,col,pos){const p=wg?'P.':'',v=wg?'vec3f':'vec3';return `${col}=mix(${col},mix(${v}(.27,.36,.38),${p}fogTint,.38),${p}landStyle.y*.48*(1.0-exp(-max(0.0,distance(${p}cameraPosition,${pos})-max(130.0,${p}landStyle.z*.91))*.0014)));`;}
+ // Raw sRGB scans are decoded ONCE. Diffuse skylight is not a view-dependent white rim.
+@@ -15,7 +20,8 @@
+     sample=pos=>wg?`textureSampleLevel(glossT,glossS,${pos}/max(P.fowSide,1.),0.0)`:`texture2D(glossMap,${pos}/max(fowSide,1.))`;
+   return `${f} h=max(0.0,${height});
++    ${wg?'let':'vec2'} foot=${at}.xy-${p}sunDir.xy*h/max(.54,${p}sunDir.z);
+     ${c} cover=${sample(at+'.xy')}.rgb;
+     ${f} below=1.-smoothstep(52.,175.,h);
+-    ${f} beam=sun;
++    ${f} beam=sun*(1.-${k}*(1.-.72*${p}forestWeather.x)*below*${sample('foot')}.r*woodWindow(foot));
+     ${c} fill=(indirect+soilBounce(${at},gn))*woodFill(cover,${k}*below);
+     ${f} nl=max(0.,dot(n,${p}sunDir));
+--- a/endor-weather.js
++++ b/endor-weather.js
+@@ -62,5 +62,7 @@
+     f = wg ? 'let' : 'float',
+     V = wg ? 'let' : 'vec3',
+-    h = leaf ? (wg ? 'v.stemHeight' : 'stemHeight') : '0.0';
++    h = leaf ? (wg ? 'v.stemHeight' : 'stemHeight') : '0.0',
++    s = leaf ? (wg ? 'P.fowSide' : 'fowSide') : wg ? 'T.side.x' : 'side',
++    sample = uv => wg ? `textureSampleLevel(${leaf ? 'glossT,glossS' : 'canopyT,canopyS'},${uv},0.0)` : `textureLod(${leaf ? 'glossMap' : 'canopyMap'},${uv},0.0)`;
+   return `if(${p}forestWeather.w>0. && ${p}landStyle.y>0.){
+     ${V} path=${pos}-${p}cameraPosition; ${f} d=length(path);
+@@ -72,12 +74,7 @@
+         ${V} point=${pos}-ray*travel;
+         ${f} height=max(0.,${h}-ray.z*travel);
+-        ${wg ? 'var lit=1.0' : 'float lit=1.0'};
+-        if(${p}shadowOn>.5){
+-          ${V} q=(${p}shadowMatrix*${wg?'vec4f':'vec4'}(point,1.)).xyz;
+-          if(${wg?'all(q>=vec3f(0.)) && all(q<=vec3f(1.))':'all(greaterThanEqual(q,vec3(0.))) && all(lessThanEqual(q,vec3(1.)))'}){
+-            lit=${wg?'textureSampleCompareLevel(shadowMap,shadowS,q.xy,q.z)':'texture(shadowMap,q)'};
+-          }
+-        }
+-        scatter+=lit*(1.-smoothstep(84.,190.,height));
++        ${wg ? 'let' : 'vec2'} foot=point.xy-${p}sunDir.xy*height/max(.54,${p}sunDir.z);
++        ${f} crown=${sample(`foot/max(1.,${s})`)}.r;
++        scatter+=(1.-smoothstep(.12,.80,crown))*(1.-smoothstep(84.,190.,height));
+       }
+       ${f} cloud=${p}forestWeather.x;

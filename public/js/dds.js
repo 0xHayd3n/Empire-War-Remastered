@@ -1,6 +1,7 @@
 import { diag } from './diag.js';
 import * as THREE from '../vendor/three/build/three.module.js';
 import { fetchBinary } from './vfs.js';
+import { readMaterialFile } from './texture-showcase/store.js';
 import { gfx } from './gfx.js';
 import { decodeDXT, decodeRGTC } from './ddsdecode.js';
 import { buildMips, mipsFit } from './ddsmips.js';
@@ -393,7 +394,7 @@ export async function textureFromBytes(buf, repeat = false) {
   return makeTexture(await fullChain(await wholeBlocks(detail(await parseAnyTexture(buf)))), repeat);
 }
 function picture(name, repeat) {
-  return fetchBinary('Data/Art/Textures/' + fileOf(name), { keep: false }).then(async buf => {
+  return readMaterialFile(name, file => fetchBinary('Data/Art/Textures/' + fileOf(file), { keep: false })).then(async buf => {
     if (!buf) return missingTexture();
     let real;
     try {
@@ -425,7 +426,7 @@ export async function standaloneFileTexture(t) {
 
 const files = new WeakMap();
 const keepData = new WeakSet(),
-  restoring = new WeakSet();
+  restoring = new WeakMap();
 const hasPictures = t => !!(t.mipmaps?.[0]?.data || t.image?.data);
 
 class FileTexture extends THREE.Texture {
@@ -467,15 +468,38 @@ function releasePictures(t) {
 function restorePictures(t, keep = false) {
   if (keep) keepData.add(t);
   const file = files.get(t.source);
-  if (!file || restoring.has(t) || hasPictures(t)) return;
-  restoring.add(t);
-  picture(file.name, file.repeat).then(real => {
-    restoring.delete(t);
-    t.mipmaps = real.mipmaps.slice();
-    t.source = real.source;
-    files.set(t.source, file);
-    t.needsUpdate = true;
-  });
+  if (!file || hasPictures(t)) return;
+  if (!restoring.has(t)) {
+    const job = picture(file.name, file.repeat)
+      .then(real => {
+        t.mipmaps = real.mipmaps.slice();
+        t.source = real.source;
+        files.set(t.source, file);
+        t.needsUpdate = true;
+      })
+      .finally(() => restoring.delete(t));
+    restoring.set(t, job);
+  }
+  return restoring.get(t);
+}
+
+// The galaxy gets a new rendering context even when entered from a live menu.
+// Wait only for this scene's file textures, including pixels released by the old context.
+export async function prepareSceneTextures(...scenes) {
+  const needed = new Set();
+  for (const scene of scenes)
+    scene.traverse(o => {
+      if (!o.material) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (m.map instanceof FileTexture) needed.add(m.map);
+        for (const u of Object.values(m.uniforms || {})) if (u.value instanceof FileTexture) needed.add(u.value);
+      }
+    });
+  // Missing or unreadable mod artwork must not block a playable campaign.
+  await Promise.allSettled([...needed].map(async tex => {
+    await tex.userData.ready;
+    await restorePictures(tex);
+  }));
 }
 
 export async function texturesReady() {

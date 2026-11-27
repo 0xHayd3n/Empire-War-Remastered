@@ -1,0 +1,293 @@
+/* One ground scene. The crest is projected inside its circle of figures. */
+.op-panel > .op-command-stage {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  grid-template: auto auto minmax(0, 1fr) auto / minmax(0, 1fr);
+  padding: clamp(10px, 2.3vw, 34px);
+  gap: 6px;
+  color: #f0f2ef;
+  background: #0e151a;
+}
+.op-ring-scenery,
+.op-ring-layer,
+.op-ring-photo,
+.op-ring-layer::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.op-ring-scenery {
+  z-index: -1;
+  overflow: hidden;
+}
+.op-ring-layer {
+  opacity: 0;
+  transition: opacity 0.36s ease-out;
+  background: #10171b;
+}
+.op-ring-layer.is-on {
+  opacity: 1;
+}
+.op-ring-photo {
+  background-position: center 55%;
+  background-size: cover;
+  filter: saturate(0.64);
+  opacity: 0;
+  transition: opacity 0.32s ease-out;
+}
+.op-ring-photo.is-ready {
+  opacity: var(--photo-opacity, 0.6);
+}
+.op-ring-layer::before {
+  content: '';
+  z-index: 1;
+  background: linear-gradient(105deg, color-mix(in srgb, var(--command-color) 46%, transparent), transparent 72%),
+    linear-gradient(to top, #070d12 0%, #0c10142b 42%, #070b1099);
+}
+.op-ring-tools {
+  display: grid;
+  grid-area: 1 / 1;
+  justify-self: center;
+  width: min(100%, 34rem);
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: 6px;
+  z-index: 3;
+}
+.op-ring-tools .op-search {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border-radius: 2px;
+  padding: 5px 12px;
+  background: #101a23c9;
+  border: 1px solid #b6c7d24a;
+  color: #fff;
+  font: 400 14px var(--ui-font);
+}
+.op-ring-tools .op-search::placeholder {
+  color: #d3dadc;
+}
+.op-faction-rail {
+  grid-area: 2 / 1;
+  justify-self: center;
+  min-width: 0;
+  margin-block: 3px;
+}
+.op-faction-rail[hidden] {
+  display: none;
+}
+.op-family-current {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.op-family-stack {
+  display: grid;
+  justify-items: start;
+  min-width: 0;
+  gap: 1px;
+}
+.op-faction-rail .op-group-link {
+  appearance: none;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  padding: 2px 0;
+  color: #e3d2ad;
+  text-shadow: 0 1px 4px #071016;
+  font: 400 13px/1.15 var(--ui-font);
+  cursor: pointer;
+}
+.op-faction-rail .op-group-link::before {
+  content: ''; display: inline-block; width: .7em; height: .7em; margin-right: .4em;
+  background: var(--roster-shade); border: 1px solid #ffffff70; border-radius: 50%;
+}
+.op-faction-rail .op-group-link[hidden] {
+  display: none;
+}
+.op-group-link:hover,
+.op-group-link[aria-pressed='true'] {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.op-family-current {
+  gap: 10px;
+  text-align: left;
+  font: 500 clamp(17px, 1.65vw, 25px) / 1.12 var(--ui-font);
+  color: #fffbef;
+  text-shadow: 0 1px 5px #000;
+}
+.op-family-current .op-crest-credit {
+  font: 400 12px/1.1 var(--ui-font);
+  color: var(--brief-muted, #d3dadc);
+}
+.op-faction-rail .uc-crest {
+  width: clamp(33px, 3.6vw, 45px);
+  height: clamp(33px, 3.6vw, 45px);
+  object-fit: contain;
+  flex: none;
+}
+.op-command-stage .op-ring-arrow {
+  appearance: none;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  padding: 0;
+  color: #eee;
+  line-height: 1;
+  text-shadow: 0 2px 7px #000;
+}
+.op-command-stage .op-ring-arrow:is(:hover, :active, :focus) {
+  background: none;
+  box-shadow: none;
+  color: white;
+}
+.op-ring-arrow:disabled {
+  visibility: hidden;
+}
+.op-ring-arena {
+  grid-area: 3 / 1;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  touch-action: pan-y;
+}
+.op-ring-arena canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.op-command-stage .op-ring-arrow {
+  display: grid;
+  place-items: center;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0;
+  width: clamp(44px, 5.5vw, 72px);
+  height: 88px;
+}
+.op-command-stage .op-ring-arrow::before {
+  content: '';
+  width: clamp(19px, 2.5vw, 31px);
+  height: clamp(19px, 2.5vw, 31px);
+  border: solid currentColor;
+  border-width: 0 5px 5px 0;
+  filter: drop-shadow(0 2px 3px #111);
+}
+.op-ring-prev {
+  left: 0;
+}
+.op-ring-prev::before {
+  transform: rotate(135deg);
+}
+.op-ring-next {
+  right: 0;
+}
+.op-ring-next::before {
+  transform: rotate(-45deg);
+}
+.op-ring-caption {
+  grid-area: 4 / 1;
+  display: flex;
+  justify-self: center;
+  width: max-content;
+  max-width: 100%;
+  align-items: center;
+  flex-direction: column;
+  text-align: center;
+  gap: 7px;
+  transform: translateX(clamp(calc(50% - var(--half-stage, 0px)), var(--follow, 0px), calc(var(--half-stage, 0px) - 50%)));
+}
+.op-command-stage .op-ring-assign {
+  padding: 7px 26px;
+  font: 500 16px/1.2 var(--ui-font);
+  color: #172029;
+  background: #e4d4af;
+  border: 0;
+}
+.op-ring-bio {
+  min-width: 0;
+  text-shadow: 0 1px 5px #000;
+}
+.op-ring-bio h3 {
+  font: 500 clamp(25px, 3.4vw, 49px) / 1.08 var(--ui-font);
+  margin: 0 0 4px;
+  overflow-wrap: anywhere;
+}
+.op-ring-dates {
+  font: 500 clamp(14px, 1.3vw, 18px) / 1.25 var(--ui-font);
+  color: #eee;
+}
+.op-ring-origin,
+.op-ring-meta,
+.op-ring-notice {
+  font: 400 14px/1.35 var(--ui-font);
+  color: #c4ced1;
+}
+.op-ring-meta {
+  font-size: 12px;
+}
+.op-ring-notice:empty,
+.op-ring-meta:empty {
+  display: none;
+}
+.op-command-stage .op-ring-notice {
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  text-align: center;
+  background: #111922df;
+}
+.op-command-stage :is(button, input):focus-visible {
+  outline: 2px solid #efdeb9;
+  outline-offset: 2px;
+}
+.op-ring-arena:focus {
+  outline: none;
+}
+.op-ring-arena:focus-visible .op-ring-arrow {
+  color: #ffdfa7;
+}
+@media (max-width: 680px) {
+  .op-ring-caption {
+    gap: 4px;
+  }
+  .op-ring-bio h3 {
+    margin: 0;
+    font-size: 26px;
+  }
+}
+@media (max-height: 470px) {
+  .op-panel > .op-command-stage {
+    padding: 5px 10px;
+    gap: 2px;
+  }
+  .op-family-current .uc-crest {
+    width: 23px;
+    height: 23px;
+  }
+  .op-ring-bio h3 {
+    font-size: 22px;
+  }
+  .op-ring-caption {
+    gap: 2px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .op-ring-layer,
+  .op-ring-photo {
+    transition: none;
+  }
+}

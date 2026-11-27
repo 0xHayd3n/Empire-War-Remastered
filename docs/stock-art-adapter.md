@@ -1,0 +1,11 @@
+# Stock Remastered · dependency-only pilot
+
+Status: **preflight only**. There are no approved third-party bindings and no runtime switches or unit replacements yet. This is not the earlier generated-texture showcase. Nothing in this pilot builds a DDS, extracts a model for distribution, or mounts donor gameplay XML.
+
+The proposed submod distributes our own references. Players obtain the required parent mod from its author. Referencing a local installation is a delivery method, not evidence of permission. Before adding a binding, identify the actual submod, parent Workshop item, asset creator(s), any separately licensed contributions, terms that allow this use, attribution and technical compatibility evidence for the specific stock edition. If the terms are unclear, ask or leave the slot stock. Credit alone is not permission.
+
+Run `node tools/stock-art-adapter.mjs tools/fixtures/stock-art-adapter` for the empty template, or `node tools/test-stock-art-adapter.mjs` for the independent fixture check. The template reports stock/no mapping for the Star Destroyer, X-wing and AT-AT in both EaW and FoC. This command accepts the **distributable reference directory**, not the parent Workshop mod folder. It never writes to either. Keep development docs and tooling outside that directory.
+
+`adapter.json` is the only permitted package member. Each proposed binding names `edition`, `target` (a pilot stock ALO), `workshop`, `model`, and `files` (art paths with their SHA-256 hashes). A separate maintainer review is keyed to the complete binding; the submod cannot approve itself. An eligible check inspects the live, unambiguous installed parent directly, not another mod with the same filenames, a download, or a previously generated pack. Missing dependencies, hash mismatches, and unapproved changes leave stock selected. The checker cannot determine authorship or license validity from a hash.
+
+Next gate: evaluate a permitted pair in the mounted Universal window. Keep the stock unit, XML, simulation skeleton, collision dimensions and save identity; check turret/muzzle alignment, hardpoint loss and death on the capital ship, flight and firing on the fighter, and walk/aim/fire animation on the walker. Only then connect an opt-in visual binding. A preflight pass does not demonstrate any of these gameplay properties.

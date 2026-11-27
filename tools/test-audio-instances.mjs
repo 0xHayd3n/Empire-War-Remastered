@@ -115,7 +115,15 @@ assert.equal(context.started.length, before + 1, 'Max_Instances defaults to one,
 for (const source of [...context.started]) source.end();
 context.started.length = 0;
 for (let i = 0; i < 40; i++)
-  soundEvent('Test_Shot_' + i, { Samples: 'Test_Shot.wav', Is_3D: 'Yes', Max_Instances: 4, Priority: 4, Volume_Saturation_Distance: 100000, Min_Volume: 100, Max_Volume: 100 });
+  soundEvent('Test_Shot_' + i, {
+    Samples: 'Test_Shot.wav',
+    Is_3D: 'Yes',
+    Max_Instances: 4,
+    Priority: 4,
+    Volume_Saturation_Distance: 100000,
+    Min_Volume: 100,
+    Max_Volume: 100
+  });
 for (let i = 0; i < 32; i++) audio.play('Test_Shot_' + i, 1000 + i, 0);
 await settle();
 assert.equal(audio.positional.size, 32, 'thirty-two positional voices play');
@@ -126,13 +134,56 @@ audio.play('Test_Shot_33', 10, 0);
 await settle();
 assert.equal(context.started.length, 33, 'a nearer shot of the same priority takes a voice');
 assert.notEqual(context.started[31].stoppedAt, null, 'from the farthest of the least important');
-soundEvent('Test_Explosion', { Samples: 'Test_Boom.wav', Is_3D: 'Yes', Max_Instances: 3, Priority: 2, Volume_Saturation_Distance: 100000, Min_Volume: 100, Max_Volume: 100 });
+soundEvent('Test_Explosion', {
+  Samples: 'Test_Boom.wav',
+  Is_3D: 'Yes',
+  Max_Instances: 3,
+  Priority: 2,
+  Volume_Saturation_Distance: 100000,
+  Min_Volume: 100,
+  Max_Volume: 100
+});
 audio.play('Test_Explosion', 20, 0);
 await settle();
 assert.equal(context.started.length, 34, 'a more important sound takes a voice');
-soundEvent('Test_Ambient', { Samples: 'Test_Hum.wav', Is_3D: 'Yes', Max_Instances: 3, Priority: 5, Volume_Saturation_Distance: 100000, Min_Volume: 100, Max_Volume: 100 });
+soundEvent('Test_Ambient', {
+  Samples: 'Test_Hum.wav',
+  Is_3D: 'Yes',
+  Max_Instances: 3,
+  Priority: 5,
+  Volume_Saturation_Distance: 100000,
+  Min_Volume: 100,
+  Max_Volume: 100
+});
 audio.play('Test_Ambient', 1, 0);
 await settle();
 assert.equal(context.started.length, 34, 'a less important sound does not take a voice');
 assert.equal(audio.positional.size, 32, 'the voice budget holds');
-console.log('audio instance rules ok');
+soundEvent('Chatter', { Samples: 'test.wav', Is_Ambient_VO: 'Yes', Is_2D: 'Yes' });
+for (const [preference, script, audible] of [
+  [false, true, false],
+  [true, false, false],
+  [true, true, true]
+]) {
+  audio.setVoiceChannel('ambient', preference);
+  audio.allowAmbientVO(script);
+  const n = context.started.length;
+  audio.play('Chatter');
+  await settle();
+  assert.equal(context.started.length - n, Number(audible), 'Both script and player must allow ambient chatter');
+}
+soundEvent('GUI_Settings_Test', { Samples: 'Test_Click.wav', Is_2D: 'Yes' });
+const beforeGui = context.started.length;
+audio.setMixOption('gui', false);
+audio.play('GUI_Settings_Test');
+await settle();
+assert.equal(context.started.length, beforeGui);
+audio.setMixOption('gui', true);
+audio.play('GUI_Settings_Test');
+await settle();
+assert.equal(context.started.length, beforeGui + 1);
+audio.speech = { queue: [{ state: 'playing' }] };
+assert.equal(audio.ducked(0.9), 0.3);
+audio.setMixOption('duck', false);
+assert.equal(audio.ducked(0.9), 0.9);
+console.log('audio instance, GUI, dialogue ducking and voice channel rules ok');

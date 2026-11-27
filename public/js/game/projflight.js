@@ -250,7 +250,9 @@ export function pathAt(out, path, d) {
   return out;
 }
 
-export function sweep(x0, y0, z0, x1, y1, z1, cx, cy, cz, heading, a, b, c) {
+export function sweep(x0, y0, z0, x1, y1, z1, cx, cy, cz, heading, a, b, c, casts) {
+  const native=casts?.volume(false,x0,y0,z0,x1,y1,z1,cx,cy,cz,heading,a,b,c);
+  if(native!==undefined)return native;
   const co = Math.cos(heading),
     si = Math.sin(heading);
   const lx = (x, y) => ((x - cx) * co + (y - cy) * si) / a,
@@ -272,7 +274,9 @@ export function sweep(x0, y0, z0, x1, y1, z1, cx, cy, cz, heading, a, b, c) {
   return t >= 0 && t <= 1 ? t : -1;
 }
 
-export function sweepBox(x0, y0, z0, x1, y1, z1, cx, cy, cz, heading, a, b, c) {
+export function sweepBox(x0, y0, z0, x1, y1, z1, cx, cy, cz, heading, a, b, c, casts) {
+  const native=casts?.volume(true,x0,y0,z0,x1,y1,z1,cx,cy,cz,heading,a,b,c);
+  if(native!==undefined)return native;
   const co = Math.cos(heading),
     si = Math.sin(heading);
   const ox = (x0 - cx) * co + (y0 - cy) * si,

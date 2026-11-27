@@ -4,7 +4,7 @@ export function placeGalacticModel(root, planet) {
   root.scale.setScalar(planet.type.num('Scale_Factor', 1));
 }
 
-export function renderGalacticScenes(renderer, camera, main, background, midground, midforeground) {
+export function renderGalacticScenes(renderer, camera, main, background, midground, midforeground, detail = null) {
   const autoClear = renderer.autoClear,
     near = camera.near,
     far = camera.far;
@@ -17,7 +17,10 @@ export function renderGalacticScenes(renderer, camera, main, background, midgrou
     camera.near = 10;
     camera.far = 100000;
     camera.updateProjectionMatrix();
-    renderer.render(scene, camera);
+    if (detail) {
+      scene.updateMatrixWorld();
+      detail.draw(scene,camera,renderer.domElement.clientHeight || innerHeight,() => renderer.render(scene,camera));
+    } else renderer.render(scene, camera);
     restoreClip();
   };
   try {
@@ -27,7 +30,8 @@ export function renderGalacticScenes(renderer, camera, main, background, midgrou
     renderer.clearDepth();
     if (midground?.children.length) distant(midground);
     if (midforeground?.children.length) distant(midforeground);
-    renderer.render(main, camera);
+    if (detail) detail.draw(main,camera,renderer.domElement.clientHeight || innerHeight,() => renderer.render(main,camera));
+    else renderer.render(main, camera);
   } finally {
     if (camera.near !== near || camera.far !== far) restoreClip();
     renderer.autoClear = autoClear;

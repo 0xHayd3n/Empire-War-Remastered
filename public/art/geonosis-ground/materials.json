@@ -1,0 +1,38 @@
+[
+  {
+    "pack": "geonosis-ground",
+    "id": "scoured-crust",
+    "asset": "cracked_red_ground",
+    "role": "soil",
+    "tileMeters": 2,
+    "colorHash": "724cd00463ad6ca1826c69fd017197e33c5b4495461c41f301a0925c9b9f4dcb",
+    "surfaceHash": "7643a8dd7fa4c8f0aaae26f4e6ca286e439d7554d0439a2a305bbecffb54623c"
+  },
+  {
+    "pack": "geonosis-ground",
+    "id": "fan-gravel",
+    "asset": "dry_ground_rocks",
+    "role": "soil",
+    "tileMeters": 4,
+    "colorHash": "e3a8f2e2e9abdc0078c54f953b46dc4cde9942cd0081b6bcad9181d8fdafe5c7",
+    "surfaceHash": "1fd03ec326d7c8e809679c2c2bc71b8a84a5393bb07d42e3c7efd67d31584130"
+  },
+  {
+    "pack": "geonosis-ground",
+    "id": "mineral-skin",
+    "asset": "mud_cracked_dry_03",
+    "role": "mud",
+    "tileMeters": 1.5,
+    "colorHash": "01f55e2a4d80e0f6f3d7359a05fa21c12a55da1cb5a0f4beb92ef5f42a6e7adb",
+    "surfaceHash": "dce3bd155b85416b4ad915e1576ca7246e80669fbd8e0e0a6f104dd06ce6114e"
+  },
+  {
+    "pack": "geonosis-ground",
+    "id": "scarp-stone",
+    "asset": "tiger_rock",
+    "role": "rock",
+    "tileMeters": 2.55,
+    "colorHash": "df0b911af2efd89352fef71645afc80b2cb64ed4c239e3727219b7d80c46cdc1",
+    "surfaceHash": "22eb3120d5d75fdbb19a42018aeef8b350804516a7802d1b7dcc24013c0a2328"
+  }
+]

@@ -1,22 +1,68 @@
 import { diag } from './diag.js';
 import * as THREE from '../vendor/three/build/three.module.js';
+import { refitMaterialName } from './texture-showcase/store.js';
 import { loadALO } from './alo.js';
 import { loadTexture, whiteTexture, blackTexture } from './dds.js';
 import { gfx } from './gfx.js';
+import { strength } from './battlelook.js';
+import { groundFillShader, nearGroundShader } from './landlight.js';
+import { orbitShader } from './orbitcolor.js';
+import { hullFinish } from './hullfinish.js';
+import { blastShader, BLAST_SLOTS } from './blastlight.js';
+import { backdropExposure } from './game/spacebackdrop.js';
+import { cubicShader } from './imagesampling.js';
 import { planetVertex, planetFragment } from './planetshader.js';
 import { effectInfo, effectLOD, selectEffectTechnique } from './fxo.js';
 import { fetchBinary } from './vfs.js';
 import { planetEnvironment } from './planetlighting.js';
 import { env as gpuEnv } from './gpu/env.js';
 import { skyAtlas } from './skyreflect.js';
+import { battlePrefs } from './battlerealism.js';
 import { rigidLodPairs } from './game/fleet-lod.js';
+import { registerModelPart } from './game/model-detail.js';
+import {
+  LIVERY_AMOUNT,
+  LIVERY_FRAG_APPLY,
+  LIVERY_FRAG_DECL,
+  LIVERY_VERT_DECL,
+  LIVERY_VERT_SET,
+  liveryBounds,
+  liveryKey,
+  liveryPaintable,
+  liveryUniformValues,
+  normalizeLivery
+} from './livery.js';
+
+import { diskBounce } from './planetshine.js';
 
 const noShadow = new THREE.DepthTexture(1, 1);
 noShadow.compareFunction = THREE.LessEqualCompare;
 noShadow.magFilter = noShadow.minFilter = THREE.LinearFilter;
 noShadow.needsUpdate = true;
 
+import { airShader, footprintShader, bendShader, leafy } from './battlefield.js';
+import { materialEnvironmentShader, receiverShader } from './fieldreceivers.js';
 export const lighting = {
+  receiverMap:{value:new THREE.Vector4(0,0,0,0)}, receiverMode:{value:new THREE.Vector4(0,0,0,0)},
+  fieldCloud:{value:whiteTexture()},fieldSoil:{value:whiteTexture()},fieldSky:{value:blackTexture()},
+  landStyle: { value: new THREE.Vector4() },
+  canopyView: { value: new THREE.Vector4() },
+  forestWeather: { value: new THREE.Vector4() },
+  sceneryWet: {value:0}, landProbeOn: {value:0}, wideShadow: {value:new THREE.Vector3()},
+  fieldLook: { value: new THREE.Vector4(0,0,0,0) },
+  fieldWind: { value: new THREE.Vector4(0,0,0,0) },
+  surfaceLook: { value: new THREE.Vector2() },
+  materialFinish: { value: 0 },
+  orbitalKey: { value: 0 },
+  landGround: { value: new THREE.Vector4(0,0,0,0) },
+  planetDisk: { value: new THREE.Vector4(0,0,0,0) },
+  planetRadiance: { value: new THREE.Vector3() },
+  orbitHDR: { value: 0 },
+  orbitDir: { value: new THREE.Vector3() },
+  orbitRadiance: { value: new THREE.Vector3() },
+  orbitPos: { value: new THREE.Matrix3().multiplyScalar(0) },
+  orbitNeg: { value: new THREE.Matrix3().multiplyScalar(0) },
+  textureCubic: { value: 0 },
   sunDir: { value: new THREE.Vector3(0.4, -0.5, 0.75).normalize() },
   sunColor: { value: new THREE.Color(1.0, 0.98, 0.94) },
   sunSpecular: { value: new THREE.Color(2, 1.96, 1.88) },
@@ -26,6 +72,9 @@ export const lighting = {
   fillColor2: { value: new THREE.Color(0, 0, 0) },
   fillWrap: { value: 0 },
   ambient: { value: new THREE.Color(0.32, 0.32, 0.36) },
+  hullShadowMap: { value: noShadow },
+  hullShadowMatrix: { value: new THREE.Matrix4() },
+  hullShadowParams: { value: new THREE.Vector3() },
   shadowMap: { value: noShadow },
   shadowMatrix: { value: new THREE.Matrix4() },
   shadowOn: { value: 0 },
@@ -48,9 +97,35 @@ export const boltLights = {
   boltN: { value: 0 }
 };
 gpuEnv.bolts = boltLights;
+export const blastLights = {
+  blastCount: { value: 0 },
+  blastSource: { value: Array.from({ length: BLAST_SLOTS }, () => new THREE.Vector4()) },
+  blastEnergy: { value: Array.from({ length: BLAST_SLOTS }, () => new THREE.Vector4()) }
+};
+gpuEnv.blasts = blastLights;
 const lightingAtStart = Object.fromEntries(
   Object.entries(lighting).map(([k, u]) => [k, u.value?.isTexture || typeof u.value !== 'object' ? u.value : u.value.clone()])
 );
+const tacticalPlanetAir = { value: 0 };
+export const tacticalPlanetColumn = { value: 0 };
+// Only the tactical draw opts in; thumbnail, shadow-depth and menu renderers keep their authored treatment.
+export function setBattleSurface(on, look = gfx, stage = 0, hdr = false) {
+  lighting.textureCubic.value = on && gfx.textureCubic === true ? 1 : 0;
+  const prefs=battlePrefs(gfx);
+  tacticalPlanetAir.value = on ? strength(prefs.planetAir) : 0;
+  tacticalPlanetColumn.value = on && (prefs.orbitalLighting === 'air' || prefs.orbitalLighting === 'bounce') ? 1 : 0;
+  lighting.landGround.value.w=0;
+  lighting.landProbeOn.value=0;lighting.wideShadow.value.set(0,0,0);
+  lighting.landStyle.value.set(0,0,0,0);
+  lighting.receiverMap.value.set(0,0,0,0);lighting.receiverMode.value.set(0,0,0,0);
+  lighting.fieldSky.value=blackTexture();lighting.fieldCloud.value=lighting.fieldSoil.value=whiteTexture();
+  lighting.fieldLook.value.set(0,0,on && prefs.steadyDetail ? 1 : 0,0);
+  lighting.fieldWind.value.w=0;
+  lighting.orbitalKey.value = on ? stage : 0;
+  lighting.orbitHDR.value = hdr ? 1 : 0;
+  lighting.materialFinish.value = on ? strength(look.materialFinish) : 0;
+  lighting.surfaceLook.value.set(on ? strength(look.surfaceRelief) : 0, on ? strength(look.environmentLight) : 0);
+}
 export function resetLighting() {
   for (const [k, v] of Object.entries(lightingAtStart)) {
     const u = lighting[k];
@@ -78,11 +153,21 @@ export function setPlanetEnvironment(env) {
 const SKIP = /collision|shadowvolume|lightvisualize|meshheat/;
 const ADDITIVE = /additive|nebula|meshshield/;
 const SPEC_GLOW = /^(mesh|rskin)bumpspecglowcolorize\.fx$/;
-const FOW_DIMMED =/^(terrainmeshgloss|terrainmeshbump|batchmeshgloss|batchmeshalpha|grass)\.fx$/;
+const FOW_DIMMED = /^(terrainmeshgloss|terrainmeshbump|batchmeshgloss|batchmeshalpha|grass)\.fx$/;
 const ALPHA = /alpha|tree\.fx|grass/;
 const UNLIT = /skydome|nebula/;
 
+import { forestAir } from './endor-weather.js';
+import { canopyWindowShader } from './canopy-view.js';
+import { woodFunctions, woodColor, woodMist, highlightKnee } from './woodland-light.js';
+import { naturalSlot, naturalShade } from './scenery-surface.js';
 const VERT = `
+#ifdef ENDOR_WOODLAND
+varying float stemHeight;
+#endif
+#ifdef WIND_LEAVES
+uniform vec4 fieldWind;
+#endif
 attribute vec3 tangent;
 attribute vec3 binormal;
 #ifdef USE_VCOLOR
@@ -94,10 +179,11 @@ varying vec3 vNormal;
 varying vec3 vTangent;
 varying vec3 vBinormal;
 varying vec3 vWorldPos;
-#ifdef DETAIL
+#if defined(DETAIL) || defined(HULL_FINISH)
 varying vec3 vObjPos;
 #endif
 varying vec4 vTint;
+${LIVERY_VERT_DECL}
 #ifdef USE_INSTANCING
 attribute vec4 instanceTint;
 #endif
@@ -123,6 +209,7 @@ mat4 boneAt(float b) { return boneMatrices[int(b)]; }
 #endif
 void main() {
   vUv = uv + uvScroll;
+${LIVERY_VERT_SET}
 #ifdef NATIVE_MESH_ADDITIVE
   vUv += time * uvScrollRate;
 #endif
@@ -155,8 +242,14 @@ void main() {
 #else
   vec4 wp = mm * vec4(position, 1.0);
 #endif
+  #ifdef WIND_LEAVES
+  ${bendShader(false)}
+  #endif
   vWorldPos = wp.xyz;
-#ifdef DETAIL
+#ifdef ENDOR_WOODLAND
+  stemHeight=wp.z-mm[3].z;
+#endif
+#if defined(DETAIL) || defined(HULL_FINISH)
   vObjPos = position;
 #endif
   mat3 nm = mat3(mm);
@@ -170,29 +263,66 @@ void main() {
 }`;
 
 const FRAG = `
+uniform vec4 fieldLook;
+${airShader(false)}
+${footprintShader(false)}
 uniform sampler2D map;
 uniform sampler2D normalMap;
-#if defined(GLOSSMAP) || defined(SPECGLOW)
+#if defined(GLOSSMAP) || defined(SPECGLOW) || defined(ENDOR_WOODLAND)
 uniform sampler2D glossMap;
 #endif
 uniform vec3 sunDir, sunColor, sunSpecular, fillDir, fillColor, fillDir2, fillColor2, ambient;
 uniform float fillWrap;
+uniform vec2 surfaceLook;
+uniform float materialFinish, orbitalKey, orbitHDR;
+uniform mat3 orbitPos, orbitNeg;
+uniform vec4 planetDisk;
+uniform vec3 planetRadiance;
+uniform vec3 orbitDir, orbitRadiance;
+${orbitShader('glsl')}
+uniform float blastCount;
+uniform vec4 blastSource[${BLAST_SLOTS}], blastEnergy[${BLAST_SLOTS}];
+${blastShader(false)}
 uniform vec4 boltAt[16], boltTint[16];
 uniform float boltN;
 float fillTerm(vec3 n, vec3 d) {
   float x = dot(n, d);
   return fillWrap > 0.5 ? max(0.0, 0.25 + 0.5 * x + 0.3125 * (1.5 * x * x - 0.5)) : max(x, 0.0);
 }
+uniform vec4 forestWeather; uniform float sceneryWet, landProbeOn; uniform vec3 wideShadow;
+uniform vec4 landGround, receiverMap,receiverMode; uniform sampler2D fieldCloud,fieldSoil,fieldSky;
+${receiverShader(false)}
 #ifndef UNLIT
-uniform highp sampler2DShadow shadowMap;
+uniform highp sampler2DShadow shadowMap, hullShadowMap;
+uniform mat4 hullShadowMatrix;
+uniform vec3 hullShadowParams; // world units per texel, normalized depth per texel, UV texel
+${groundFillShader(false)}
+#ifdef MAP_FINISH
+${materialEnvironmentShader(false)}
+#endif
+${nearGroundShader(false)}
+float hullSun(vec3 wp) {
+  // Bias the actual triangle toward the light, not the painted/smoothed normal.
+  // A grazing deck must clear the diagonal extent of the bilinear PCF footprint.
+  vec3 face=cross(dFdx(wp),dFdy(wp));
+  vec3 n=face/max(length(face),1e-12);
+  float nl=dot(n,sunDir);
+  vec3 p=(hullShadowMatrix*vec4(wp+n*(sign(nl)*(1.0-abs(nl))*1.95*hullShadowParams.x),1.0)).xyz;
+  if(any(lessThan(p,vec3(0.0))) || any(greaterThan(p,vec3(1.0)))) return 1.0;
+  float d=p.z-hullShadowParams.y*0.38, o=hullShadowParams.z*0.65;
+  float visibility=0.25*(texture(hullShadowMap,vec3(p.xy+vec2(-o,-o),d))+texture(hullShadowMap,vec3(p.xy+vec2(o,-o),d))+
+               texture(hullShadowMap,vec3(p.xy+vec2(-o,o),d))+texture(hullShadowMap,vec3(p.xy+vec2(o,o),d)));
+  vec3 edge=min(p,1.0-p)/hullShadowParams.zzy;
+  return mix(1.0,visibility,smoothstep(0.0,2.0,min(edge.x,min(edge.y,edge.z))));
+}
 uniform mat4 shadowMatrix;
 uniform float shadowOn, shadowTexel;
 uniform vec3 shadowTint;
 float sunlit(vec3 wp, vec3 n) {
   if (shadowOn < 0.5) return 1.0;
-  vec3 p = (shadowMatrix * vec4(wp + n * 3.0, 1.0)).xyz;
+  vec3 p = (shadowMatrix * vec4(wp + n * (wideShadow.x>0.0?wideShadow.x*.48:3.0), 1.0)).xyz;
   if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0 || p.z > 1.0) return 1.0;
-  float d = p.z - 0.0012, o = shadowTexel * 1.4;
+  float d = p.z - (wideShadow.x>0.0?.44*wideShadow.y:.0012), o = shadowTexel * 1.4;
   float s = texture(shadowMap, vec3(p.xy, d)) * 2.0;
   s += texture(shadowMap, vec3(p.xy + vec2(-o, -o), d));
   s += texture(shadowMap, vec3(p.xy + vec2(o, -o), d));
@@ -205,7 +335,16 @@ float sunlit(vec3 wp, vec3 n) {
 #endif
 uniform vec3 fogTint; uniform vec2 fogRange;
 #ifdef FOW_DIM
-uniform sampler2D fowMap; uniform float fowSide;
+uniform sampler2D fowMap;
+#endif
+uniform float fowSide;
+uniform vec4 landStyle;
+#if defined(WIND_LEAVES) || (defined(ENDOR_WOODLAND) && defined(ALPHA)) || defined(CANOPY_STEM)
+uniform vec4 canopyView;
+#endif
+#ifdef ENDOR_WOODLAND
+varying float stemHeight;
+${woodFunctions(false)}
 #endif
 uniform float ghost;
 uniform float dissolve;
@@ -214,7 +353,7 @@ float bayer2(vec2 a) { a = floor(a); return fract(a.x / 2.0 + a.y * a.y * 0.75);
 float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
 #ifdef REFLECT
 uniform sampler2D skyAtlas;
-vec3 skyAt(vec3 r) {
+vec2 skyUV(vec3 r) {
   vec3 a = abs(r), F, U;
   float i;
   if (a.x >= a.y && a.x >= a.z) { i = r.x > 0.0 ? 0.0 : 1.0; F = vec3(sign(r.x), 0.0, 0.0); U = vec3(0.0, 0.0, 1.0); }
@@ -222,8 +361,12 @@ vec3 skyAt(vec3 r) {
   else { i = r.z > 0.0 ? 4.0 : 5.0; F = vec3(0.0, 0.0, sign(r.z)); U = vec3(0.0, 1.0, 0.0); }
   float d = max(dot(r, F), 1e-4);
   vec2 f = clamp(vec2(dot(r, cross(F, U)), dot(r, U)) / d * 0.5 + 0.5, 0.004, 0.996);
-  return texture2D(skyAtlas, vec2((i + f.x) / 6.0, f.y)).rgb;
+  #if defined(FITTING_FINISH) || defined(HULL_ENV)
+  f = clamp(f, 0.5/48.0, 1.0-0.5/48.0);
+  #endif
+  return vec2((i+f.x)/6.0,f.y);
 }
+vec3 skyAt(vec3 r) { return texture2D(skyAtlas,skyUV(r)).rgb; }
 #endif
 float haze(vec3 at) { return fogRange.y > 0.0 ? clamp((fogRange.y - distance(cameraPosition, at)) / max(1.0, fogRange.y - fogRange.x), 0.0, 1.0) : 1.0; }
 uniform vec4 colorization;
@@ -241,8 +384,10 @@ varying vec4 vColor;
 #ifdef NEBULA
 varying vec3 vShade;
 #endif
-#ifdef DETAIL
+#if defined(DETAIL) || defined(HULL_FINISH)
 varying vec3 vObjPos;
+#endif
+#ifdef DETAIL
 uniform float detailScale;
 float dHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
 float dNoise(vec3 x) {
@@ -261,18 +406,51 @@ float rock(vec3 p) {
   return dFbm(p) * 0.6 + ridges * ridges * 0.3 + dNoise(p * 6.0) * 0.1;
 }
 #endif
+#if !defined(UNLIT) && !defined(ALPHA) && !defined(ADDITIVE)
+uniform float textureCubic;
+${cubicShader('glsl')}
+#endif
+${LIVERY_FRAG_DECL}
 void main() {
   vec4 base = texture2D(map, vUv);
+#if defined(ALPHA) && !defined(UNLIT) && (defined(WIND_LEAVES) || defined(ENDOR_WOODLAND))
+  // A hole in a leaf card needs neither normal mapping nor filtered sunlight.
+  #define EARLY_LEAF_MASK
+  if (base.a * opacity <= alphaRef) discard;
+#endif
+#if defined(WIND_LEAVES) || (defined(ENDOR_WOODLAND) && defined(ALPHA)) || defined(CANOPY_STEM)
+  ${canopyWindowShader(false)}
+#endif
+#if !defined(UNLIT) && !defined(ALPHA) && !defined(NATIVE_MESH_GLOSS_EMISSIVE)
+  vec2 stableDx=dFdx(vUv), stableDy=dFdy(vUv);
+  float filterK=detailWidth(stableDx,stableDy,vec2(textureSize(map,0)));
+  if(filterK>1.0) base.rgb=textureGrad(map,vUv,stableDx*filterK,stableDy*filterK).rgb;
+#endif
+#ifdef DEEP_BACKDROP
+  ${backdropExposure(false)}
+#endif
+#if !defined(UNLIT) && !defined(ALPHA) && !defined(ADDITIVE)
+  if (textureCubic > 0.0) {
+    vec2 size = vec2(textureSize(map,0));
+    float span = max(length(dFdx(vUv)*size),length(dFdy(vUv)*size));
+    if (span < 1.0) base.rgb = mix(base.rgb,cubicRGB(vUv,size),1.0-smoothstep(0.55,1.0,span));
+  }
+#endif
   vec3 albedo = base.rgb;
 #ifdef COLORIZE
   albedo = mix(albedo, albedo * colorization.rgb, base.a);
 #endif
+${LIVERY_FRAG_APPLY}
 #ifdef UNLIT
   #ifdef REFLECT
   albedo = skyAt(reflect(normalize(vWorldPos - cameraPosition), normalize(vNormal) * (gl_FrontFacing ? 1.0 : -1.0)));
   base.a = 1.0;
   #endif
   vec3 col = albedo * diffuse;
+  #ifdef WIND_LEAVES
+  if(receiverMode.y>0.0)col+=albedo*sunColor*((0.065+0.26*pow(max(0.0,dot(normalize(vWorldPos-cameraPosition),sunDir)),2.0))*cloudSun(vWorldPos));
+  if(fieldLook.x>0.0) col=mix(col,fogTint,airDepth(vWorldPos));
+  #endif
   float a = base.a;
   #ifdef USE_VCOLOR
   col *= vColor.rgb; a *= vColor.a;
@@ -296,6 +474,9 @@ void main() {
   vec4 nt = texture2D(normalMap, vUv);
   #endif
   #ifdef BUMP
+  #if !defined(UNLIT) && !defined(ALPHA) && !defined(NATIVE_MESH_GLOSS_EMISSIVE)
+  if(filterK>1.0) nt=textureGrad(normalMap,vUv,stableDx*filterK,stableDy*filterK);
+  #endif
   vec3 tn = nt.xyz * 2.0 - 1.0;
   n = normalize(tn.x * normalize(vTangent) + tn.y * normalize(vBinormal) + tn.z * n);
   gloss = nt.a;
@@ -317,6 +498,32 @@ void main() {
     albedo *= mix(vec3(1.0, 0.96, 0.9), vec3(0.9, 0.96, 1.04), dNoise(q * 0.35));
   }
   #endif
+  #if !defined(NATIVE_MESH_GLOSS_EMISSIVE) && !defined(ALPHA)
+  #if defined(HULL_FINISH) || defined(INCIDENT_LIGHT)
+  bool corrected = true;
+  #else
+  bool corrected = orbitalKey >= 2.0 || landProbeOn>0.0;
+  #endif
+  #if !defined(ENDOR_WOODLAND) && !defined(NATURAL_STONE) && !defined(NATURAL_PLANT)
+  if (corrected) albedo = orbitDecode(albedo);
+  #endif
+  #endif
+  // Mounted diffuse provides the height gradient; retain the authored bump normal as the base.
+  #if !defined(NATIVE_MESH_GLOSS_EMISSIVE) && !defined(ALPHA)
+  #if !defined(ENDOR_WOODLAND) && !defined(NATURAL_STONE) && !defined(NATURAL_PLANT)
+  if (surfaceLook.x > 0.0) {
+    vec2 dims = vec2(textureSize(map, 0));
+    vec2 du = dFdx(vUv), dv = dFdy(vUv);
+    float footprint = max(1.0, max(length(du*dims), length(dv*dims)));
+    vec2 stepUV = footprint / dims;
+    const vec3 luma = vec3(0.2126, 0.7152, 0.0722);
+    vec2 slope = vec2(dot(base.rgb-textureGrad(map, vUv+vec2(stepUV.x,0.0),du,dv).rgb,luma),
+                      dot(base.rgb-textureGrad(map, vUv+vec2(0.0,stepUV.y),du,dv).rgb,luma));
+    slope = clamp(slope*5.0, -0.85, 0.85) * surfaceLook.x / sqrt(footprint);
+    n = normalize(n + slope.x*vTangent/max(length(vTangent),1e-5) + slope.y*vBinormal/max(length(vBinormal),1e-5));
+  }
+  #endif
+  #endif
   if (!gl_FrontFacing) n = -n;
   vec3 gn = normalize(vNormal) * (gl_FrontFacing ? 1.0 : -1.0);
   #ifdef DETAIL
@@ -327,13 +534,32 @@ void main() {
   if (shadowOn > 0.5) shadowLit = min(shadowLit, smoothstep(-0.05, 0.05, dot(normalize(vNormal) * (gl_FrontFacing ? 1.0 : -1.0), sunDir)));
   #endif
   bool mapShadow = shadowTint.x >= 0.0;
-  float sun = mapShadow ? 1.0 : mix(0.38, 1.0, shadowLit);
+  // In a vacuum a cast shadow blocks the sun, not the planet's bounce, an engine or a passing bolt.
+  bool vacuum = orbitalKey == 4.0;
+  if (vacuum) mapShadow = false;
+  float sun = vacuum ? shadowLit : (mapShadow ? 1.0 : mix(0.38, 1.0, shadowLit));
+  if (landGround.w>0.0) sun=groundSun(vWorldPos,gn,shadowLit);
+  if (hullShadowParams.x > 0.0 && landGround.w<1.5) sun=min(sun,hullSun(vWorldPos));
+  sun*=cloudSun(vWorldPos);
   #ifdef BUMP
   float sunTerm = max(dot(n, sunDir), 0.0);
   #else
-  float sunTerm = fillTerm(gn, sunDir);
+  float sunTerm = fillTerm(surfaceLook.x > 0.0 ? n : gn, sunDir);
   #endif
-  vec3 light = ambient + fillColor * fillTerm(gn, fillDir) + fillColor2 * fillTerm(gn, fillDir2) + sunColor * sunTerm * sun;
+  vec3 indirect = ambient + fillColor * fillTerm(gn, fillDir) + fillColor2 * fillTerm(gn, fillDir2);
+  vec3 light = indirect + sunColor * sunTerm * sun;
+  // Preserve the mounted sun's bearing and hue. Cool only the indirect fill, not windows, engines or bolt lights.
+  if (orbitalKey > 0.5) light = indirect * vec3(0.64, 0.75, 0.92) + sunColor * (1.12 * max(dot(n, sunDir), 0.0) * sun);
+  if (vacuum) light = max(0.14*indirect,vec3(0.012)) + sunColor*(1.22*max(dot(n,sunDir),0.0)*sun);
+  if(landGround.w>0.0){indirect=groundFill(n);
+  #ifndef ENDOR_WOODLAND
+  indirect*=shelteredSky(vWorldPos);
+  #endif
+  light=indirect+sunColor*(max(dot(n,sunDir),0.0)*sun);}
+  light+=soilBounce(vWorldPos,gn);
+  #ifdef WIND_LEAVES
+  if(receiverMode.y>0.0)light+=sunColor*((0.10+0.35*max(dot(-gn,sunDir),0.0))*(0.50+0.50*pow(max(0.0,dot(normalize(vWorldPos-cameraPosition),sunDir)),2.0))*sun);
+  #endif
   vec3 boltSum = vec3(0.0);
   for (int i = 0; i < 16; i++) {
     if (float(i) >= boltN) break;
@@ -345,6 +571,20 @@ void main() {
   vec3 v = normalize(cameraPosition - vWorldPos);
   float sp = pow(max(dot(n, normalize(sunDir + v)), 0.0), 16.0) * sun;
   vec4 ls = objectTint(tint) * objectTint(vTint);
+  #if defined(NATURAL_STONE)
+  ${naturalShade(false,false)}
+  #elif defined(NATURAL_PLANT)
+  ${naturalShade(false,true)}
+  #elif defined(ENDOR_WOODLAND)
+  vec3 vv=v;
+  #if defined(ENDOR_BARK)
+  ${woodColor(false,false,true)}
+  #elif defined(ALPHA)
+  ${woodColor(false,true,false)}
+  #else
+  ${woodColor(false,false,false)}
+  #endif
+  #else
   #ifdef NATIVE_MESH_GLOSS_EMISSIVE
   vec3 col = albedo * emissive * 2.0;
   #elif defined(SPECGLOW)
@@ -354,8 +594,139 @@ void main() {
   #else
   vec3 col = albedo * (2.0 * emissive + diffuse * light * ls.rgb) + specular * sunSpecular * sp * gloss;
   #endif
-  #ifdef REFLECT
-  col += skyAt(reflect(-v, n)) * specular * nt.a;
+  bool mapped=false;
+  #if defined(MAP_FINISH) && !defined(HULL_FINISH) && !defined(FITTING_FINISH)
+  mapped=receiverMode.z!=0.0;
+  if(mapped){
+    #ifdef SPECGLOW
+    float g=clamp(st.a,0.0,1.0);vec3 mask=clamp(st.rgb,0.0,1.0);
+    #else
+    float g=clamp(gloss,0.0,1.0);vec3 mask=clamp(specular,0.0,1.0);
+    #endif
+    #if defined(REFLECT) && !defined(SPECGLOW)
+    mask*=nt.a;
+    #endif
+    vec3 env=materialEnvironment(vWorldPos,reflect(-v,n),g);float edge=pow(1.0-clamp(dot(v,n),0.0,1.0),5.0);
+    vec3 reflected=env*mask*(0.10+0.45*g+0.28*edge);
+    col=corrected?col+reflected:orbitEncode(orbitDecode(max(col,0.0))+reflected);
+  }
+  #endif
+  #ifndef HULL_FINISH
+  #ifdef FITTING_FINISH
+  float band=shininess;
+  #ifdef BUMP
+  band+=0.5*(0.5-gloss);
+  #endif
+  band=clamp(band,0.0,1.0)*2.0;
+  vec2 uv=skyUV(reflect(-v,n));
+  vec3 lo=orbitDecode(texture2D(skyAtlas,vec2(uv.x,(uv.y+floor(band))/3.0)).rgb);
+  vec3 hi=orbitDecode(texture2D(skyAtlas,vec2(uv.x,(uv.y+min(floor(band)+1.0,2.0))/3.0)).rgb);
+  vec3 F=mix(specular,vec3(1.0),pow(1.0-clamp(dot(n,v),0.0,1.0),5.0));
+  vec3 bounce=mix(lo,hi,fract(band))*F*(1.0-0.27*band);
+  col=corrected?col+bounce:orbitEncode(orbitDecode(max(col,0.0))+bounce);
+  #elif defined(REFLECT)
+  vec3 reflected = skyAt(reflect(-v, n));
+  #if !defined(NATIVE_MESH_GLOSS_EMISSIVE) && !defined(ALPHA)
+  if (corrected) reflected = orbitDecode(reflected);
+  #endif
+  if(!mapped)col += reflected * specular * nt.a;
+  #endif
+  #if !defined(NATIVE_MESH_GLOSS_EMISSIVE) && !defined(ALPHA)
+  if (materialFinish > 0.0) {
+    // Replace (not stack on) the legacy specular lobe. Gloss is a roughness proxy, not an invented metalness map.
+    #ifdef SPECGLOW
+    float g = clamp(st.a,0.0,1.0); vec3 mask=clamp(st.rgb,0.0,1.0), legacy=sunSpecular*st.rgb*sh;
+    #else
+    float g = clamp(gloss,0.0,1.0); vec3 mask=clamp(specular,0.0,1.0), legacy=specular*sunSpecular*sp*gloss;
+    #endif
+    float rough=mix(0.78,0.27,g), a2=rough*rough*rough*rough;
+    vec3 h=(v+sunDir)/max(length(v+sunDir),0.0001);
+    float nv=clamp(dot(n,v),0.001,1.0), nl=clamp(dot(n,sunDir),0.0,1.0), nh=clamp(dot(n,h),0.0,1.0);
+    float d=nh*nh*(a2-1.0)+1.0, k=(rough+1.0)*(rough+1.0)/8.0;
+    vec3 f0=mix(vec3(0.035),vec3(0.22),g)*mask;
+    vec3 F=f0+(1.0-f0)*pow(1.0-clamp(dot(v,h),0.0,1.0),5.0);
+    vec3 direct=sunSpecular*F*(a2/(3.14159*d*d))*(nl/max(4.0*mix(nv,1.0,k)*mix(nl,1.0,k),0.001))*sun;
+    float sky=clamp(0.5+0.5*reflect(-v,n).z,0.0,1.0);
+    vec3 bounce=(ambient+fillColor)*sky*(f0+(1.0-f0)*pow(1.0-nv,5.0))*(1.0-0.7*rough);
+    #ifdef FITTING_FINISH
+    col += materialFinish*(direct-legacy);
+    #else
+    col += materialFinish*(direct+(mapped?0.0:(vacuum ? 0.14 : 1.0))*bounce-legacy);
+    #endif
+  }
+  if (surfaceLook.y > 0.0 && landProbeOn<.5) {
+    // Broad sky bounce and a view-dependent grazing reflection, both modulated by the map lighting.
+    float sky = 0.5 + 0.5*n.z, edge = pow(1.0-clamp(dot(n,v),0.0,1.0),2.5);
+    vec3 skyColor = clamp(ambient*0.65 + fillColor*0.5 + sunColor*0.25, 0.0, 1.8) * vec3(0.78,0.9,1.0);
+    col += surfaceLook.y * skyColor * (albedo*diffuse*ls.rgb*sky + (mapped?0.0:edge)*(0.22+0.48*clamp(gloss,0.0,1.0))) * mix(0.65,1.0,shadowLit);
+  }
+  if (orbitalKey >= 3.0 && landProbeOn<.5) {
+    vec3 ray = reflect(-v,n), nr = max(n,0.0), nf = min(n,0.0), rp = max(ray,0.0), rn = min(ray,0.0);
+    vec3 broad = orbitPos*(nr*nr) + orbitNeg*(nf*nf);
+    vec3 sheen = orbitPos*(rp*rp) + orbitNeg*(rn*rn);
+    float g = clamp(gloss,0.0,1.0), edge = 1.0-clamp(dot(n,v),0.0,1.0);
+    #ifdef FITTING_FINISH
+    // Keep the captured diffuse fill, but do not count its specular approximation a second time.
+    col += (2.0*broad + 1.25*orbitRadiance*max(dot(n,orbitDir),0.0))*albedo*diffuse*ls.rgb;
+    #else
+    col += 2.0*broad*albedo*diffuse*ls.rgb + (mapped?0.0:1.0)*mix(broad,sheen,g)*(0.06+0.3*g+0.18*edge*edge);
+    float facing = max(dot(n,orbitDir),0.0), highlight = pow(max(dot(ray,orbitDir),0.0),mix(3.0,22.0,g));
+    col += orbitRadiance * (1.25*facing*albedo*diffuse*ls.rgb + (mapped?0.0:1.0)*(0.05+0.19*g)*highlight);
+    #endif
+  }
+  #endif
+  #endif
+  #if !defined(NATIVE_MESH_GLOSS_EMISSIVE) && !defined(ALPHA)
+  #ifdef HULL_FINISH
+  #ifdef HULL_ENV
+  ${hullFinish(false,true)}
+  #else
+  ${hullFinish(false,false)}
+  #endif
+  #endif
+  #ifdef HULL_FINISH
+  #define planetPaint coatBase
+  #else
+  #define planetPaint ((corrected ? albedo : orbitDecode(albedo))*diffuse*ls.rgb)
+  #endif
+  ${diskBounce(false,'planetPaint')}
+  if (blastCount > 0.0 && receiverMode.x<1.5) {
+    vec3 local = vec3(0.0), paint = (corrected ? albedo : orbitDecode(albedo)) * diffuse * ls.rgb;
+    #ifdef HULL_FINISH
+    paint=coatBase; vec3 mask=coatF0; float g=1.0-rough;
+    #elif defined(SPECGLOW)
+    vec3 mask = st.rgb; float g = st.a;
+    #else
+    vec3 mask = clamp(specular,0.0,1.0); float g = gloss;
+    #endif
+    for (int i=0; i<${BLAST_SLOTS}; i++) {
+      if (float(i) >= blastCount) break;
+      local += blastBounce(blastSource[i].xyz-vWorldPos,blastSource[i].w,blastEnergy[i].rgb,n,v,paint,mask,g);
+    }
+    if (any(greaterThan(local,vec3(0.0)))) {
+      // The authored solar shadow does not occlude a nearby explosion.
+      if (mapShadow) col *= mix(shadowTint,vec3(1.0),shadowLit);
+      mapShadow = false;
+      col = corrected ? col+local : orbitEncode(orbitDecode(max(col,0.0))+local);
+    }
+  }
+  if (corrected) {
+    if (mapShadow) col *= mix(shadowTint,vec3(1.0),shadowLit);
+    mapShadow = false;
+    #ifdef INCIDENT_LIGHT
+    col = orbitEncode(col); // Keep headroom through legacy tint/fog; attachment adapter decodes before blend.
+    #else
+    col = orbitEncode(orbitHDR > 0.5 ? col : orbitShoulder(col));
+    #endif
+  }
+  #endif
+  #endif
+  if(fieldLook.x>0.0) col=mix(col,fogTint,airDepth(vWorldPos));
+  #ifdef ENDOR_WOODLAND
+  ${woodMist(false,'col','vWorldPos')}
+  ${forestAir(false,true,'vWorldPos','col')}
+  #else
+  ${highlightKnee(false)}
   #endif
   col = tinted(col, tint);
   col = tinted(col, vTint);
@@ -367,7 +738,9 @@ void main() {
   col = mix(fogTint, col, haze(vWorldPos));
   if (mapShadow) col *= mix(shadowTint, vec3(1.0), shadowLit);
   #ifdef ALPHA
+  #ifndef EARLY_LEAF_MASK
   if (base.a * opacity <= alphaRef) discard;
+  #endif
   gl_FragColor = vec4(col, base.a * opacity * ls.a);
   #else
   gl_FragColor = vec4(col, opacity * ls.a);
@@ -464,6 +837,9 @@ function makePlanetMaterial(p) {
       atmosphere: { value: new THREE.Vector4(...(p.Atmosphere || [0, 0, 0, 1])) },
       cityColor: { value: c3(p.CityColor, 1) },
       atmospherePower: { value: p.AtmospherePower ?? 4.5 },
+      orbitalAir: tacticalPlanetAir,
+      planetColumn: tacticalPlanetColumn,
+      cloudLayer: { value: p.CloudTexture ? 1 : 0 },
       cloudScroll: { value: p.CloudScrollRate ?? 0.0025 },
       lightScale: { value: new THREE.Vector4(...(p.LightScale || [1, 1, 1, 1])) },
       time: planetClock,
@@ -556,11 +932,17 @@ export const alphaInstanceable = new WeakSet();
 export const skinBatchable = new WeakSet();
 const MAX_BONES = 24;
 const DEPTH_FRAG = `
+#ifdef LEAF_CASTER
+uniform sampler2D map; varying vec2 vUv; uniform float opacity,alphaRef;
+#endif
 uniform float ghost;
 uniform float dissolve;
 float bayer2(vec2 a) { a = floor(a); return fract(a.x / 2.0 + a.y * a.y * 0.75); }
 float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
 void main() {
+#ifdef LEAF_CASTER
+  if(texture2D(map,vUv).a*opacity<=alphaRef) discard;
+#endif
 #ifndef UNLIT
   if (ghost > 0.5 && mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0) < 1.0) discard;
   if (dissolve > 0.0 && bayer4(gl_FragCoord.xy) < dissolve) discard;
@@ -568,6 +950,30 @@ void main() {
   gl_FragColor = vec4(0.0);
 }`;
 export const programSources = { VERT, FRAG, DEPTH_FRAG };
+const leafTwins = new WeakMap();
+export function leafShadowMaterial(m){
+  if (!(m?.defines?.WIND_LEAVES || (m?.defines?.ENDOR_WOODLAND && m?.defines?.ALPHA)) || !m.visible || m.vertexShader !== VERT) return null;
+  let d = leafTwins.get(m);
+  if (!d) {
+    // A blended leaf can have no colour-pass alpha test (ref < 0). Passing that
+    // sentinel to the depth pass would let even fully transparent texels cast.
+    // Read the FX state live; the mounted technique can resolve after first draw.
+    const uniforms = {
+      ...m.uniforms,
+      alphaRef: { get value() {
+        const ref = m.uniforms.alphaRef.value;
+        if (!m.transparent) return ref;
+        // Grass's 8/255 fringe test is not a silhouette; cast from the dense blades.
+        if (m.userData.grassCard && !m.depthWrite) return Math.max(.55, ref);
+        return ref < 0 ? .5 : ref;
+      } }
+    };
+    d = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: DEPTH_FRAG, defines: { ...m.defines, LEAF_CASTER: 1 },
+      uniforms, side: THREE.DoubleSide, colorWrite: false });
+    leafTwins.set(m, d);
+  }
+  return d;
+}
 const depthTwins = new WeakMap();
 export function depthMaterial(m) {
   if (!m || !m.isShaderMaterial || !m.userData || !m.userData.depthOk || m.depthWrite === false || m.vertexShader !== VERT) return null;
@@ -610,7 +1016,46 @@ function emissiveAdditiveColor(emissive) {
   return new THREE.Color(level, level, level);
 }
 
-function makeMaterial(mat, format, teamColor, selfShadow = false) {
+const zeroRGB = value => value?.length >= 3 && value[0] === 0 && value[1] === 0 && value[2] === 0;
+
+// Army Painter palettes are bounded. Scrubbing a colour can ask for hundreds of
+// materials, but every palette shares one compiled program, so dropping the
+// oldest cache entries only lets the garbage collector reclaim the wrappers.
+const PALETTE_MATERIAL_LIMIT = 96;
+const paletteEntries = [];
+export const paletteMaterialCount = () => paletteEntries.length;
+
+function retainPalette(key, m) {
+  if (!m.userData?.palette) return;
+  const at = paletteEntries.indexOf(key);
+  if (at >= 0) paletteEntries.splice(at, 1);
+  paletteEntries.push(key);
+  while (paletteEntries.length > PALETTE_MATERIAL_LIMIT) {
+    const old = paletteEntries.shift();
+    if (old !== key) materialCache.delete(old);
+  }
+}
+
+function liveryUniformSet(paint, bounds) {
+  const v = liveryUniformValues(paint, bounds, LIVERY_AMOUNT);
+  return {
+    liveryColor0: { value: new THREE.Vector4(...v.colors[0]) },
+    liveryColor1: { value: new THREE.Vector4(...v.colors[1]) },
+    liveryColor2: { value: new THREE.Vector4(...v.colors[2]) },
+    liveryColor3: { value: new THREE.Vector4(...v.colors[3]) },
+    liveryCenter: { value: new THREE.Vector3(...v.center) },
+    liveryHalf: { value: new THREE.Vector3(...v.half) },
+    liveryParams: { value: new THREE.Vector4(v.pattern, v.amount, 0, 0) }
+  };
+}
+
+const propSources = new WeakMap();
+export function sceneryMaterial(original, role) {
+  const src = propSources.get(original);
+  const finish = src && !original.defines?.NATIVE_MESH_GLOSS_EMISSIVE && naturalSlot(role, src.mat.shader, src.mat.params.BaseTexture);
+  return finish ? makeMaterial(src.mat, src.format, null, src.selfShadow, null, null, finish) : original;
+}
+function makeMaterial(mat, format, teamColor, selfShadow = false, livery = null, bounds = null, finish = '') {
   const shader = mat.shader;
   const p = mat.params;
   const nebula = shader === 'nebula.fx';
@@ -618,6 +1063,14 @@ function makeMaterial(mat, format, teamColor, selfShadow = false) {
   const nativeAdditive = /^(mesh|rskin)additive(vcolor|2x)?\.fx$/.test(shader) || emissiveAdditive || nebula;
   const uvScrollRate = nativeAdditive ? (p.UVScrollRate || [0, 0]).map(v => v * (nebula ? 3 : 1)) : null;
   const skinned = /RSkin|B4I4/.test(format);
+  const additive = ADDITIVE.test(shader),
+    alpha = !additive && ALPHA.test(shader);
+  const unlit = additive || UNLIT.test(shader) || (!finish && shader === 'batchmeshalpha.fx');
+  const emissiveOnly = shader === 'meshgloss.fx' && zeroRGB(p.Diffuse) && zeroRGB(p.Specular);
+  // Paint only lit hull materials. Effects, skies, shields, additive passes and
+  // the glow-only gloss pass keep their stock colour, blending and depth state.
+  const paint = livery && liveryPaintable(shader, { additive, unlit, nativeAdditive, nebula, emissiveOnly }) ? livery : null;
+  const paintFrame = paint ? bounds || liveryBounds() : null;
   const key =
     shader === 'planet.fx'
       ? shader +
@@ -646,10 +1099,14 @@ function makeMaterial(mat, format, teamColor, selfShadow = false) {
           p.FowDimAllowed ?? '',
           uvScrollRate?.slice(0, 2).join() || '',
           gfx.shader | 0,
-          selfShadow ? 'shadowed' : ''
+          selfShadow ? 'shadowed' : '', finish,
+          paint ? `paint:${liveryKey(paint)}:${paintFrame.key}` : ''
         ].join('|');
   let m = materialCache.get(key);
-  if (m) return m;
+  if (m) {
+    retainPalette(key, m);
+    return m;
+  }
   if (shader === 'meshshield.fx') {
     m = makeShieldMaterial(p, format);
     materialCache.set(key, m);
@@ -662,17 +1119,16 @@ function makeMaterial(mat, format, teamColor, selfShadow = false) {
     materialCache.set(key, m);
     return m;
   }
-  const additive = ADDITIVE.test(shader),
-    alpha = !additive && ALPHA.test(shader);
-  const unlit = additive || UNLIT.test(shader) || shader === 'batchmeshalpha.fx';
   const defines = {};
   if (additive) defines.ADDITIVE = 1;
   if (nativeAdditive) defines.NATIVE_MESH_ADDITIVE = 1;
   if (nebula) defines.NEBULA = 1;
-  const zeroRGB = value => value?.length >= 3 && value[0] === 0 && value[1] === 0 && value[2] === 0;
-  if (shader === 'meshgloss.fx' && zeroRGB(p.Diffuse) && zeroRGB(p.Specular)) defines.NATIVE_MESH_GLOSS_EMISSIVE = 1;
+  if (emissiveOnly) defines.NATIVE_MESH_GLOSS_EMISSIVE = 1;
   if (alpha) defines.ALPHA = 1;
+  if (!skinned && leafy(shader,p.BaseTexture)) defines.WIND_LEAVES=1;
   if (unlit) defines.UNLIT = 1;
+  if (paint) defines.LIVERY = 1;
+  if (finish) defines[finish === 'stone' ? 'NATURAL_STONE' : 'NATURAL_PLANT'] = 1;
   if (shader.includes('colorize') && teamColor) defines.COLORIZE = 1;
   const detail = gfx.shader | 0;
   if (shader.includes('bump') && p.NormalTexture && detail >= 2) defines.BUMP = 1;
@@ -682,6 +1138,9 @@ function makeMaterial(mat, format, teamColor, selfShadow = false) {
   } else if (specGlow) defines.SPECGLOW = 1;
   else if (p.GlossTexture && !unlit) defines.GLOSSMAP = 1;
   else if (shader.includes('gloss')) defines.GLOSS = 1;
+  const knownFinish = /^(?:(?:rskin|mesh)(?:bump|gloss|reflect)(?:colorize)?|(?:terrainmesh|batchmesh)(?:bump|gloss))\.fx$/.test(shader);
+  if (!finish && !alpha && !unlit && !emissiveOnly && (defines.SPECGLOW || (knownFinish && (defines.BUMP || defines.REFLECT || defines.GLOSS || defines.GLOSSMAP)
+    && p.Specular?.slice?.(0, 3).some(c => c > 0)))) defines.MAP_FINISH = 1;
   if (format.endsWith('C')) defines.USE_VCOLOR = 1;
   if (FOW_DIMMED.test(shader) && p.FowDimAllowed !== 0 && p.FowDimAllowed !== false) defines.FOW_DIM = 1;
   const rocky = !unlit && /asteroid/i.test(p.BaseTexture || '');
@@ -689,9 +1148,8 @@ function makeMaterial(mat, format, teamColor, selfShadow = false) {
   if (skinned) defines.SKINNED = 1;
   if (selfShadow && !unlit) defines.SELF_SHADOW = 1;
   const c3 = (v, d) => (Array.isArray(v) ? new THREE.Color(v[0], v[1], v[2]) : new THREE.Color(d, d, d));
-  const diffuse = emissiveAdditive
-    ? emissiveAdditiveColor(p.Emissive)
-    : c3(nativeAdditive ? p.Color : p.Diffuse || p.Color, 1);
+  const hullFile = name => shader === 'meshbumpcolorize.fx' ? refitMaterialName(name,p.BaseTexture,p.NormalTexture) : name;
+  const diffuse = emissiveAdditive ? emissiveAdditiveColor(p.Emissive) : c3(nativeAdditive ? p.Color : p.Diffuse || p.Color, 1);
   if (shader === 'meshadditive2x.fx') diffuse.multiplyScalar(2);
   m = new THREE.ShaderMaterial({
     vertexShader: VERT,
@@ -700,11 +1158,12 @@ function makeMaterial(mat, format, teamColor, selfShadow = false) {
     uniforms: {
       ...lighting,
       ...boltLights,
-      map: { value: p.BaseTexture ? loadTexture(p.BaseTexture) : whiteTexture() },
+      ...blastLights,
+      map: { value: p.BaseTexture ? loadTexture(hullFile(p.BaseTexture)) : whiteTexture() },
       normalMap: {
         value:
           (defines.BUMP || defines.SPECGLOW || defines.REFLECT) && p.NormalTexture
-            ? loadTexture(p.NormalTexture)
+            ? loadTexture(hullFile(p.NormalTexture))
             : defines.SPECGLOW
               ? blackTexture()
               : whiteTexture()
@@ -729,7 +1188,8 @@ function makeMaterial(mat, format, teamColor, selfShadow = false) {
       ...(nebula ? { nebulaWave: { value: new THREE.Vector3(p.DistortionScale ?? 0, p.SFreq ?? 0, p.TFreq ?? 0) } } : {}),
       ...(rocky ? { detailScale: { value: 0.09 } } : {}),
       ...(defines.REFLECT ? { skyAtlas } : {}),
-      ...(skinned ? { boneMatrices: { value: IDENTITY_BONES } } : {})
+      ...(skinned ? { boneMatrices: { value: IDENTITY_BONES } } : {}),
+      ...(paint ? liveryUniformSet(paint, paintFrame) : {})
     },
     side: (additive || alpha) && !/nebula/.test(shader) ? THREE.FrontSide : THREE.DoubleSide,
     transparent: additive || alpha,
@@ -742,8 +1202,11 @@ function makeMaterial(mat, format, teamColor, selfShadow = false) {
     m.blendDst = THREE.OneFactor;
     m.blending = THREE.CustomBlending;
   }
+  m.userData.stockDestroyerPaint = shader === 'meshbumpcolorize.fx' && /^ev_stardestroyer(?:\.(?:dds|tga))?$/i.test((p.BaseTexture || '').split(/[\\/]/).pop());
   m.userData.additive = additive;
   m.userData.alpha = alpha;
+  if (shader === 'grass.fx') m.userData.grassCard = true;
+  m.userData.palette = !!(paint || teamColor);
   if (shader === 'skydome.fx') m.userData.ignoresLightScale = true;
   if (emissiveAdditive) m.userData.lightScaleGain = Math.max(1, 1 + (Number(p.Emissive) || 0));
   const base = m.uniforms.map.value;
@@ -756,7 +1219,9 @@ function makeMaterial(mat, format, teamColor, selfShadow = false) {
   if (!skinned && !alpha) instanceable.add(m);
   if (!skinned && alpha) alphaInstanceable.add(m);
   if (skinned && !alpha) skinBatchable.add(m);
+  if (!finish && !teamColor && !paint && !skinned) propSources.set(m, { mat, format, selfShadow });
   materialCache.set(key, m);
+  retainPalette(key, m);
   hideWithoutShader(shader, m);
   return m;
 }
@@ -767,7 +1232,11 @@ function hideWithoutShader(shader, m) {
   let found = shaderFound.get(shader);
   if (!found) {
     const file = shader.replace(/\.fx$/i, '.fxo'),
-      look = path => fetchBinary(path).then(b => !!b, () => false);
+      look = path =>
+        fetchBinary(path).then(
+          b => !!b,
+          () => false
+        );
     found = look('Data/Art/Shaders/' + file).then(ok => ok || look('Data/Art/Shaders/Engine/' + file));
     shaderFound.set(shader, found);
   }
@@ -1133,10 +1602,14 @@ export class ModelInstance {
 
 const NO_EULER = () => {};
 const prebuilt = new Map();
-export function prebuildModel(model, teamColor, n) {
+// A pooled instance is only reusable for the exact paint it was built with.
+const paintToken = (teamColor, livery) => [teamColor ? teamColor.getHexString() : '-', liveryKey(livery)].join('/');
+export function prebuildModel(model, teamColor, n, livery = null) {
+  const paint = normalizeLivery(livery, teamColor);
   let list = prebuilt.get(model);
   if (!list) prebuilt.set(model, (list = []));
-  for (let i = 0; i < n; i++) list.push({ teamColor, inst: buildModel(model, { teamColor, fresh: true }) });
+  for (let i = 0; i < n; i++)
+    list.push({ teamColor, paint: paintToken(teamColor, paint), inst: buildModel(model, { teamColor, livery, fresh: true }) });
 }
 export function dropPrebuilt() {
   prebuilt.clear();
@@ -1170,10 +1643,15 @@ export function fleetLodMeshes(inst) {
 const HEADLESS = new THREE.MeshBasicMaterial();
 const seeThrough = shader => shader === 'meshshield.fx' || (shader !== 'planet.fx' && (ADDITIVE.test(shader) || ALPHA.test(shader)));
 
-export function buildModel(model, { teamColor = null, showHidden = false, alt = 0, alts = false, fresh = false, headless = false } = {}) {
+export function buildModel(
+  model,
+  { teamColor = null, livery = null, showHidden = false, alt = 0, alts = false, fresh = false, headless = false } = {}
+) {
+  const paint = normalizeLivery(livery, teamColor);
   if (!fresh && !headless && !showHidden && !alt && !alts) {
-    const list = prebuilt.get(model),
-      i = list ? list.findIndex(e => e.teamColor === teamColor) : -1;
+    const token = paintToken(teamColor, paint),
+      list = prebuilt.get(model),
+      i = list ? list.findIndex(e => e.teamColor === teamColor && e.paint === token) : -1;
     if (i >= 0) return list.splice(i, 1)[0].inst;
   }
   diag.note('model');
@@ -1254,7 +1732,17 @@ export function buildModel(model, { teamColor = null, showHidden = false, alt = 
         }
         continue;
       }
-      const obj = new THREE.Mesh(geo, makeMaterial(sub.material, sub.geometry.format, teamColor, selfShadow));
+      const obj = new THREE.Mesh(
+        geo,
+        makeMaterial(
+          sub.material,
+          sub.geometry.format,
+          teamColor,
+          selfShadow,
+          paint,
+          paint ? liveryBounds(geo.boundingBox?.min, geo.boundingBox?.max) : null
+        )
+      );
       if (obj.material.defines.SKINNED && sub.geometry.boneMap) {
         const skin = { mesh: obj, boneMap: sub.geometry.boneMap, mats: null };
         inst.skins.push(skin);
@@ -1281,6 +1769,13 @@ export function buildModel(model, { teamColor = null, showHidden = false, alt = 
   }
   for (const px of model.proxies) {
     inst.proxies.push({ name: px.name, bone: inst.bones[px.bone] || inst.root, hidden: px.hidden });
+  }
+  if (!headless) {
+    const authored = fleetLodMeshes(inst);
+    for (const group of new Set(inst.meshByName.values())) for (const mesh of group.children) {
+      if (mesh.isMesh && !mesh.material.transparent && !mesh.material.userData.additive && mesh.material.depthWrite !== false)
+        registerModelPart(mesh, authored.get(mesh));
+    }
   }
   if (inst.box.isEmpty()) inst.box.set(new THREE.Vector3(-1, -1, -1), new THREE.Vector3(1, 1, 1));
   const size = inst.box.getSize(new THREE.Vector3());

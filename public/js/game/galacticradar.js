@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { viewOptions as prefs } from './viewpreferences.js';
 import { db } from '../gamedata.js';
 import { loadALO } from '../alo.js';
 import { loadALA, animName, AnimState } from '../ala.js';
@@ -224,12 +225,12 @@ export class GalacticRadar {
         this.colorKeys.set(appearance.color, { floats, key: floats.join(',') });
       }
       const color = this.colorKeys.get(appearance.color);
-      row.width = (rect?.w || 0) * scale;
-      row.height = (rect?.h || 0) * scale;
+      row.width = (rect?.w || 0) * scale * prefs.radarScale;
+      row.height = (rect?.h || 0) * scale * prefs.radarScale;
       row.known = appearance.known;
       const key = name + '|' + color.key,
         alpha = appearance.alpha,
-        state = key + '|' + alpha + '|' + selected;
+        state = key + '|' + alpha + '|' + selected + '|' + prefs.radarScale;
       if (row.key !== state) {
         row.key = state;
         if (!this.urls.has(key)) {
@@ -333,7 +334,7 @@ export class GalacticRadar {
     }
     const r = this.mesh.rect,
       k = Math.max(1, Math.min(3, Math.ceil(this.host.scale * devicePixelRatio)));
-    const key = k + '|' + points.map(n => n.toFixed(1)).join(',');
+    const key = k + '|' + prefs.radarLine + '|' + points.map(n => n.toFixed(1)).join(',');
     if (key === this.outlineKey) return true;
     this.outlineKey = key;
     const cv = this.outline,
@@ -345,7 +346,7 @@ export class GalacticRadar {
     g.setTransform(k, 0, 0, k, 0, 0);
     g.clearRect(0, 0, r.w, r.h);
     g.strokeStyle = 'rgba(255,255,255,0.8)';
-    g.lineWidth = 1;
+    g.lineWidth = prefs.radarLine;
     g.beginPath();
     for (let i = 0; i < 8; i += 2) (i ? g.lineTo : g.moveTo).call(g, points[i], points[i + 1]);
     g.closePath();
@@ -364,9 +365,9 @@ export class GalacticRadar {
     }
     const v = this.game.view,
       away = !!(this.game.baseLayout?.open || this.game.battle);
-    const outline = !away && this.host && this.drawOutline();
+    const outline = prefs.radarView && !away && this.host && this.drawOutline();
     if (this.outline.hidden !== !outline) this.outline.hidden = !outline;
-    const hidden = !!(outline || v.zoom || v.dir || away);
+    const hidden = !prefs.radarView || !!(outline || v.zoom || v.dir || away);
     if (this.canvas.hidden !== hidden) this.canvas.hidden = hidden;
     if (this.canvas.hidden || !this.host) return;
     const size = this.comps

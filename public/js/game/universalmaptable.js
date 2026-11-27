@@ -1,4 +1,5 @@
-import { planetRange, countLabel } from './universalmaplist.js';
+import { planetRange } from './universalmaplist.js';
+import { showPlanetCount } from './universalplanetcount.js';
 import { mapSections, scenarioTypes } from './universalmapgroups.js';
 import { sidebarTabs } from './universalsidebartabs.js';
 import { mapOrder } from './universalmaporder.js';
@@ -48,20 +49,8 @@ export function mapTable(pickMap, pickDate, clearChoice) {
     return { tr, b, number };
   }
   function setCount(cell, [lo, hi], setup) {
-    const text = countLabel([lo, hi], setup);
-    if (cell.title === text) return text;
-    cell.title = text;
     order.range(cell.parentNode, lo, hi);
-    const tint = n => {
-      const span = document.createElement('span');
-      span.className = 'uc-count-' + (n < 50 ? 'low' : n < 100 ? 'mid' : 'high');
-      span.textContent = n;
-      return span;
-    };
-    cell.replaceChildren(tint(lo));
-    if (hi !== lo) cell.append('–', tint(hi));
-    if (setup) cell.append(' setup');
-    return text;
+    return showPlanetCount(cell, [lo, hi], setup);
   }
   function leaf(body, item, g) {
     const { f, title } = item,

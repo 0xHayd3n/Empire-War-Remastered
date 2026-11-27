@@ -186,9 +186,11 @@ export class SpeechPlayer {
           record.offset = record.duration;
           record.state = 'ended';
           record.reason = 'ended';
+          this.audio.refreshMusicSpeech?.();
         }
       };
       source.start(0, record.offset);
+      this.audio.refreshMusicSpeech?.();
       this.emit('start', record);
     } catch (error) {
       this.fail(record, error.message);
@@ -198,6 +200,7 @@ export class SpeechPlayer {
     this.errors.set(record.name, message);
     record.state = 'ended';
     record.reason = 'failed';
+    this.audio.refreshMusicSpeech?.();
   }
   disconnect(record) {
     if (record.source) {
@@ -207,6 +210,7 @@ export class SpeechPlayer {
       } catch {}
       record.source.disconnect();
       record.source = null;
+      this.audio.refreshMusicSpeech?.();
     }
     record.gain?.disconnect();
     record.gain = null;

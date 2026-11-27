@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import { composeGround } from '../public/js/game/ground-composition.js';
+import { nabooRecipe as recipe } from '../public/js/naboo-recipe.js';
+import { auditDonors } from './remaster/surface-audit.mjs';
+
+assert.equal(recipe.edition, 'foc');
+assert.equal(recipe.path, 'DATA/ART/MAPS/_MP_LAND_NABOO.TED');
+assert.equal(Object.keys(recipe.slots).length, 20);
+assert.deepEqual(Object.entries(recipe.slots).filter(([, s]) => s.use === 'built').map(([i]) => +i), [47, 62]);
+assert.equal(recipe.slots[48].family, 'worn-track');
+const a = auditDonors(recipe.donors);
+assert(Math.min(...a['court-sett'].normalCorrelation) > 0.5, 'Recessed Theed joints must not be inverted');
+assert.notEqual(recipe.donors.find(d => d.id === 'meadow-turf').colorHash, recipe.donors.find(d => d.id === 'open-cover').colorHash);
+const c = recipe.composition, used = [...c.channels, 47], size = 48, width = 41, height = 39;
+const t = { size, width, height, layerIndex: new Uint8Array(size * size), heights: new Float32Array(size * size) };
+const zones = { built: new Set([7]), authorized: (_, s) => s === 7 };
+const sample = (props = []) => Array.from(composeGround(t, used, c, null, props, zones).sample(400, 400, new Float64Array(7)));
+const grass = sample();
+assert(grass[0] + grass[1] > .95 && grass[4] + grass[5] === 0 && grass[6] === 0);
+const underTree = sample([{ modelFile: c.treeModels[0], x: 400, y: 400 }]);
+assert(underTree[6] > .68 && underTree[0] < grass[0]);
+t.layerIndex.fill(c.bedHints[0]);
+assert(sample()[3] > .9, 'Painted cut floor lost its gravel');
+for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) t.heights[y * size + x] = 29 * y;
+assert(sample()[5] > .93, 'Gravel flooded a steep bank');
+console.log('PASS Naboo: exact FoC binding, meadow/shoulder pair, localized roots, mapped beds, bank projection and recessed court stone');

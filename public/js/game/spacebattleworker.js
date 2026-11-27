@@ -1,5 +1,6 @@
 import './workeroverlay.js';
 import * as THREE from '../../vendor/three/build/three.module.js';
+import { prepareDetachments } from './skirmishdetachments.js';
 import { loadGameData, db } from '../gamedata.js';
 import { setTacticalRules } from './tacticalrules.js';
 import { loadMap } from '../ted.js';
@@ -15,6 +16,8 @@ import { loadALA, animName } from '../ala.js';
 import { findFiles } from '../vfs.js';
 import { loadPrioritySets } from './priorities.js';
 import { SpaceRecorder } from './spacerecord.js';
+import { installBattlePhysics } from './battle-physics.js';
+import { loadWreckPhysics } from './rapier-runtime.js';
 import { plain, keeper, hookBattle, stepRecord, guard, send, applyDirect } from './spacebattlehooks.js';
 import { ScriptHost } from './scripts.js';
 import { SkirmishAI } from './ai.js';
@@ -36,6 +39,10 @@ const nothing = new Proxy(function () {}, { get: (t, k) => (k === Symbol.toPrimi
 
 const fixedSeed = m => (m.net ? m.net.seed : m.record ? m.record.seed : null);
 
+// One worker, one mount and language. Preflight reads immutable input only;
+// the authoritative world, IDs, seed and AI are created only from the run snapshot.
+let dataReady, scriptReady;
+const definitions = ({language, universalProfile}) => (dataReady ||= loadGameData(() => {}, { language, universalProfile }));
 async function setUp(m, events) {
   const seed = fixedSeed(m);
   const fixed = seed !== null;
@@ -46,7 +53,8 @@ async function setUp(m, events) {
     ms[k] = Math.round(n - t);
     t = n;
   };
-  await loadGameData(() => {}, { language: m.language });
+  await definitions(m);
+  await prepareDetachments(m.setup, {restoring: !!m.save});
   lap('data');
   const map = m.map
     ? { ...m.map, objects: m.map.objects.map(o => ({ ...o, type: db.type(o.type) })).filter(o => o.type) }
@@ -59,16 +67,19 @@ async function setUp(m, events) {
     const ty = db.type(n);
     if (ty) modelsForType(ty, null, names, seen);
   }
-  await preloadModels([...names].filter(Boolean));
-  const clips = new Set((await findFiles('MODELS\\\\[^\\\\]*_(IDLE|DIE|DEPLOY|UNDEPLOY|BUILD)_00\\.ALA$')).map(n => n.split('\\').pop()));
-  const wanted = [];
-  for (const n of names)
-    for (const kind of ['IDLE', 'DIE', 'DEPLOY', 'UNDEPLOY', 'BUILD']) {
-      const a = animName(n, kind);
-      if (clips.has(a)) wanted.push(a);
-    }
-  await Promise.all(wanted.map(a => loadALA(a)));
-  await loadPrioritySets().catch(() => null);
+  await Promise.all([
+    preloadModels([...names].filter(Boolean)),
+    findFiles('MODELS\\\\[^\\\\]*_(IDLE|DIE|DEPLOY|UNDEPLOY|BUILD)_00\\.ALA$').then(files => {
+      const clips = new Set(files.map(n => n.split('\\').pop())), wanted = [];
+      for (const n of names)
+        for (const kind of ['IDLE', 'DIE', 'DEPLOY', 'UNDEPLOY', 'BUILD']) {
+          const a = animName(n, kind);
+          if (clips.has(a) || /^UXA/i.test(a)) wanted.push(a);
+        }
+      return Promise.all(wanted.map(a => loadALA(a)));
+    }),
+    loadPrioritySets().catch(() => null)
+  ]);
   lap('models');
 
   if (fixed) {
@@ -81,11 +92,13 @@ async function setUp(m, events) {
     audio: events ? keeper('audio', events) : nothing,
     map
   });
+  if (events && m.ramRule === 1 && !m.net) installBattlePhysics(w,await loadWreckPhysics(),'space',m.battlePhysicsRule === 1 ? 1 : 0);
   w.modelOpts = { headless: true };
   w.artReady = () => true;
   w.onEvent = () => {};
   w.fog = !!m.fog;
   w.autofire = m.autofire;
+  w.presentArmorHits = !!events && !!m.presentArmorHits;
   w.skirmish = !!m.skirmish;
   w.campaign = !!m.campaign;
   w.tacticalRules = setTacticalRules(m.rules || { campaign: w.campaign });
@@ -98,6 +111,7 @@ async function setUp(m, events) {
   for (const p of m.players) {
     const pl = w.addPlayer(
       new Player(p.id, teams[p.team], {
+        faction: p.faction,
         human: p.human,
         credits: p.credits,
         popCap: p.popCap,
@@ -171,6 +185,11 @@ onmessage = async e => {
   if (m && m.k === 'vfsr') return;
   globalThis.SWR_BASE = m.base;
   try {
+    if (m.k === 'prepare') {
+      definitions(m).catch(() => {}); // run joins this promise and reports any failure.
+      if (m.scripts) scriptReady = ScriptHost.prepare().catch(() => null);
+      return;
+    }
     if (m.k === 'run') {
       globalThis.SWR_NOJOBS = !!m.nojobs;
       globalThis.SWR_SPAWN_JOBS = (sh, n) => postMessage({ k: 'spawnJobs', sh, n });
@@ -219,7 +238,7 @@ onmessage = async e => {
   }
 };
 
-async function minds(w, m, map, events, thing) {
+async function minds(w, m, map, events, thing, scriptInputs) {
   const fixed = fixedSeed(m) !== null;
   const has = k => (m.switches || []).includes(k);
   const tell =
@@ -240,7 +259,7 @@ async function minds(w, m, map, events, thing) {
   };
   const scripts = has('noscripts')
     ? null
-    : await ScriptHost.create(game).catch(e => {
+    : await ScriptHost.create(game, scriptInputs).catch(e => {
         console.warn('space worker: scripts', e);
         return null;
       });
@@ -337,11 +356,12 @@ async function run(m) {
   const fixed = fixedSeed(m) !== null;
   const events = [],
     spawns = [];
+  const scriptInputs = !m.switches?.includes('noscripts') && (scriptReady || ScriptHost.prepare().catch(() => null));
   const { w, ms, ids, map, thing } = await setUp(m, events);
   w.onEvent = (kind, data) => {
     events.push(['world', 'onEvent', [kind, plain(data)]]);
   };
-  const { think, game, takeOver, scriptsFrom } = await minds(w, m, map, events, thing);
+  const { think, game, takeOver, scriptsFrom } = await minds(w, m, map, events, thing, scriptInputs);
   events.length = 0;
   const told = w.onEvent;
   hookBattle(w, events, spawns);
@@ -360,7 +380,8 @@ async function run(m) {
     steps = 0;
   const hashLog = [];
   const said = new Set();
-  const replay = m.record?.replay || null;
+  const replay = m.record?.replay || null,
+    replayRate = [1,2,4,8,16].includes(m.record?.replayRate) ? m.record.replayRate : REPLAY_SPEED;
   const replayInputs = new Map();
   for (const [at, ...entry] of replay?.inputs || []) {
     if (at >= replay.until) continue;
@@ -528,14 +549,14 @@ async function run(m) {
       }
     }
   };
-  postMessage({ k: 'ready', ms, ids, scriptsFrom });
+  postMessage({ k: 'ready', ms, ids, scriptsFrom, ramRule: w.ramImpacts ? 1 : 0, battlePhysicsRule:w.battlePhysicsRule || 0 });
   if (m.net) return;
   let next = performance.now();
   const tick = () => {
     const now = performance.now();
     let n = 0;
     if (paused) next = now;
-    const rate = replaying ? REPLAY_SPEED : speed;
+    const rate = replaying ? replayRate : speed;
     while (!paused && next <= now && n < (replaying ? 16 : 4) && unseen < AHEAD) {
       if (fixed && w.paths && !w.paths.ready()) {
         routesPending = true;

@@ -17,6 +17,7 @@ import {
 } from '../nativefont.js';
 import { onLanguageChange } from '../language.js';
 import { dialogFontPixels, uiTextHeight } from './dialogtext.js';
+import { startingFilters } from './battledrafts.js';
 import { showSplash, campaignDestination } from '../splash.js';
 
 import * as THREE from 'three';
@@ -24,12 +25,12 @@ import { BenchOverlay } from '../benchoverlay.js';
 import { db, switchLanguage, categoryMask } from '../gamedata.js';
 import { loadModel, planetLighting, lighting, updateBillboards, planetClock, programSources } from '../model.js';
 import { env as gpuEnv, wantGPU } from '../gpu/env.js';
-import { loadTexture } from '../dds.js';
+import { loadTexture, prepareSceneTextures } from '../dds.js';
 import { RouteBatches } from './routebatch.js';
 import { loadALA, animName, AnimState } from '../ala.js';
 import { fontFamily, loadGameFonts } from '../fonts.js';
 import { fontPixels } from '../fontpolicy.js';
-import { gfx, pixelRatio, gammaOn } from '../gfx.js';
+import { gfx, livePlanetAir, pixelRatio, gammaOn } from '../gfx.js';
 import { loadCampaignData, startingGalaxy, snapshotGalaxy, applyGalaxy, PLANET_RADIUS, isHumanFaction, onOrbit, placeStartingForce } from './galaxy.js';
 import { GalacticNet, orders, runCommand, galaxyHash, recordRef } from './galacticnet.js';
 import { MpBattles } from './galacticmpbattle.js';
@@ -110,6 +111,7 @@ import {
   VIS
 } from './galacticfog.js';
 import { routeStyle, routeSettings, routeAxes } from './galacticroutes.js';
+import { ModelDetail } from './model-detail.js';
 import { placeGalacticModel, renderGalacticScenes } from './galacticscenes.js';
 import { GalacticModelFade } from './galacticfade.js';
 import { strategicIndex, strategicMultiplier } from './galacticspeed.js';
@@ -123,6 +125,8 @@ import { startStrategicMusic } from './galacticmusic.js';
 import { stepDualFlash } from './tutorialrewards.js';
 import { TacticalMovies } from './tacticalmovies.js';
 import { pressed, held } from './keybinds.js';
+import { saveBeforeConflict, cycleCheckpoint } from './conquestcheckpoints.js';
+import { viewOptions as prefs, wheelDirection } from './viewpreferences.js';
 import { edgeCursor, panAxis } from './edge-scroll.js';
 import { planetMaxStarbase } from './planetstats.js';
 
@@ -217,6 +221,7 @@ export class GalacticGame {
   }
 
   dispose() {
+    this.modelDetail?.dispose();
     this.modeSuspended = true;
     this.over = true;
     this.countdownBox?.remove();
@@ -248,8 +253,12 @@ export class GalacticGame {
     const initial = campaignDestination(this.setup.campaign);
     let finishSplash = showSplash(this.setup.restore ? 'save' : initial.kind, initial.title);
     P('Reading the campaigns', 0);
-    const data = (this.data = await loadCampaignData());
-    await loadBlackMarket();
+    // Start immutable script/AI input alongside campaign IO. The VM, story
+    // callbacks, AI controllers and opening draw keep their original order.
+    const inputs = Promise.all([GalacticStoryHost.prepare(!!this.setup.restore), GalacticAI.prepareBrain()]);
+    inputs.catch(() => {}); // Report the original error when joined below, even if graphics take longer.
+    const [data] = await Promise.all([loadCampaignData(), loadBlackMarket()]);
+    this.data = data;
     if (this.setup.net) seedSim(this.setup.seed >>> 0);
     const exactPath = (this.setup.restore || this.setup).universalPath === 1;
     const want = String((exactPath && this.setup.restore?.campaign) || this.setup.campaign || '').toUpperCase();
@@ -300,7 +309,8 @@ export class GalacticGame {
     this.victory = new GalacticVictory(this);
     this.me = this.setup.net ? this.localFaction : db.faction(g.active)?.name || g.players[0]?.faction;
     stepVisibility(g, this.me);
-    this.filters = g.displayFilters || 0;
+    this.filters = g.displayFilters ?? startingFilters();
+    g.displayFilters = this.filters;
 
     const num = (k, d) => C.num(k, d),
       vec = (k, d) => {
@@ -372,82 +382,43 @@ export class GalacticGame {
     for (const key of Object.keys(planetLighting)) planetLighting[key].value.copy(lighting[key].value);
 
     P('Placing the planets', 0.1);
-    await loadGameFonts().catch(() => null);
-    let done = 0;
-    await Promise.all(
-      g.planets.map(async (p, i) => {
-        const file = destroyedPlanetModel(p);
-        const inst = file && (await loadModel(file, { alts: p.background ? false : [0, 1, 2] }).catch(() => null));
-        if (inst) {
-          placeGalacticModel(inst.root, p);
-          new GalacticModelFade(inst, p.type, p.type.bool('In_Background'));
-          const scene = p.type.bool('In_Background')
-            ? this.backgroundScene
-            : p.type.bool('In_Midground')
-              ? this.midgroundScene
-              : p.type.bool('In_Midforeground')
-                ? this.midforegroundScene
-                : this.scene;
-          scene.add(inst.root);
-          if (scene === this.scene) inst.root.userData.cull = true;
-          if (p.type.bool('Loop_Idle_Anim_00')) {
-            const a = await Promise.resolve(loadALA(animName(file, 'IDLE'))).catch(() => null);
-            if (a) this.idlers.push(new AnimState(inst, a, { loop: true, speed: p.type.num('Idle_Anim_00_Rate_Mod', 1) }));
-          }
-        }
-        this.planetViews[i] = { inst, name: db.t(p.type.str('Text_ID')) || p.name, show: !p.background };
-        P(`Placing the planets (${++done}/${g.planets.length})`, 0.1 + (0.8 * done) / g.planets.length);
-      })
-    );
-    this.bounds = this.planetBounds();
-    this.clampPan();
-    this.marker = await loadModel('w_planet_select_neutral.alo').catch(() => null);
-    if (this.marker) {
-      this.marker.root.visible = false;
-      this.scene.add(this.marker.root);
-      this.marker.root.traverse(o => {
-        if (o.isMesh) {
-          const own = o.material.clone();
-          for (const k in o.material.uniforms)
-            if (!['diffuse', 'emissive', 'specular'].includes(k)) own.uniforms[k] = o.material.uniforms[k];
-          o.material = own;
-          o.userData.baseColors = ['diffuse', 'emissive', 'specular'].map(k => o.material.uniforms?.[k]?.value.clone());
-        }
-      });
-      const idle = await Promise.resolve(loadALA(animName('w_planet_select_neutral.alo', 'IDLE'))).catch(() => null);
-      if (idle) {
-        this.markerIdle = new AnimState(this.marker, idle, { loop: true });
-        this.idlers.push(this.markerIdle);
-      }
-    }
-    this.buildRoutes();
-    await this.buildNames();
-    P('Fleets', 0.95);
     this.fleetViews = new Map();
     this.mergeFleets();
-    await Promise.all(g.fleets.map(f => this.fleetView(f)));
+    this.buildRoutes();
+    const [command, overview] = await Promise.all([
+      loadGalacticHudAssets(this.me).then(async hud => {
+        if (!hud) return {};
+        const [radar] = await Promise.all([loadGalacticRadarAssets(hud), prepareComponentFonts(hud.comps, uiTextHeight())]);
+        return { hud, radar };
+      }),
+      loadOverviewAssets(),
+      this.loadPlanets(),
+      loadGameFonts().catch(() => null).then(() => this.buildNames()),
+      this.loadSelectionMarker(),
+      Promise.all(g.fleets.map(f => this.fleetView(f))),
+      this.audio?.speech?.load()
+    ]);
+    this.bounds = this.planetBounds();
+    this.clampPan();
 
     P('Galactic command bar', 0.98);
-    const hud = await loadGalacticHudAssets(this.me);
+    const { hud, radar } = command;
     if (hud) {
       this.human = { factionName: this.me };
       $('hud').classList.remove('hidden');
       document.body.classList.add('original-hud');
-      await prepareComponentFonts(hud.comps, uiTextHeight());
       this.ui = new GalacticBar(this, hud);
       this.scriptUI = new ScriptUI(this, hud);
       g.scriptUISnapshot = () => this.scriptUI.snapshot();
       this.screenText = new GalacticScreenText(this, hud.comps);
       this.movies = new GalacticMovies(this, hud);
-      this.radar = new GalacticRadar(this, await loadGalacticRadarAssets(hud));
+      this.radar = new GalacticRadar(this, radar);
       $('minimap').hidden = true;
     }
-    const overview = await loadOverviewAssets();
     if (overview) this.overview = new PlanetOverview(this, overview);
 
     P('Campaign story', 0.99);
     this.menus = new Menus(this);
-    await this.audio?.speech?.load();
     this.speechStoryDone = this.audio?.speech?.on('storydone', record => {
       this.screenText?.show({ id: 'TEXT_SPEECH_' + record.name, remove: true });
       if (!this.setup.net) this.story?.signal('STORY_SPEECH_DONE', record.name);
@@ -486,9 +457,10 @@ export class GalacticGame {
       this.suspendAI = g.hostSaved.suspendAI;
       this.tutorialPlayer = g.hostSaved.tutorialPlayer;
     }
-    this.story = await GalacticStoryHost.create(this, { warm: false });
+    const [prepared, brain] = await inputs;
+    this.story = await GalacticStoryHost.create(this, { warm: false, prepared, brain });
     if (g.scriptUISaved && this.scriptUI) this.scriptUI.restore(g.scriptUISaved);
-    this.ai = await GalacticAI.create(this);
+    this.ai = await GalacticAI.create(this, brain);
     if (this.story?.unwarmed) {
       this.story.unwarmed = false;
       await this.story.warm();
@@ -503,27 +475,29 @@ export class GalacticGame {
     await this.scriptUI?.ready();
 
     this.setup.menuFamily ||= exactPath ? 'conquest' : g.campaign.bool('Tutorial') ? 'tutorial' : /^Full_Story_Campaign_(Rebel|Empire|Underworld)$/i.test(g.campaign.name) ? 'story' : 'conquest';
-    finishSplash();
     if (this.setup.restore && !this.setup.result && !this.setup.net) this.setUserPaused?.(true);
-    this.bindInput();
+    this.mouse = { x: innerWidth / 2, y: innerHeight / 2, in: false };
     this.fit();
+    // Submit the actual opening camera and HUD without ticking the campaign.
+    await prepareSceneTextures(this.scene, this.backgroundScene, this.midgroundScene, this.midforegroundScene);
+    const zoom = this.placeCamera();
+    this.cullPlanets();
+    this.present(0, 0, zoom);
+    if (this.renderer.settle) {
+      await this.renderer.settle();
+      this.present(0, 0, zoom);
+    }
+    this.bindInput();
     this.unsubscribeLanguage = onLanguageChange(() => this.refreshLanguage(), 2);
     this.listen('resize', () => this.fit());
     window.game = this;
     startStrategicMusic(this);
     if (this.setup.net) await this.startNet();
     this.last = performance.now();
-    // The host owns a single plate across profile navigation. Do not reveal a
-    // ready renderer before it has actually presented the opening galaxy/UI.
-    if (exactPath && window.universalLaunch?.pending) {
-      requestAnimationFrame(now => {
-        try {
-          this.frame(now);
-        } finally {
-          window.universalLaunch.end();
-        }
-      });
-    } else requestAnimationFrame(this.frame);
+    finishSplash();
+    // A native story also owns a host presentation token, but not a Universal rules path.
+    if (window.universalLaunch?.pending) window.universalLaunch.end();
+    requestAnimationFrame(this.frame);
     if (!this.setup.restore && !this.setup.result && !this.setup.net && this.setup.menuFamily === 'conquest' && !this.noSave) {
       // A new conquest can be continued before its first battle. Never overwrite a manual slot.
       try { await putSave(snapshot(this, this.saveName()), 'conquest-opening'); }
@@ -738,7 +712,7 @@ export class GalacticGame {
     const inst = await pv.destroyedLoad;
     if (inst) {
       placeGalacticModel(inst.root, p);
-      new GalacticModelFade(inst, p.type, p.background);
+      new GalacticModelFade(inst, p.type, p.background, livePlanetAir);
       this.scene.add(inst.root);
       inst.root.userData.cull = true;
       pv.inst = inst;
@@ -1034,8 +1008,8 @@ export class GalacticGame {
         gr = L.out[1] + (L.in[1] - L.out[1]) * zoom,
         bl = L.out[2] + (L.in[2] - L.out[2]) * zoom,
         opacity = L.out[3] + (L.in[3] - L.out[3]) * zoom;
-      B.setQuad(rt, visible ? width : 0, r, gr, bl, opacity);
-      const sparks = visible && !L.neutral && zoom < 1;
+      B.setQuad(rt, visible ? width * prefs.routeWidth : 0, r, gr, bl, opacity);
+      const sparks = prefs.routeSparks && visible && !L.neutral && zoom < 1;
       rt.lastZoom = zoom;
       if (changed) {
         rt.ticks = 0;
@@ -1061,6 +1035,58 @@ export class GalacticGame {
       B.moveSparks(rt, rt.ticks);
     }
     B.flush();
+  }
+
+  async loadPlanets() {
+    const { planets } = this.galaxy;
+    let done = 0;
+    await Promise.all(
+      planets.map(async (p, i) => {
+        const file = destroyedPlanetModel(p);
+        const inst = file && (await loadModel(file, { alts: p.background ? false : [0, 1, 2] }).catch(() => null));
+        if (inst) {
+          placeGalacticModel(inst.root, p);
+          new GalacticModelFade(inst, p.type, p.type.bool('In_Background'), livePlanetAir);
+          const scene = p.type.bool('In_Background')
+            ? this.backgroundScene
+            : p.type.bool('In_Midground')
+              ? this.midgroundScene
+              : p.type.bool('In_Midforeground')
+                ? this.midforegroundScene
+                : this.scene;
+          scene.add(inst.root);
+          if (scene === this.scene) inst.root.userData.cull = true;
+          if (p.type.bool('Loop_Idle_Anim_00')) {
+            const a = await Promise.resolve(loadALA(animName(file, 'IDLE'))).catch(() => null);
+            if (a) this.idlers.push(new AnimState(inst, a, { loop: true, speed: p.type.num('Idle_Anim_00_Rate_Mod', 1) }));
+          }
+        }
+        this.planetViews[i] = { inst, name: db.t(p.type.str('Text_ID')) || p.name, show: !p.background };
+        this.progress(`Placing the planets (${++done}/${planets.length})`, 0.1 + (0.8 * done) / planets.length);
+      })
+    );
+  }
+
+  async loadSelectionMarker() {
+    this.marker = await loadModel('w_planet_select_neutral.alo').catch(() => null);
+    if (this.marker) {
+      this.marker.root.visible = false;
+      this.scene.add(this.marker.root);
+      this.marker.root.traverse(o => {
+        if (o.isMesh) {
+          const own = o.material.clone();
+          for (const k in o.material.uniforms)
+            if (!['diffuse', 'emissive', 'specular'].includes(k)) own.uniforms[k] = o.material.uniforms[k];
+          o.material = own;
+          o.userData.baseColors = ['diffuse', 'emissive', 'specular'].map(k => o.material.uniforms?.[k]?.value.clone());
+        }
+      });
+      const idle = await Promise.resolve(loadALA(animName('w_planet_select_neutral.alo', 'IDLE'))).catch(() => null);
+      if (idle) {
+        this.markerIdle = new AnimState(this.marker, idle, { loop: true });
+        this.idlers.push(this.markerIdle);
+      }
+    }
   }
 
   async buildNames() {
@@ -1188,7 +1214,8 @@ export class GalacticGame {
     this.typePortraits = new WeakMap();
     this.stackPictures = new Map();
     this.labelRasterCache = new Map();
-    await this.warmNameFonts();
+    // Labels depend on the campaign and language, not on the planet models.
+    await this.warmNameFonts(this.galaxy.planets.map(p => db.t(p.type.str('Text_ID')) || p.name));
   }
 
   overlayScale() {
@@ -1677,7 +1704,6 @@ export class GalacticGame {
     });
     addEventListener('keyup', e => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
-    this.mouse = { x: innerWidth / 2, y: innerHeight / 2, in: false };
     this.edgeCursor = edgeCursor(el, this.life.signal);
     el.addEventListener('pointermove', e => {
       this.mouse.x = e.clientX;
@@ -1857,19 +1883,20 @@ export class GalacticGame {
         const v = this.view,
           out = v.zoom === 0 && v.dir === 0,
           zoomed = v.zoom === 1 && v.dir === 0;
+        const delta = wheelDirection(e.deltaY);
         if (!out && !zoomed) {
-          if (e.deltaY < 0 && v.dir < 0 && v.planet >= 0) this.zoomIn(v.planet);
-          else if (e.deltaY > 0 && v.dir > 0) this.zoomOut();
+          if (delta < 0 && v.dir < 0 && v.planet >= 0) this.zoomIn(v.planet);
+          else if (delta > 0 && v.dir > 0) this.zoomOut();
           return;
         }
-        if (e.deltaY < 0) {
+        if (delta < 0) {
           if (zoomed) this.openBaseLayout();
           if (!out) return;
           if (this.hover >= 0) this.select(this.hover);
           if (this.selected >= 0) this.zoomIn(this.selected);
-          else if (this.zoomMap(-1)) this.anchorZoom(e.clientX, e.clientY);
+          else if (this.zoomMap(-1) && prefs.cursorZoom) this.anchorZoom(e.clientX, e.clientY);
         } else if (zoomed) this.zoomOut();
-        else if (out && this.zoomMap(1)) this.anchorZoom(e.clientX, e.clientY);
+        else if (out && this.zoomMap(1) && prefs.cursorZoom) this.anchorZoom(e.clientX, e.clientY);
       },
       { passive: false }
     );
@@ -2745,13 +2772,7 @@ export class GalacticGame {
     this.planetInfo.close();
     this.galacticLog?.close();
     this.radar?.flash(p);
-    if (!this.noSave && !this.net) {
-      try {
-        putSave(snapshot(this, db.t('TEXT_GUI_AUTO_SAVE')), 'autosave').catch(e => console.warn('autosave', e));
-      } catch (e) {
-        console.warn('autosave', e);
-      }
-    }
+    saveBeforeConflict(this);
     if (mode === 'land' && attacker === this.me) this.audio?.play(db.faction(this.me)?.str('SFXEvent_Land_Invasion_Commencing'));
     this.battle = {
       p,
@@ -3602,7 +3623,7 @@ export class GalacticGame {
         region = c.num('Strategic_Edge_Scroll_Region', 2),
         lo = c.num('Strategic_Min_Scroll_Speed', 80),
         hi = c.num('Strategic_Max_Scroll_Speed', 400),
-        speed = lo + (hi - lo) / 2,
+        speed = (lo + (hi - lo) / 2) * prefs.pan,
         dt = Math.min(1, elapsed),
         edge = !this.drag && !this.dragFleet && this.dragGround === undefined && this.edgeCursor(region);
       const r = speed * panAxis(k, 'SCROLL_RIGHT', 'SCROLL_LEFT', edge?.right),
@@ -3678,6 +3699,7 @@ export class GalacticGame {
         if (this.over) return;
       }
     }
+    cycleCheckpoint(this);
     this.stepPlanetFlashes(real);
     this.present(real, elapsed, zoom);
   }
@@ -3972,7 +3994,8 @@ export class GalacticGame {
     this.updateSceneMatrices();
     this.scene.matrixWorldAutoUpdate = false;
     try {
-      renderGalacticScenes(this.renderer, this.camera, this.scene, this.backgroundScene, this.midgroundScene, this.midforegroundScene);
+      const detail = gfx.modelLod !== false && (this.modelDetail ||= new ModelDetail());
+      renderGalacticScenes(this.renderer, this.camera, this.scene, this.backgroundScene, this.midgroundScene, this.midforegroundScene, detail);
     } finally {
       this.scene.matrixWorldAutoUpdate = true;
     }
@@ -4149,7 +4172,7 @@ export class GalacticGame {
     }
   }
 
-  async warmNameFonts() {
+  async warmNameFonts(names) {
     if (!this.nameStyle) return;
     this.labelRasterCache.clear();
     const s = this.nameStyle,
@@ -4159,7 +4182,7 @@ export class GalacticGame {
         .map(face => loadComponentFont(face, dialogFontPixels(uiTextHeight(), s.pt)))
         .concat([loadComponentFont(v.font, dialogFontPixels(uiTextHeight(), v.pt))])
     );
-    const text = this.planetViews.map(p => p.name.toUpperCase()).join('');
+    const text = (names || this.planetViews.map(p => p.name)).join('').toUpperCase();
     await Promise.all(fonts.filter(Boolean).map(font => font.ensure(text)));
   }
 
@@ -4208,11 +4231,16 @@ export class GalacticGame {
     return 0.5 + 0.5 * Math.cos(((now - f.start) / 1000) * f.speed);
   }
 
+  mapLabelStyle(style) {
+    if (prefs.labelScale === 1 && !prefs.labelOutline) return style;
+    return {...style, scale: style.scale * prefs.labelScale, outline: style.outline || prefs.labelOutline};
+  }
+
   drawNames(zoom) {
     const cv = this.names,
       x = cv.getContext('2d'),
       r = cv.width / innerWidth,
-      s = this.nameStyle;
+      s = this.mapLabelStyle(this.nameStyle), valueStyle = this.mapLabelStyle(this.valueStyle);
     x.setTransform(1, 0, 0, 1, 0, 0);
     x.clearRect(0, 0, cv.width, cv.height);
     const alpha = Math.max(0, 1 - this.view.zoom * 10);
@@ -4240,7 +4268,7 @@ export class GalacticGame {
         faction = db.faction(owner),
         relative = this.relativeColors(),
         col = relative && faction ? this.factionColor(owner) : rgb(faction?.str('Color')),
-        ink = !relative && faction?.str('Display_Font_Color') ? rgb(faction.str('Display_Font_Color')) : col;
+        ink = prefs.whiteNames ? [1,1,1] : !relative && faction?.str('Display_Font_Color') ? rgb(faction.str('Display_Font_Color')) : col;
       const ring = i !== this.selected && !!this.ringComp.texture && this.tinted(this.ringComp.texture, col);
       if (ring) {
         const z = ui * this.ringComp.scale;
@@ -4277,7 +4305,7 @@ export class GalacticGame {
         this.nameHits.push({ i, x: px / r - (s.center ? w / 2 : 0), y: (py - h / 2) / r, w, h: h / r });
       }
       if (this.filters & 1) {
-        const s = this.valueStyle,
+        const s = valueStyle,
           text = String(Math.round(displayIncome(this.galaxy, p, (orbit ||= orbitFleets(this.galaxy)))));
         x.font = `${s.pt * 1.6 * ui * s.scale}px ${fontFamily(s.font)}`;
         const vx = (point.x + s.offset[0] * scale) * r,

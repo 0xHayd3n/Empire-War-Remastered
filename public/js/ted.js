@@ -1,4 +1,5 @@
-import { ChunkReader, fetchBinary, fetchHead, findFiles } from './vfs.js';
+import { ChunkReader, fetchBinary, fetchHead, findFiles, pageOverlay } from './vfs.js';
+import { expansion } from './edition.js';
 import { db } from './gamedata.js';
 import { loadTextureCanvas, decodeTGA } from './dds.js';
 
@@ -89,12 +90,31 @@ export const registerDynamicMaps = api => {
   dynamic = api;
 };
 const dynamicOf = name => (dynamic?.is(name) ? dynamic : null);
+// Browser-installed folders can shadow, add or remove maps. Only a pure
+// mounted runtime can take its header bytes directly from the local server.
+async function mountedHeaders() {
+  if (!globalThis.document?.querySelector?.('meta[name="swr-mounted-index"]') || await pageOverlay()) return null;
+  try {
+    const r = await fetch('/api/universal/map-headers' + (expansion() ? '' : '?game=eaw'));
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
 export async function skirmishMaps() {
+  const rows = await mountedHeaders();
   const names = list => list.map(n => n.split('\\').pop());
-  const art = names(await findFiles('ART\\\\MAPS\\\\[^\\\\]*\\.TED$').catch(() => []));
-  const own = names(await findFiles('^DATA\\\\CUSTOMMAPS\\\\[^\\\\]*\\.TED$').catch(() => [])).filter(
-    f => !art.some(a => a.toUpperCase() === f.toUpperCase())
-  );
+  const [art, custom] = rows ? [false,true].map(custom => rows.filter(r => r[0] === custom).map(r => r[1])) : await Promise.all([
+    findFiles('ART\\\\MAPS\\\\[^\\\\]*\\.TED$').then(names).catch(() => []),
+    findFiles('^DATA\\\\CUSTOMMAPS\\\\[^\\\\]*\\.TED$').then(names).catch(() => [])
+  ]);
+  const regular = new Set(art.map(f => f.toUpperCase()));
+  const own = custom.filter(f => !regular.has(f.toUpperCase()));
+  if (rows) for (const [custom, file, encoded] of rows) {
+    const key = file.toUpperCase();
+    if (mapHeaders.has(key) || (custom && regular.has(key))) continue;
+    const header = encoded === null ? null : parseMapHeader(Uint8Array.from(atob(encoded), c => c.charCodeAt(0)).buffer);
+    mapHeaders.set(key, Promise.resolve(header));
+  }
   for (const f of own) mapDirs.set(f.toUpperCase(), 'Data/CustomMaps/');
   const files = [...art, ...own];
   const heads = await Promise.all(files.map(loadMapHeader));

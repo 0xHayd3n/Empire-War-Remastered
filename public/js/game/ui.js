@@ -10,6 +10,7 @@ import { buildCost, buildTime, isUpgradeType, isSquadronType, isCompanyType, com
 import { ids } from './commands.js';
 import { CommandBar } from './hud.js';
 import { pressed, held, groupKey, withKey, bothButtonsRotate, keysOf, keyName } from './keybinds.js';
+import { viewOptions as prefs, tacticalWheel, showUnitVitals } from './viewpreferences.js';
 import { edgeCursor, panAxis } from './edge-scroll.js';
 
 const ORDER_KEYS = [
@@ -253,11 +254,11 @@ export class UI {
       return;
     }
     if (this.r.chase?.on) {
-      this.r.chase.wheel(e.deltaY / 100);
+      this.r.chase.wheel(tacticalWheel(e.deltaY) / 100);
       return;
     }
     if (this.track?.on) {
-      this.r.rig.wheel(e.deltaY / 100);
+      this.r.rig.wheel(tacticalWheel(e.deltaY) / 100);
       return;
     }
     const d = Math.sign(e.deltaY),
@@ -281,11 +282,11 @@ export class UI {
   zoom(delta) {
     if (this.game.controlsLocked) return;
     const rig = this.r.rig;
-    const before = this.r.pickGround(this.mouse.x, this.mouse.y);
-    rig.wheel(delta / 100);
+    const before = prefs.cursorZoom && this.r.pickGround(this.mouse.x, this.mouse.y);
+    rig.wheel(tacticalWheel(delta) / 100);
     rig.apply(0);
     this.r.camera.updateMatrixWorld();
-    const after = this.r.pickGround(this.mouse.x, this.mouse.y);
+    const after = before && this.r.pickGround(this.mouse.x, this.mouse.y);
     if (before && after) {
       rig.x += before.x - after.x;
       rig.y += before.y - after.y;
@@ -359,7 +360,7 @@ export class UI {
         this.arm(null);
         return;
       }
-      this.pendingCommand = { x: m.x, y: m.y, ctrl: e.ctrlKey, shift: e.shiftKey || e.altKey, fast: e.detail >= 2 };
+      this.pendingCommand = { x: m.x, y: m.y, ctrl: e.ctrlKey, shift: e.shiftKey || e.altKey, fast: prefs.hazardShortcut && e.detail >= 2 };
       this.ctrlTurn = e.ctrlKey && !e.shiftKey && !e.altKey ? { x: m.x, y: m.y } : null;
       const movers = this.mine().filter(s => !s.dead && (s.isSquad || s.isMobile)),
         g = this.r.pickGround(m.x, m.y),
@@ -385,8 +386,9 @@ export class UI {
     }
     if (this.track?.on) {
       const rig = this.r.rig;
-      rig.yaw -= (e.movementX || 0) * TRACK_LOOK;
-      rig.pitch = Math.min(1.5, Math.max(-1.5, rig.pitch + (e.movementY || 0) * TRACK_LOOK));
+      const k = TRACK_LOOK * prefs.orbitLook;
+      rig.yaw -= (e.movementX || 0) * k;
+      rig.pitch = Math.min(1.5, Math.max(-1.5, rig.pitch + (e.movementY || 0) * k * (prefs.orbitInvert ? -1 : 1)));
       return;
     }
     if (this.panDrag) {
@@ -406,10 +408,10 @@ export class UI {
       this.turnDrag = { x: e.clientX, y: e.clientY, tilt: true };
     }
     if (this.turnDrag) {
-      this.r.rig.yaw -= (e.clientX - this.turnDrag.x) * TURN_DRAG;
+      this.r.rig.yaw -= (e.clientX - this.turnDrag.x) * TURN_DRAG * prefs.turn;
       this.turnDrag.x = e.clientX;
       if (this.turnDrag.tilt) {
-        this.r.rig.tilt((e.clientY - this.turnDrag.y) * TURN_DRAG);
+        this.r.rig.tilt((e.clientY - this.turnDrag.y) * TURN_DRAG * prefs.turn);
         this.turnDrag.y = e.clientY;
       }
     }
@@ -480,7 +482,7 @@ export class UI {
     } else {
       const hit = this.pick(d.x0, d.y0);
       const now = performance.now();
-      if (hit && hit.player === this.player && now - this.lastClick.t < 350 && this.lastClick.type === hit.type) {
+      if (hit && hit.player === this.player && now - this.lastClick.t < 350 * prefs.multiClick && this.lastClick.type === hit.type) {
         const same = [];
         for (const s of this.world.selectables()) {
           if (s.player !== this.player || s.type !== hit.type) continue;
@@ -667,7 +669,7 @@ export class UI {
         if (g.length) {
           const same = g.length === this.selection.length && g.every(s => this.selection.includes(s));
           this.select(g, false);
-          if (same) {
+          if (prefs.groupCenter === 'always' || (prefs.groupCenter === 'selected' && same)) {
             let x = 0,
               y = 0;
             for (const s of g) {
@@ -1590,7 +1592,7 @@ export class UI {
   }
 
   waypointsUp() {
-    return this.keys.has('AltLeft') || this.keys.has('AltRight') || this.armed === 'waypoint';
+    return prefs.showWaypoints || this.keys.has('AltLeft') || this.keys.has('AltRight') || this.armed === 'waypoint';
   }
 
   waypointPaths() {
@@ -1669,7 +1671,7 @@ export class UI {
       });
       this.beaconView.update(w.beacons.live(w.time).filter(b => b.owner.team === this.player.team));
     }
-    const pan = rig.dist * 0.9 * dt;
+    const pan = rig.dist * 0.9 * dt * prefs.pan;
     const g = this.game, m = this.mouse;
     const edge = !this.drag && !this.panDrag && !this.turnDrag && !this.direct && !this.track?.on && !this.r.chase?.on && !g.menus?.open && !g.chatDlg &&
       !g.controlsLocked && !g.cine?.on && !g.tacticalCinematics?.on && !g.tacticalMovies?.active && !g.setup.attract && !g.over && this.edgeCursor();
@@ -1690,10 +1692,10 @@ export class UI {
       if (this.track?.on) rig.z = c.z;
     }
     if (px || py) rig.pan(px * pan, py * pan);
-    if (held(k, 'ROTATE_LEFT')) rig.yaw -= dt * 1.2;
-    if (held(k, 'ROTATE_RIGHT')) rig.yaw += dt * 1.2;
-    if (held(k, 'TILT_UP')) rig.tilt(-dt * 0.9);
-    if (held(k, 'TILT_DOWN')) rig.tilt(dt * 0.9);
+    if (held(k, 'ROTATE_LEFT')) rig.yaw -= dt * 1.2 * prefs.turn;
+    if (held(k, 'ROTATE_RIGHT')) rig.yaw += dt * 1.2 * prefs.turn;
+    if (held(k, 'TILT_UP')) rig.tilt(-dt * 0.9 * prefs.turn);
+    if (held(k, 'TILT_DOWN')) rig.tilt(dt * 0.9 * prefs.turn);
     if (k.has('PageUp')) rig.dist *= Math.exp(-dt * 1.5);
     if (k.has('PageDown')) rig.dist *= Math.exp(dt * 1.5);
     rig.clamp();
@@ -1859,11 +1861,20 @@ export class UI {
         const w = hasIcon ? grabHealth || size : Math.max(26, Math.min(120, r * 1.5)),
           x = p.x - w / 2,
           y = hasIcon ? p.y + size / 2 + 9 : p.y - r - 9;
-        g.fillStyle = 'rgba(0,0,0,0.6)';
-        g.fillRect(x - 1, y - 1, w + 2, 5);
-        const f = s.healthFrac;
-        g.fillStyle = f > 0.5 ? '#5fe067' : f > 0.25 ? '#f2c744' : '#ff5a4d';
-        g.fillRect(x, y, w * f, 3);
+        const f = s.healthFrac, shield = !s.isSquad && s.maxShield > 0;
+        if (showUnitVitals(true, s.selected || s === this.hover, f < 1 || (shield && (s.shieldBarDown || s.shield < s.maxShield)))) {
+          const width = w * prefs.barWidth, left = p.x - width / 2;
+          g.fillStyle = 'rgba(0,0,0,0.6)';
+          g.fillRect(left - 1, y - 1, width + 2, 5);
+          g.fillStyle = f > 0.5 ? '#5fe067' : f > 0.25 ? '#f2c744' : '#ff5a4d';
+          g.fillRect(left, y, width * f, 3);
+          if (shield && prefs.barShields) {
+            g.fillStyle = 'rgba(0,0,0,0.6)';
+            g.fillRect(left - 1, y - 6, width + 2, 4);
+            g.fillStyle = '#4fb3ff';
+            g.fillRect(left, y - 5, width * (s.shieldBarDown ? 0 : Math.max(0, s.shield / s.maxShield)), 2);
+          }
+        }
         if (!enemy && s.player.id >= 0) {
           const a = shownAbility(s.abilities),
             name = a && abilityIconName(a.def.kind, a.def.icon),
@@ -1882,12 +1893,6 @@ export class UI {
               fh = Math.round(rect.h * k);
             g.drawImage(iconAtlas(), rect.x, rect.y, rect.w, rect.h, Math.round(p.x + size / 2 + 1), Math.round(y + 3 - fh), fw, fh);
           }
-        }
-        if (!s.isSquad && s.maxShield > 0) {
-          g.fillStyle = 'rgba(0,0,0,0.6)';
-          g.fillRect(x - 1, y - 6, w + 2, 4);
-          g.fillStyle = '#4fb3ff';
-          g.fillRect(x, y - 5, w * (s.shieldBarDown ? 0 : Math.max(0, s.shield / s.maxShield)), 2);
         }
         if (s.construction) {
           g.fillStyle = 'rgba(0,0,0,0.6)';

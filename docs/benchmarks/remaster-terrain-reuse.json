@@ -1,0 +1,586 @@
+{
+  "chrome": "158.0.8127.38",
+  "viewport": [
+    1280,
+    720
+  ],
+  "frames": 960,
+  "warm": 360,
+  "rounds": 2,
+  "backend": "webgpu",
+  "hashes": {
+    "after": {
+      "forestfloor.js": "efea8aeb3878e99dd564fba107158b6a4d207180d438e84456eae5af4a15e8ce",
+      "game/endor-relief.js": "b083f79a84ea67a1bc157eb6ec44e50e78ef8bfad06f6236b31fa6a36d5e998b",
+      "gpu/renderer.js": "5c12daf13967c6d4c13f3d6a97bd22433c0c2a022e92f184d4a29f7a324bbac7",
+      "game/landgame.js": "9fd0ec1fe2da2c3c1f5eacb4012544150c5151bbc4de498a211640b0e9751c21"
+    },
+    "before": {
+      "forestfloor.js": "dbefe5ae4d251bd2cc2b40407ddb692eaf3b0e1be46ebd01b60e6bd19aad048c",
+      "game/endor-relief.js": "995ea4930ce7ce93cf7ab9708f1ed31293bf9cc64eb0c05387771fab4061edf7",
+      "gpu/renderer.js": "29c2924660b33baf6e60a43e4b6cd6d1321b1ac7c941b0366fcd7d90f7133bbf",
+      "game/landgame.js": "2909f4d4b0877fef1f19eb4b4a67f4d7c011ae197512912acf0a4e4c70fe8235"
+    }
+  },
+  "summary": {
+    "endor": {
+      "before": 71.25684455393586,
+      "after": 76.86867447377487,
+      "change": 7.875495968097912,
+      "paired": [
+        0.7827988734787628,
+        13.825216930060048
+      ]
+    },
+    "yavin": {
+      "before": 123.64967471119431,
+      "after": 155.95764287892936,
+      "change": 26.128631751920107,
+      "paired": [
+        37.10849144666917,
+        12.92200472373315
+      ]
+    },
+    "hoth": {
+      "before": 172.70722168051321,
+      "after": 157.87902684025684,
+      "change": -8.585741057016527,
+      "paired": [
+        -15.995048177413373,
+        0.8295001433070048
+      ]
+    },
+    "tatooine": {
+      "before": 174.4556099063528,
+      "after": 172.45390226354726,
+      "change": -1.1474022783675708,
+      "paired": [
+        0.49655834315232017,
+        -2.814488519444802
+      ]
+    },
+    "overall": {
+      "before": 118.89416352731118,
+      "after": 126.7675657260117,
+      "change": 6.622194029643791,
+      "paired": [
+        4.98888470872334,
+        8.281164663237806
+      ]
+    }
+  },
+  "runs": [
+    {
+      "map": "endor",
+      "version": "before",
+      "pair": 0,
+      "mapFile": "_MP_LAND_ENDOR.TED",
+      "backend": "webgpu",
+      "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "ampere",
+        "isFallback": false
+      },
+      "pivot": [
+        1460,
+        3120
+      ],
+      "env": "Noon_Clear",
+      "units": 90,
+      "battleSeconds": 16.000000000000274,
+      "active": true,
+      "canvas": [
+        2560,
+        1440
+      ],
+      "shadowSize": 2048,
+      "nearSize": 1024,
+      "shadows": true,
+      "quality": "custom",
+      "elapsed": 11483.565,
+      "fps": 83.59773293398,
+      "p95ms": 16.834999999999127
+    },
+    {
+      "map": "endor",
+      "version": "after",
+      "pair": 0,
+      "mapFile": "_MP_LAND_ENDOR.TED",
+      "backend": "webgpu",
+      "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "ampere",
+        "isFallback": false
+      },
+      "pivot": [
+        1460,
+        3120
+      ],
+      "env": "Noon_Clear",
+      "units": 90,
+      "battleSeconds": 16.000000000000277,
+      "active": true,
+      "canvas": [
+        2560,
+        1440
+      ],
+      "shadowSize": 2048,
+      "nearSize": 1024,
+      "shadows": true,
+      "quality": "custom",
+      "elapsed": 11394.369999999999,
+      "fps": 84.25213504564097,
+      "p95ms": 16.75
+    },
+    {
+      "map": "yavin",
+      "version": "after",
+      "pair": 0,
+      "mapFile": "_MP_LAND_YAVIN.TED",
+      "backend": "webgpu",
+      "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "ampere",
+        "isFallback": false
+      },
+      "pivot": [
+        1233,
+        3406
+      ],
+      "env": "Sunrise_Rain",
+      "units": 66,
+      "battleSeconds": 16.000000000000274,
+      "active": true,
+      "canvas": [
+        1280,
+        720
+      ],
+      "shadowSize": 2048,
+      "nearSize": 1024,
+      "shadows": true,
+      "quality": "custom",
+      "elapsed": 6722.235000000001,
+      "fps": 142.80964589902018,
+      "p95ms": 11.219999999997526
+    },
+    {
+      "map": "yavin",
+      "version": "before",
+      "pair": 0,
+      "mapFile": "_MP_LAND_YAVIN.TED",
+      "backend": "webgpu",
+      "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "ampere",
+        "isFallback": false
+      },
+      "pivot": [
+        1233,
+        3406
+      ],
+      "env": "Sunrise_Rain",
+      "units": 66,
+      "battleSeconds": 16.000000000000274,
+      "active": true,
+      "canvas": [
+        1280,
+        720
+      ],
+      "shadowSize": 2048,
+      "nearSize": 1024,
+      "shadows": true,
+      "quality": "custom",
+      "elapsed": 9216.755000000001,
+      "fps": 104.15813374663858,
+      "p95ms": 16.645000000000437
+    },
+    {
+      "map": "hoth",
+      "version": "before",
+      "pair": 0,
+      "mapFile": "_MP_LAND_HOTH.TED",
+      "backend": "webgpu",
+      "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "ampere",
+        "isFallback": false
+      },
+      "pivot": [
+        2845,
+        2231
+      ],
+      "env": "Sunrise_Snow",
+      "units": 68,
+      "battleSeconds": 16.000000000000277,
+      "active": true,
+      "canvas": [
+        1280,
+        720
+      ],
+      "shadowSize": 2048,
+      "nearSize": 1024,
+      "shadows": true,
+      "quality": "custom",
+      "elapsed": 5717.02,
+      "fps": 167.91965044726098,
+      "p95ms": 10.969999999997526
+    },
+    {
+      "map": "hoth",
+      "version": "after",
+      "pair": 0,
+      "mapFile": "_MP_LAND_HOTH.TED",
+      "backend": "webgpu",
+      "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "ampere",
+        "isFallback": false
+      },
+      "pivot": [
+        2845,
+        2231
+      ],
+      "env": "Sunrise_Snow",
+      "units": 68,
+      "battleSeconds": 16.000000000000284,
+      "active": true,
+      "canvas": [
+        1280,
+        720
+      ],
+      "shadowSize": 2048,
+      "nearSize": 1024,
+      "shadows": true,
+      "quality": "custom",
+      "elapsed": 6805.575000000001,
+      "fps": 141.06082145887746,
+      "p95ms": 16.6150000000016
+    },
+    {
+      "map": "tatooine",
+      "version": "after",
+      "pair": 0,
+      "mapFile": "_MP_LAND_TATOOINE.TED",
+      "backend": "webgpu",
+      "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "ampere",
+        "isFallback": false
+      },
+      "pivot": [
+        755,
+        1691
+      ],
+      "env": "Sunrise_Sandstorm",
+      "units": 73,
+      "battleSeconds": 16.00000000000028,
+      "active": true,
+      "canvas": [
+        1280,
+        720
+      ],
+      "shadowSize": 2048,
+      "nearSize": 1024,
+      "shadows": true,
+      "quality": "custom",
+      "elapsed": 5605.585000000003,
+      "fps": 171.257772382365,
+      "p95ms": 5.75
+    },
+    {
+      "map": "tatooine",
+      "version": "before",
+      "pair": 0,
+      "mapFile": "_MP_LAND_TATOOINE.TED",
+      "backend": "webgpu",
+      "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "ampere",
+        "isFallback": false
+      },
+      "pivot": [
+        755,
+        1691
+      ],
+      "env": "Sunrise_Sandstorm",
+      "units": 73,
+      "battleSeconds": 16.000000000000274,
+      "active": true,
+      "canvas": [
+        1280,
+        720
+      ],
+      "shadowSize": 2048,
+      "nearSize": 1024,
+      "shadows": true,
+      "quality": "custom",
+      "elapsed": 5633.419999999998,
+      "fps": 170.41157946682483,
+      "p95ms": 5.819999999999709
+    },
+    {
+      "map": "tatooine",
+      "version": "before",
+      "pair": 1,
+      "mapFile": "_MP_LAND_TATOOINE.TED",
+      "backend": "webgpu",
+      "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "ampere",
+        "isFallback": false
+      },
+      "pivot": [
+        755,
+        1691
+      ],
+      "env": "Sunrise_Sandstorm",
+      "units": 73,
+      "battleSeconds": 16.00000000000027,
+      "active": true,
+      "canvas": [
+        1280,
+        720
+      ],
+      "shadowSize": 2048,
+      "nearSize": 1024,
+      "shadows": true,
+      "quality": "custom",
+      "elapsed": 5372.244999999999,
+      "fps": 178.69624337683783,
+      "p95ms": 5.68999999999869
+    },
+    {
+      "map": "tatooine",
+      "version": "after",
+      "pair": 1,
+      "mapFile": "_MP_LAND_TATOOINE.TED",
+      "backend": "webgpu",
+      "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "ampere",
+        "isFallback": false
+      },
+      "pivot": [
+        755,
+        1691
+      ],
+      "env": "Sunrise_Sandstorm",
+      "units": 73,
+      "battleSeconds": 16.000000000000274,
+      "active": true,
+      "canvas": [
+        1280,
+        720
+      ],
+      "shadowSize": 2048,
+      "nearSize": 1024,
+      "shadows": true,
+      "quality": "custom",
+      "elapsed": 5527.824999999999,
+      "fps": 173.6668581223176,
+      "p95ms": 5.790000000000873
+    },
+    {
+      "map": "hoth",
+      "version": "after",
+      "pair": 1,
+      "mapFile": "_MP_LAND_HOTH.TED",
+      "backend": "webgpu",
+      "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "ampere",
+        "isFallback": false
+      },
+      "pivot": [
+        2845,
+        2231
+      ],
+      "env": "Sunrise_Snow",
+      "units": 68,
+      "battleSeconds": 16.00000000000027,
+      "active": true,
+      "canvas": [
+        1280,
+        720
+      ],
+      "shadowSize": 2048,
+      "nearSize": 1024,
+      "shadows": true,
+      "quality": "custom",
+      "elapsed": 5355.635,
+      "fps": 179.25045302751212,
+      "p95ms": 5.735000000000582
+    },
+    {
+      "map": "hoth",
+      "version": "before",
+      "pair": 1,
+      "mapFile": "_MP_LAND_HOTH.TED",
+      "backend": "webgpu",
+      "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "ampere",
+        "isFallback": false
+      },
+      "pivot": [
+        2845,
+        2231
+      ],
+      "env": "Sunrise_Snow",
+      "units": 68,
+      "battleSeconds": 16.000000000000274,
+      "active": true,
+      "canvas": [
+        1280,
+        720
+      ],
+      "shadowSize": 2048,
+      "nearSize": 1024,
+      "shadows": true,
+      "quality": "custom",
+      "elapsed": 5400.060000000001,
+      "fps": 177.7758024910834,
+      "p95ms": 5.725000000000364
+    },
+    {
+      "map": "yavin",
+      "version": "before",
+      "pair": 1,
+      "mapFile": "_MP_LAND_YAVIN.TED",
+      "backend": "webgpu",
+      "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "ampere",
+        "isFallback": false
+      },
+      "pivot": [
+        1233,
+        3406
+      ],
+      "env": "Sunrise_Rain",
+      "units": 66,
+      "battleSeconds": 16.000000000000284,
+      "active": true,
+      "canvas": [
+        1280,
+        720
+      ],
+      "shadowSize": 2048,
+      "nearSize": 1024,
+      "shadows": true,
+      "quality": "custom",
+      "elapsed": 6310.984999999997,
+      "fps": 152.11571569255835,
+      "p95ms": 11.159999999999854
+    },
+    {
+      "map": "yavin",
+      "version": "after",
+      "pair": 1,
+      "mapFile": "_MP_LAND_YAVIN.TED",
+      "backend": "webgpu",
+      "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "ampere",
+        "isFallback": false
+      },
+      "pivot": [
+        1233,
+        3406
+      ],
+      "env": "Sunrise_Rain",
+      "units": 66,
+      "battleSeconds": 16.000000000000284,
+      "active": true,
+      "canvas": [
+        1280,
+        720
+      ],
+      "shadowSize": 2048,
+      "nearSize": 1024,
+      "shadows": true,
+      "quality": "custom",
+      "elapsed": 5588.799999999999,
+      "fps": 171.77211565989123,
+      "p95ms": 5.825000000000728
+    },
+    {
+      "map": "endor",
+      "version": "after",
+      "pair": 1,
+      "mapFile": "_MP_LAND_ENDOR.TED",
+      "backend": "webgpu",
+      "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "ampere",
+        "isFallback": false
+      },
+      "pivot": [
+        1460,
+        3120
+      ],
+      "env": "Noon_Clear",
+      "units": 90,
+      "battleSeconds": 16.00000000000028,
+      "active": true,
+      "canvas": [
+        2560,
+        1440
+      ],
+      "shadowSize": 2048,
+      "nearSize": 1024,
+      "shadows": true,
+      "quality": "custom",
+      "elapsed": 13583.294999999998,
+      "fps": 70.67504607681715,
+      "p95ms": 22.274999999997817
+    },
+    {
+      "map": "endor",
+      "version": "before",
+      "pair": 1,
+      "mapFile": "_MP_LAND_ENDOR.TED",
+      "backend": "webgpu",
+      "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3070 (0x00002488) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "adapter": {
+        "vendor": "nvidia",
+        "architecture": "ampere",
+        "isFallback": false
+      },
+      "pivot": [
+        1460,
+        3120
+      ],
+      "env": "Noon_Clear",
+      "units": 90,
+      "battleSeconds": 16.000000000000274,
+      "active": true,
+      "canvas": [
+        2560,
+        1440
+      ],
+      "shadowSize": 2048,
+      "nearSize": 1024,
+      "shadows": true,
+      "quality": "custom",
+      "elapsed": 15461.215,
+      "fps": 62.09085120412594,
+      "p95ms": 33.41500000000087
+    }
+  ]
+}

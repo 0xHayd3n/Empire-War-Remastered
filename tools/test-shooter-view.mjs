@@ -22,6 +22,15 @@ s.toggleView();
 assert.equal(s.cockpit, false, 'directly possessed vehicle uses vehicle preference too');
 assert.deepEqual(JSON.parse(saved.get('swr-shooter-settings')), { view: 'first', vehicleView: 'chase' });
 
+const { shooterFields, loadShooterConfig, setShooterPreference } = await import('../public/js/game/shooterpreferences.js');
+for (const { key, node } of shooterFields.filter(f => f.node)) {
+  s[node] = { style: {} };
+  setShooterPreference(s, key, false);
+  assert.equal(s[node].style.visibility, 'hidden');
+  assert.equal(loadShooterConfig()[key], false);
+  setShooterPreference(s, key, true);
+  assert.equal(s[node].style.visibility, '');
+}
 const cam = new PerspectiveCamera(70, 1.6, 0.3, 10000);
 cam.up.set(0, 0, 1);
 const hull = new Object3D();

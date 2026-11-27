@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "chrome": "158.0.8127.38",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700KF",
+    "cpuRate": 1
+  },
+  "result": {
+    "suite": "soak",
+    "legs": [
+      {
+        "engine": "rapier",
+        "waves": 24,
+        "casualties": 144,
+        "peakParked": 128,
+        "kept": 128,
+        "evicted": true,
+        "cleared": true,
+        "freedWaves": 24,
+        "remaining": [
+          0,
+          0,
+          0
+        ],
+        "failures": []
+      },
+      {
+        "engine": "jolt",
+        "waves": 24,
+        "casualties": 144,
+        "peakParked": 128,
+        "kept": 128,
+        "evicted": true,
+        "cleared": true,
+        "freedWaves": 24,
+        "remaining": [
+          0,
+          0,
+          0
+        ],
+        "failures": []
+      }
+    ]
+  },
+  "errors": []
+}

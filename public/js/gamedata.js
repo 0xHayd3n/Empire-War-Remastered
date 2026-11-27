@@ -1,5 +1,6 @@
 import { fetchText, fetchBinary } from './vfs.js';
 import { parseXML } from './xml.js';
+import { rosterColor, rgbBytes, alternateShade } from './game/commandgroups.js';
 import { languageId, resolveLanguageText, setActiveLanguage, activeLanguage, refreshLanguageViews } from './language.js';
 
 const XML = 'Data/XML/';
@@ -229,6 +230,8 @@ export function spawnList(type, tech) {
 }
 
 export function skirmishStation(faction, marker = null) {
+  const guest=guestObjects.factions.get(faction?.toUpperCase())?.detachment;
+  if(guest)return !marker || /SPACE_STATION$/i.test(marker.name) ? guest.station : null;
   const m = marker || db.type('Team_00_Space_Station');
   const f = (faction || '').toUpperCase();
   for (const n of m ? m.list('Marker_For_Specific_Object_Type') : []) {
@@ -244,12 +247,13 @@ export function factionColor(name) {
   return m ? '#' + [1, 2, 3].map(i => Math.min(255, +m[i]).toString(16).padStart(2, '0')).join('') : null;
 }
 
-export function autoColors(players, teamFactions, palette) {
+export function autoColors(players, teamFactions, palette, sourceColor) {
   const used = new Set(players.filter(p => !p.auto && p.color).map(p => String(p.color).toLowerCase()));
   for (const p of players) {
     if (!p.auto && p.color) continue;
-    const own = factionColor(teamFactions[p.team]);
-    p.color = own && !used.has(own) ? own : palette.find(c => !used.has(c.toLowerCase())) || p.color || palette[0];
+    const own = sourceColor?.(p)?.toLowerCase() || factionColor(p.skirmishFaction || teamFactions[p.team]);
+    const free = c => !used.has(c.toLowerCase());
+    p.color = (own && free(own) && own) || (db.universalProfile && alternateShade(own, free)) || palette.find(free) || p.color || palette[0];
     used.add(String(p.color).toLowerCase());
   }
   return players;
@@ -262,6 +266,8 @@ export function skirmishFactions() {
   return (stationed.length ? stationed : playable).map(f => f.name);
 }
 
+// Separate namespace: never enumerated as map owners or included in campaign manifests.
+export const guestObjects={types:new Map(),hardpoints:new Map(),factions:new Map()};
 export const db = {
   types: new Map(),
   typesByCrc: new Map(),
@@ -273,13 +279,13 @@ export const db = {
   music: new Map(),
   text: new Map(),
   type(name) {
-    return name ? sealedLookup(typeNames, this.types, name) : undefined;
+    return name ? (/^UXF_/i.test(name) ? guestObjects.types.get(name.toUpperCase()) : sealedLookup(typeNames, this.types, name)) : undefined;
   },
   hardpoint(name) {
-    return name ? this.hardpoints.get(name.trim().toUpperCase()) : undefined;
+    return name ? (/^UXF_/i.test(name)?guestObjects.hardpoints:this.hardpoints).get(name.trim().toUpperCase()) : undefined;
   },
   faction(name) {
-    return name ? sealedLookup(factionNames, this.factions, name) : undefined;
+    return name ? (/^UXF_/i.test(name) ? guestObjects.factions.get(name.toUpperCase()) : sealedLookup(factionNames, this.factions, name)) : undefined;
   },
   t(id) {
     if (!id) return '';
@@ -331,7 +337,10 @@ export async function loadFileList(manifest) {
 }
 
 async function loadText(language) {
-  if (language === undefined) language = new URLSearchParams(globalThis.location?.search || '').get('language');
+  if (language === undefined) {
+    language = new URLSearchParams(globalThis.location?.search || '').get('language');
+    if (language === null) try { language = localStorage.getItem('swr-game-language'); } catch {}
+  }
   const resolved = await resolveLanguageText(fetchBinary, language);
   applyText(resolved);
 }
@@ -388,7 +397,7 @@ function acyclic(t, parent) {
   return parent || null;
 }
 
-export async function loadGameData(onProgress = () => {}, { language } = {}) {
+export async function loadGameData(onProgress = () => {}, { language, universalProfile } = {}) {
   typeNames.clear();
   factionNames.clear();
   onProgress('Reading object manifest');
@@ -430,6 +439,22 @@ export async function loadGameData(onProgress = () => {}, { language } = {}) {
     if (armor) db.armorMod.set((dmg + '|' + armor).toUpperCase(), parseFloat(mod));
   }
   for (const txt of fs) if (txt) readObjects(parseXML(txt), db.factions, null);
+  // Only the mounted Universal frame (or its explicitly identified worker)
+  // opts in. Standalone play and the pack indexers read the original colors.
+  db.universalProfile = universalProfile || null;
+  if (universalProfile) {
+    for (const f of db.factions.values()) {
+      const shade = rosterColor(universalProfile, f.name);
+      if (!shade) continue;
+      const rgb = rgbBytes(shade).join(',');
+      for (const key of ['color', 'display_font_color', 'big_fleet_color', 'selection_blob_rgba']) {
+        const original = f.props.get(key)?.at(-1);
+        if (key !== 'color' && !original) continue;
+        const alpha = original?.trim().split(/[\s,]+/)[3];
+        f.props.set(key, [alpha ? `${rgb},${alpha}` : rgb]);
+      }
+    }
+  }
   const enumXml = await fetchText(XML + 'Enum/GameObjectCategoryType.xml').catch(() => null);
   categoryMasks = new Map();
   for (const n of (enumXml && parseXML(enumXml).children[0]?.children) || []) {

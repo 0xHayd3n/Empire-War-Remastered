@@ -57,7 +57,7 @@ export function settingsControls(panel) {
         input.name = 'uc-' + id;
         input.value = k;
         input.onchange = () => {
-          if (input.checked) g.change(input.value);
+          if (!input.disabled && input.checked) g.change(input.value);
         };
         face.append(caption);
         el.append(input, face);
@@ -65,8 +65,10 @@ export function settingsControls(panel) {
         g.items.set(k, v);
       }
       if (g.body.children[i] !== v.el) g.body.insertBefore(v.el, g.body.children[i] || null);
-      v.input.checked = k === String(value);
+      v.input.disabled = !!r.disabled;
+      v.input.checked = !r.disabled && k === String(value);
       v.caption.textContent = r.label;
+      if (r.disabled) v.caption.append(node('small', 'uc-locked-note', 'Not selectable in this campaign'));
       if (cards && v.fact !== r.fact) {
         const fact = r.fact;
         v.fact = fact;

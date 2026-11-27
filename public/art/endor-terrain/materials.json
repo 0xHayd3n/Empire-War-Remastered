@@ -1,0 +1,51 @@
+[
+  {
+    "id": "grass",
+    "asset": "Ground037",
+    "tileMeters": 2.1,
+    "colorHash": "d630b84ff834fb208d55949b92a60cbb92329c07f464b85007b1fbdaf880900a",
+    "surfaceHash": "00875729ea0be94f728c0b76ada9085949dfe462f5c0ae3fea51ffd9c6e7dd51"
+  },
+  {
+    "id": "moss",
+    "asset": "forest_leaves_02",
+    "tileMeters": 3,
+    "colorHash": "2753733edd99b2962fb81830cd27350676126422e46128b9cdcd2e9053c52546",
+    "surfaceHash": "9e0c763160121f2f956ac07fc581f636ae32e330334b9438c94ca2eb479bd614"
+  },
+  {
+    "id": "litter",
+    "asset": "forest_leaves_04",
+    "tileMeters": 1.5,
+    "colorHash": "1d990abf46cec2d93e7d23d0c6105041946b1033dbddbfe24b2d1678f37e1ba4",
+    "surfaceHash": "aaa3ec8726891f570889ce096cd72814fcdf3093f1593de58b47adf32f0f48f4"
+  },
+  {
+    "id": "soil",
+    "asset": "forest_ground_04",
+    "tileMeters": 3.15,
+    "colorHash": "4ef432a1b64dcc0b044337a21f9945e6c59f746ae5dd43b082e2fc893f83cc7d",
+    "surfaceHash": "07a84d9d1de135b53325691f5bf9b53e0d18c7218831ea7ff24a8e5df347c3c9"
+  },
+  {
+    "id": "mud",
+    "asset": "brown_mud_02",
+    "tileMeters": 1.3,
+    "colorHash": "510e7615a34f0a55de3fd8cdea47d3a3dc000050b5a9de648b8b15e85822c708",
+    "surfaceHash": "4de362e52fa3f995e06dcc196e2706150ad6adbd237868ca59585f7bad5bb397"
+  },
+  {
+    "id": "rock",
+    "asset": "mossy_rock",
+    "tileMeters": 3,
+    "colorHash": "9491f14db13ab35408abca913b7c9e4e86cadcd7420f7268b9bd8ca1d67cd0c1",
+    "surfaceHash": "a46a44cee9198847222d1fd83adae6b7675d391d9c0eaf2596cfce6ba9be226a"
+  },
+  {
+    "id": "sand",
+    "asset": "sand_01",
+    "tileMeters": 1.5,
+    "colorHash": "78656a9eba925a31c4ddff68a0414c4ec48203308a0dcfec8c9becfa0d2bbc70",
+    "surfaceHash": "8c1bf1d1e6854152eccb95c23ba054a24a887b18177bcba12c92c4f139e04dd9"
+  }
+]

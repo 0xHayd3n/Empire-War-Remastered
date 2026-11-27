@@ -1,0 +1,27 @@
+[
+  {
+    "file": "jacaranda.bin",
+    "vertices": 972,
+    "triangles": 742
+  },
+  {
+    "file": "jacaranda-far.bin",
+    "vertices": 300,
+    "triangles": 270
+  },
+  {
+    "file": "anthurium.bin",
+    "vertices": 1396,
+    "triangles": 2436
+  },
+  {
+    "file": "anthurium-wide.bin",
+    "vertices": 2627,
+    "triangles": 4743
+  },
+  {
+    "file": "anthurium-young.bin",
+    "vertices": 657,
+    "triangles": 1118
+  }
+]

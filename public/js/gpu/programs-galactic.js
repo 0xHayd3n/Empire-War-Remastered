@@ -1,4 +1,5 @@
 import { families, PASS_WGSL, simple, texBinding, col3, vec4, num } from './programs.js';
+import { airColumn } from '../planetshine.js';
 import { planetVertex } from '../planetshader.js';
 
 const planetCode = D =>
@@ -10,9 +11,9 @@ struct Planet {
   sunColor: vec3f, cloudScroll: f32,
   fillDir: vec3f, time: f32,
   fillColor: vec3f, opacity: f32,
-  fillDir2: vec3f, _a: f32,
-  fillColor2: vec3f, _b: f32,
-  ambient: vec3f, _c: f32,
+  fillDir2: vec3f, orbitalAir: f32,
+  fillColor2: vec3f, cloudLayer: f32,
+  ambient: vec3f, planetColumn: f32,
   emissive: vec3f, _d: f32,
   diffuse: vec3f, _e: f32,
   specular: vec3f, _f: f32,
@@ -35,7 +36,7 @@ struct VIn { @location(0) position: vec3f, @location(1) normal: vec3f, @location
 struct VOut {
   @builtin(position) pos: vec4f, @location(0) vUv: vec2f, @location(1) vCloudUv: vec2f,
   @location(2) vLight: vec3f, @location(3) vHalf: vec3f, @location(4) vFill: vec3f, @location(5) vSpecular: vec3f,
-  @location(6) vRim: f32, @location(7) vNight: f32, @location(8) vAlpha: f32,
+  @location(6) vRim: f32, @location(7) vNight: f32, @location(8) vAlpha: f32, @location(9) vFacing: f32,
 }
 fn fillLight(n: vec3f, d: vec3f, color: vec3f) -> vec3f {
   let sh = .282095*.282095*3.141593
@@ -75,6 +76,7 @@ fn fillLight(n: vec3f, d: vec3f, color: vec3f) -> vec3f {
   o.vNight = clamp(dot(i.normal,-32.0*objectLight),0.0,1.0);
   o.vCloudUv=i.uv+vec2f(U.time*U.cloudScroll,0.0);`
   }
+  o.vFacing=dot(worldNormal,eye);
   o.vAlpha=clamp(U.lightScale.a*U.opacity,0.0,1.0);
   o.vUv=i.uv;
   o.pos=glDepth(P.proj*P.view*world);
@@ -91,22 +93,38 @@ fn fillLight(n: vec3f, d: vec3f, color: vec3f) -> vec3f {
   return vec4f(2.0*v.vFill*mix(base.rgb,cloud.rgb,cloud.a),v.vAlpha);`
       : `
   let decodedNormal=normal.rgb*2.0-1.0;
+  var rim=v.vRim; var sunVis=1.0; var air=vec3f(0.0);
+  let shell=U.planetColumn>0.0 && U.atmosphere.a>0.0 && max(U.atmosphere.r,max(U.atmosphere.g,U.atmosphere.b))>0.0;
+  if (U.orbitalAir>0.0 || shell) {
+    let day=smoothstep(-0.18,0.32,v.vLight.z); let edge=1.0-clamp(v.vFacing,0.0,1.0);
+    rim*=mix(1.0,0.18+0.42*day,U.orbitalAir);
+    air=U.orbitalAir*max(U.atmosphere.a,0.0)*U.atmosphere.rgb*U.sunColor*day*edge*edge*(0.55+2.35*edge*edge);
+    air/=1.0+0.65*max(air.r,max(air.g,air.b));
+    if (U.cloudLayer>0.0) {
+      let offset=vec2f(0.0025,0.005)*v.vLight.xy/max(v.vLight.z,0.24);
+      let blocker=textureSample(cloudMapT,cloudMapS,v.vCloudUv+offset).a;
+      sunVis-=max(U.orbitalAir,select(0.0,1.0,shell))*0.60*blocker*smoothstep(0.0,0.18,v.vLight.z);
+    }
+  }
+  if(shell) {rim=0.0;air=vec3f(0.0);}
   ${
     D.PLANET_DX8
       ? `
-  let light=U.sunColor*U.diffuse*clamp(dot(decodedNormal,v.vLight),0.0,1.0)+v.vFill;
-  let rgb=2.0*light*(mix(base.rgb,cloud.rgb,cloud.a)+U.atmosphere.rgb*v.vRim)
+  let light=U.sunColor*U.diffuse*clamp(dot(decodedNormal,v.vLight),0.0,1.0)*mix(sunVis,1.0,cloud.a)+v.vFill;
+  var rgb=2.0*light*(mix(base.rgb,cloud.rgb,cloud.a)+U.atmosphere.rgb*rim)
     +U.cityColor*(cloud.a*base.a*v.vNight)+normal.a*v.vSpecular;
-  return vec4f(rgb,v.vAlpha);`
+  `
       : `
   let cloudNormal=cloudNormalT.rgb*2.0-1.0;
-  let surface=2.0*(U.sunColor*U.diffuse*clamp(dot(decodedNormal,v.vLight),0.0,1.0)+v.vFill)
-    *(base.rgb+U.atmosphere.rgb*v.vRim);
+  let surface=2.0*(U.sunColor*U.diffuse*clamp(dot(decodedNormal,v.vLight),0.0,1.0)*sunVis+v.vFill)
+    *(base.rgb+U.atmosphere.rgb*rim);
   let city=U.cityColor*base.a*v.vNight*(1.0-cloud.a);
   let gloss=U.specular*U.sunSpecular*pow(clamp(dot(decodedNormal,v.vHalf),0.0,1.0),16.0)*normal.a;
   let clouds=2.0*(cloud.rgb*clamp(dot(cloudNormal,v.vLight),0.0,1.0)*U.sunColor+v.vFill);
-  return vec4f(mix(surface+city+gloss,clouds,cloud.a),v.vAlpha);`
-  }`
+  var rgb=mix(surface+city+gloss,clouds,cloud.a);`
+  }
+  if(shell) {${airColumn(true)}}
+  return vec4f(rgb+air,v.vAlpha);`
   }
 }`;
 
@@ -149,8 +167,11 @@ const planet = {
       c(12, 'fillColor');
       f[15] = num(U.opacity);
       c(16, 'fillDir2');
+      f[19] = num(U.orbitalAir);
       c(20, 'fillColor2');
+      f[23] = num(U.cloudLayer);
       c(24, 'ambient');
+      f[27] = num(U.planetColumn);
       c(28, 'emissive');
       c(32, 'diffuse');
       c(36, 'specular');

@@ -8,6 +8,37 @@ Discovery only. Public notes were checked for Awakening of the Clone Wars, Awake
 | **Skip campaign calculations when their inputs haven’t changed.** | [Awakening of the Clone Wars](https://steamcommunity.com/sharedfiles/filedetails/changelog/3387971722?l=english&p=2#1734921393) explicitly reports less Galactic Conquest lag when AI moves senators with galaxy-wide bonuses. It does not say how the fix works. A transferable idea is to reuse unchanged results, not slow down AI or timers. The browser [already indexes story objects by type and owner](../public/js/game/galacticstory.js), so don't reimplement that. | Only prototype if repeated bonus/ownership calculations actually show up in a stock campaign. Compare identical campaign state after moves, captures and save/load. |
 | **Bound memory used by old sound effects.** | [Remake](https://steamcommunity.com/sharedfiles/filedetails/?id=1770851727) describes a much larger audio library. The browser already [limits simultaneous voices](../public/js/audio.js) but keeps requested decoded sound-effect buffers without an eviction budget. This is our engine opportunity, not a reported Remake technique. | If retained audio memory grows over several battles, evict least recently used, inactive clips under a byte budget; check for re-decode hitches, keep active sounds intact. No change to sound quality. |
 
+## Universal campaign loading: Start to playable galaxy
+
+On the mounted Universal launcher, `node tools/bench-universal-campaign-start.cjs` times the Start click through removal of the host briefing, including a profile remount where required. `CASE=conquest`, `story`, or `clone-wars` selects one case; `LOAD_TIMINGS=1` prints engine stages. `HOST` overrides the default `http://127.0.0.1:8590/`. Restart the local Universal server to enable batched inputs. Old servers and browser folder overlays retain the per-file loader.
+
+Local Chrome at 1366×768, one browser, fresh contexts, two equivalent Universal hosts, five interleaved before/after launches per scenario (ABBAABBAAB). Median seconds:
+
+| Opening | Before | After |
+|---|---:|---:|
+| Stock Heart of the Maw, Underworld (13 worlds) | 0.963 | 0.853 |
+| Stock Underworld story (32 worlds) | 1.104 | 1.023 |
+| Fall of the Republic, Known Galaxy Large, Era 2 (126 worlds) | 8.224 | 7.586 |
+
+The first mod launch in this series was 15.84 → 13.80 s; after excluding the first launch of each version the mod medians were 7.67 → 7.52 s. First-mount costs and run-to-run variation are substantial; this is not a fixed two-second saving. Individual traces fell from 831 to 28 TED and 1,080 to 12 Lua requests in that scenario. The browser still parses the same map headers, resolves Lua aliases and executes scripts in the same order. AI and story share the same read-only equations; label fonts and radar assets load alongside planet art rather than behind it. Models, story initialization, and the first live draw still finish under the briefing.
+
+`node tools/test-mounted-launch-inputs.mjs` checks header truncation, source bytes, aliases, nested requires, and the oversized-library fallback. Set `SWR_GAME` and optionally `SWR_MOD` to compare every file against an installed archive. `node tools/check-universal-deployment.cjs` covers the host handoff. These campaign timings do not measure Skirmish or Instant Battle.
+
+## Universal battle loading: Start to playable
+
+Measured through Play → Single Player on the mounted Universal window. The clock starts on the **Start** click and stops when the tactical briefing is removed after the first live draw. Six before and six after launches per mode/domain, interleaved, using stock Abregado-Rae, default Instant Battle armies and the four-seat skirmish fixture. Chrome, fresh browser contexts, indexed local install, 1080×768. Medians:
+
+| Battle | Before | After |
+|---|---:|---:|
+| Skirmish, space | 3.65 s | 3.03 s |
+| Skirmish, land | 2.05 s | 1.72 s |
+| Instant Battle, space | 2.32 s | 1.92 s |
+| Instant Battle, land | 1.52 s | 1.56 s |
+
+The battle now overlaps command-bar and AI source reads with world construction. A worker-backed space battle reads its own mounted definitions during graphics setup, but waits for the normal snapshot to construct the simulation. Uncapped space roster loads prepare more ships per shader pass; capped budgets retain the smaller batch. No assets were removed from the warm-up. The harness checks the selected map, units/seats and briefing coverage. Runs varied; there was **no measured improvement for land Instant Battle**. These are not FPS, multiplayer, campaign, or Workshop-pack measurements.
+
+Run `LOAD_TIMINGS=1 node tools/check-universal-planet-launch.cjs` for per-launch milliseconds and stage timestamps. Use `CASE=instant-space` (or another `mode-domain` pair) for a single path.
+
 ## Repeat battle loading: tested, not adopted
 
 An in-memory page snapshot reused the resolved unit, hardpoint and sound-event definitions in a fresh battle worker. Each worker rebuilt its own objects, nested XML methods and inheritance links. Faction data, localized text, constants and other rules still used the normal loader. No cache was written to the install or the browser profile.

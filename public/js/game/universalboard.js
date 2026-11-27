@@ -1,3 +1,4 @@
+import { mapHeading } from './universalmapheading.js';
 import { settingsControls } from './universalcontrols.js';
 import { sidebarTabs } from './universalsidebartabs.js';
 import { strategicPreview } from './universalpreview.js';
@@ -8,7 +9,7 @@ export function atlasBoard(back, play, reset) {
   el.dataset.universalScreen = 'campaign';
   el.setAttribute('aria-labelledby', 'uc-heading');
   el.toggleAttribute('data-await-map', true);
-  el.innerHTML = `<div class="uc-canvas"></div><aside class="uc-panel" aria-label="Campaign settings"><h1 id="uc-heading">Galactic Conquest</h1><div class="uc-content"><div class="uc-roster" role="region" aria-label="Campaign maps"></div></div><footer><div role="status"></div><button type="button" class="uc-reset" aria-label="Reset settings">Reset</button><button type="button" class="uc-start" disabled>Start campaign</button></footer></aside>`;
+  el.innerHTML = `<div class="uc-canvas"></div><aside class="uc-panel" aria-label="Campaign settings"><div class="uc-content"><div class="uc-roster" role="region" aria-label="Campaign maps"></div></div><footer><div role="status"></div><button type="button" class="uc-reset" aria-label="Reset settings">Reset</button><button type="button" class="uc-start" disabled>Start campaign</button></footer></aside>`;
   const content = el.querySelector('.uc-content'),
     setup = sidebarTabs('setup', 'Campaign setup', ['Faction', 'Settings'], i => {
       setup.select(i);
@@ -23,9 +24,11 @@ export function atlasBoard(back, play, reset) {
     controls = settingsControls(panel);
   const start = el.querySelector('.uc-start'),
     fields = new Map();
+  const canvas = el.querySelector('.uc-canvas');
+  mapHeading(canvas, 'Galactic Conquest', back, 'uc-heading');
   document.body.append(el);
   el.showModal();
-  const map = strategicPreview(el.querySelector('.uc-canvas'));
+  const map = strategicPreview(canvas);
   el.oncancel = e => {
     e.preventDefault();
     back();

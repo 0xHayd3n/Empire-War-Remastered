@@ -1,3 +1,4 @@
+import { gfx } from '../gfx.js';
 import { lighting, boltLights } from '../model.js';
 import { lensMaterial } from './lens.js';
 
@@ -27,26 +28,26 @@ if (typeof window !== 'undefined' && globalThis.extraFx === undefined) globalThi
 
 export const extraFxOn = () => !!globalThis.extraFx;
 
-export function gradeLens(u) {
+export function gradeLens(u, grade=GRADE) {
   const sc = lighting.sunColor.value,
     top = Math.max(1e-3, sc.r, sc.g, sc.b),
-    k = GRADE.sun;
+    k = gfx.gradeTint ? grade.sun : 0;
   u.tint.value.setRGB(1 + (sc.r / top - 1) * k, 1 + (sc.g / top - 1) * k, 1 + (sc.b / top - 1) * k);
-  u.sat.value = GRADE.sat;
-  u.contrast.value = GRADE.contrast;
-  u.vignette.value = GRADE.vignette;
+  u.sat.value = gfx.gradeSaturation ? grade.sat : 1;
+  u.contrast.value = gfx.gradeContrast ? grade.contrast : 1;
+  u.vignette.value = gfx.gradeVignette ? grade.vignette : 0;
 }
 
 export function useGrade(P, on) {
   if (on === !!P.extraLens) return;
   if (on) {
     const lens = (P.extraLens = lensMaterial());
-    P.finish = mid => {
+    P.finish = (mid, target) => {
       const u = lens.uniforms;
       u.map.value = mid.texture;
       u.texel.value.set(1 / mid.width, 1 / mid.height);
       gradeLens(u);
-      P.pass(lens, null);
+      P.pass(lens, target);
     };
   } else {
     P.finish = null;

@@ -1,3 +1,5 @@
+import {menuMotion} from './menumotion.js';
+import { battlefieldLabels } from './battlefieldlabels.js';
 import { laneDetail } from './universalchartdetail.js';
 import { chartPose, cameraMotion, relatedMaps, nearlyFramed } from './universalviewmotion.js';
 import { planetArt, planetDiameter, labelPixels } from './universalplanetart.js';
@@ -8,37 +10,8 @@ import { crest } from './universalcontrols.js';
 import { overviewView } from './universalviewcamera.js';
 
 import { galaxyChart, sectorView } from './universalgalaxychart.js';
+import { chartPasses, openingFrame, renderPass } from './universalopeningframe.js';
 const onReturn = previewReturn();
-function renderPass(query, signal) {
-  return new Promise((resolve, reject) => {
-    signal.throwIfAborted();
-    const worker = new Worker(new URL('./universalviewworker.js', import.meta.url), { type: 'module' });
-    const clean = () => {
-      worker.terminate();
-      signal.removeEventListener('abort', cancel);
-    };
-    const cancel = () => {
-      clean();
-      reject(signal.reason);
-    };
-    signal.addEventListener('abort', cancel, { once: true });
-    worker.onmessage = ({ data }) => {
-      clean();
-      if (data.error) reject(Error(data.error));
-      else resolve(data);
-    };
-    worker.onerror = e => {
-      clean();
-      reject(Error(e.message));
-    };
-    try {
-      worker.postMessage(query);
-    } catch (e) {
-      clean();
-      reject(e);
-    }
-  });
-}
 function save(cache, id, result) {
   cache.set(id, result);
   if (cache.size > 3) {
@@ -47,8 +20,8 @@ function save(cache, id, result) {
     cache.delete(k);
   }
 }
-export function strategicPreview(host) {
-  host.innerHTML = `<div class="uc-map" role="group" aria-label="Starting galaxy map" tabindex="0"><div class="uc-plane"><canvas class="uc-backplate"></canvas><canvas class="uc-planets"></canvas></div><canvas class="uc-route-detail" aria-hidden="true" hidden></canvas><canvas class="uc-context" role="img" aria-label="Other charted worlds, outside this map"></canvas><canvas class="uc-active-globes" aria-hidden="true"></canvas><div class="uc-name-window"><div class="uc-worlds"></div></div></div><span class="uc-context-note" hidden>Gray worlds · outside this map</span><div class="uc-key" aria-label="Faction key"></div>`;
+export function strategicPreview(host, { selectable = false, showBattlefieldNames = false } = {}) {
+  host.insertAdjacentHTML('beforeend', `<div class="uc-map" role="group" aria-label="Starting galaxy map" tabindex="0"><div class="uc-plane"><canvas class="uc-backplate"></canvas><canvas class="uc-planets"></canvas></div><canvas class="uc-route-detail" aria-hidden="true" hidden></canvas><canvas class="uc-context" role="img" aria-label="Other charted worlds, outside this map"></canvas><canvas class="uc-active-globes" aria-hidden="true"></canvas><div class="uc-name-window"><div class="uc-worlds"></div></div></div><span class="uc-context-note" hidden>Gray worlds · outside this map</span><div class="uc-key" aria-label="Faction key"></div>`);
   const map = host.querySelector('.uc-map'),
     plane = host.querySelector('.uc-plane'),
     sky = host.querySelector('.uc-backplate'),
@@ -61,7 +34,8 @@ export function strategicPreview(host) {
     named = new Map(),
     plates = new Map(),
     shots = new Map(),
-    ghosts = contextWorlds(host.querySelector('.uc-context'), front, labels),
+    diameter = selectable ? 3.5 : planetDiameter,
+    ghosts = contextWorlds(host.querySelector('.uc-context'), front, labels, diameter),
     pool = planetPool(),
     detail = laneDetail(host.querySelector('.uc-route-detail'));
   let contextKey, contextProjection, library, firstShot, firstPlate, reusableSky;
@@ -78,8 +52,10 @@ export function strategicPreview(host) {
     framed,
     manual = false,
     drag;
-  const reduced = matchMedia('(prefers-reduced-motion: reduce)'),
-    motion = cameraMotion(move, () => reduced.matches);
+  const reduced = menuMotion,
+    motion = cameraMotion(move, () => reduced.matches),
+    lettering = showBattlefieldNames ? battlefieldLabels(map,reduced) : null;
+  const labelHit=e=>{if(!lettering)return;const r=map.getBoundingClientRect();return lettering.hit(e.clientX-r.left,e.clientY-r.top);};
   function reveal(el, opacity, duration) {
     for (const a of el.getAnimations()) a.cancel();
     if (!reduced.matches) el.animate([{ opacity }, { opacity: 1 }], { duration, easing: 'ease-out' });
@@ -92,6 +68,15 @@ export function strategicPreview(host) {
     }
   }
   reduced.addEventListener('change', settlePreference);
+  let labelZoom, labelWidth, labelHeight, refit;
+  function sizeLabels(z) {
+    labelZoom = z; labelWidth = wView; labelHeight = hView;
+    labels.style.width = wView * z + 'px';
+    labels.style.height = hView * z + 'px';
+    labels.style.setProperty('--planet-size', labelPixels(z) + 'px');
+    labels.style.setProperty('--name-gap', (diameter / 2 + 1) * z + 'px');
+    labels.style.setProperty('--name-ring', (diameter + 2.5) * z + 'px');
+  }
   function move({ z, x, y }, frame) {
     const X = x * wView,
       Y = y * hView;
@@ -100,14 +85,22 @@ export function strategicPreview(host) {
     plane.style.transform = `translate(${X}px,${Y}px) scale(${z})`;
     // Same chart coordinates, but lay out glyphs at their final screen size rather
     // than magnifying a ~1px font and rerasterizing it throughout a close zoom.
-    labels.style.transform = `translate(${X}px,${Y}px)`;
-    labels.style.width = wView * z + 'px';
-    labels.style.height = hView * z + 'px';
-    labels.style.setProperty('--planet-size', labelPixels(z) + 'px');
-    labels.style.setProperty('--name-gap', (planetDiameter / 2 + 1) * z + 'px');
-    labels.style.setProperty('--name-ring', (planetDiameter + 2.5) * z + 'px');
+    // Move the tactical hit targets together, not 1,000 percentage-positioned
+    // boxes and pseudo-elements per wheel tick. Refit crisp text when settled.
+    if (wView !== labelWidth || hView !== labelHeight || (!selectable && z !== labelZoom)) sizeLabels(z);
+    clearTimeout(refit);
+    if (selectable && z !== labelZoom && !motion.moving) {
+      // Reduced-motion cameras snap immediately. Coalesce their stationary
+      // refit too, rather than doing it once per trackpad event.
+      refit = setTimeout(() => {
+        sizeLabels(z);
+        labels.style.transform = `translate(${X}px,${Y}px)`;
+      }, 90);
+    }
+    labels.style.transform = `translate(${X}px,${Y}px) scale(${z / labelZoom})`;
     detail.move(motion.pose, motion.goal, motion.moving || !!drag);
     ghosts.move(wView, hView, X, Y, z, frame);
+    lettering?.move(wView,hView,X,Y,z);
   }
   function scale(f, u, v) {
     if (!selection || selection.onlySky) return;
@@ -122,6 +115,7 @@ export function strategicPreview(host) {
     scale(1.18 ** (-delta / 120), (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
   };
   map.onpointerdown = e => {
+    if (selectable && (e.target.closest('[data-planet]') || labelHit(e))) return;
     if (motion.pose.z > 1 && e.button === 0 && e.isPrimary && !selection?.onlySky) {
       motion.stop();
       map.removeAttribute('data-moving');
@@ -135,12 +129,13 @@ export function strategicPreview(host) {
     if (!drag && !selection?.onlySky) {
       const r = map.getBoundingClientRect();
       ghosts.point(e.clientX - r.left, e.clientY - r.top);
+      lettering?.hover(e.target.closest('[data-planet]')?.dataset.planet || lettering.hit(e.clientX-r.left,e.clientY-r.top));
     }
     if (drag?.[2] === e.pointerId) {
       motion.set(chartPose(motion.pose.z, (e.clientX - drag[0]) / wView, (e.clientY - drag[1]) / hView));
     }
   };
-  map.onpointerleave = () => ghosts.point(-100, -100);
+  map.onpointerleave = () => { ghosts.point(-100, -100); lettering?.hover(null); };
   map.onlostpointercapture = () => (drag = null);
   map.ondblclick = e => {
     if (!selection || selection.onlySky) return;
@@ -167,6 +162,7 @@ export function strategicPreview(host) {
     sceneJob = null;
   }
   function clear() {
+    clearTimeout(refit);
     stopScene();
     skyJob?.abort();
     pool.close();
@@ -195,9 +191,7 @@ export function strategicPreview(host) {
     const { p, m, worlds, variant, onlySky } = selection,
       w = map.clientWidth,
       h = map.clientHeight,
-      factor = Math.min(2, 2560 / w, 2048 / h),
-      W = Math.max(1, Math.round(w * factor)),
-      H = Math.max(1, Math.round(h * factor)),
+      { W, H, view, backdrop, query } = chartPasses(chart, p, m, worlds, w, h),
       ref = chart.reference,
       plateId = [ref.id, ref.revision, w, h, W, H].join(':'),
       id = [p.id, p.revision, variant.map, plateId, onlySky].join(':');
@@ -210,9 +204,7 @@ export function strategicPreview(host) {
     if (requestKey === id) return;
     requestKey = id;
     stopScene();
-    const view = overviewView(worlds, ref.camera, w, h, chart.frame),
-      base = { profile: p.id, revision: p.revision, w: W, h: H, camera: p.camera, view },
-      sector = sectorView(onlySky ? [] : view.labels);
+    const sector = sectorView(onlySky ? [] : view.labels);
     wView = w;
     hView = h;
     const fit = chartPose(sector.zoom, 0.5 - sector.zoom * sector.u, 0.5 - sector.zoom * sector.v);
@@ -228,23 +220,14 @@ export function strategicPreview(host) {
     const sprites = !!p.sheets;
     // A warm sky can be submitted immediately. Let the renderer process native lanes
     // in parallel with label layout, form updates and drawing this map's portraits.
-    const readyPlate = plates.get(plateId);
-    const query = (backplate, crop) => ({
-      ...base,
-      pass: sprites ? 'lanes' : 'worlds',
-      laneKit: p.laneKit,
-      ringDiameter: ((planetDiameter + 2.5) * W) / w,
-      worlds,
-      backplate,
-      overlay: p.overlay,
-      colors: m.worlds.map(([, o]) => p.facts[o]?.color || '#bbb'),
-      scenery: [],
-      routes: m.routes,
-      looks: p.looks,
-      crop
-    });
+    const opening = openingFrame(library), sized = opening?.w === w && opening.h === h;
+    const readyPlate = plates.get(plateId) || (sized && opening.plate);
+    const shot = shots.get(id) || (!onlySky && sized && opening.p === p && opening.index === variant.map && opening.shot);
+    // The tactical index already draws its selectable portraits on the front
+    // canvas. With no owner rings or trade routes there is no second GL pass.
+    const portraitsOnly = selectable && sprites && !p.overlay.ring && !m.routes.length;
     let pending, renderLanes, signal;
-    if (!onlySky && !shots.has(id)) {
+    if (!portraitsOnly && !onlySky && !shot) {
       sceneJob = new AbortController();
       signal = sceneJob.signal;
       renderLanes = async backplate => {
@@ -254,7 +237,7 @@ export function strategicPreview(host) {
       };
       if (readyPlate && selection.continuing) pending = renderLanes(readyPlate.bitmap);
     }
-    if (contextKey !== plateId) {
+    if (!selectable && contextKey !== plateId) {
       const projected = overviewView(
         chart.catalog.map(e => e.planet),
         ref.camera,
@@ -272,14 +255,15 @@ export function strategicPreview(host) {
       contextKey = plateId;
     }
     const activeArt = onlySky ? [] : worlds.map(world => planetArt(p, world));
+    lettering?.set(m.worlds.map(([i])=>p.planets[i][0]),worlds.map(w=>w[1]||w[0]),view.labels);
     const portraitsReady = ghosts.set(
-      contextProjection,
-      new Set(onlySky ? [] : m.worlds.map(([i]) => chart.world(p, i).id)),
+      selectable ? [] : contextProjection,
+      new Set(onlySky || selectable ? [] : m.worlds.map(([i]) => chart.world(p, i).id)),
       onlySky ? [] : view.labels,
       worlds.map(p => p[1] || p[0]),
       sprites ? activeArt : null
     );
-    if (!onlySky && !selection.related && !shots.has(id)) {
+    if (!onlySky && selection.transition && !selection.related && !shot) {
       const incoming = selection;
       portraitsReady.then(() => {
         if (selection === incoming && requestKey === id) reveal(front, 0.72, 100);
@@ -302,15 +286,15 @@ export function strategicPreview(host) {
       sky.height = H;
       const display = result => {
         skyCtx.drawImage(result.bitmap, 0, 0);
-        if (!shots.has(id)) reveal(plane, 0, 160);
+        if (selection?.transition && !shot) reveal(plane, 0, 160);
         return result.bitmap;
       };
-      skyReady = plates.has(plateId)
-        ? Promise.resolve(display(plates.get(plateId)))
+      skyReady = readyPlate
+        ? Promise.resolve(display(readyPlate))
         : !chart.sky.length
           ? Promise.resolve(null)
-          : (reusableSky ? (q, s) => pool.request(mount, { ...q, keepSkyContext: true }, s) : renderPass)(
-              { ...base, profile: ref.id, revision: ref.revision, camera: ref.camera, pass: 'backdrop', worlds: [], scenery: chart.sky },
+          : (reusableSky && !portraitsOnly ? (q, s) => pool.request(mount, { ...q, keepSkyContext: true }, s) : renderPass)(
+              backdrop,
               signal
             )
               .then(result => {
@@ -331,10 +315,12 @@ export function strategicPreview(host) {
               });
     }
     // Leave the plate on screen between maps; never leave the previous planets or owners over it.
-    if (canvas.width !== W || canvas.height !== H) {
-      canvas.width = W;
-      canvas.height = H;
-    } else ctx.clearRect(0, 0, W, H);
+    if (!portraitsOnly) {
+      if (canvas.width !== W || canvas.height !== H) {
+        canvas.width = W;
+        canvas.height = H;
+      } else ctx.clearRect(0, 0, W, H);
+    }
     delete host.dataset.models;
     delete host.dataset.routes;
     delete host.dataset.reused;
@@ -353,7 +339,7 @@ export function strategicPreview(host) {
       host.dataset.reused = String(result.reused);
       host.dataset.routes = String(result.routes);
       if (sprites && result.routes) {
-        const plate = plates.get(plateId)?.bitmap;
+        const plate = readyPlate?.bitmap || plates.get(plateId)?.bitmap;
         if (plate || !chart.sky.length) {
           // An opaque crop must not jump ahead of the incoming map's sky/lane fade.
           // Render during the dissolve; reveal after it. Cancellation still closes stale bitmaps.
@@ -376,8 +362,17 @@ export function strategicPreview(host) {
       host.dataset.scene = 'backdrop';
       return;
     }
-    if (shots.has(id)) {
-      paint(shots.get(id));
+    if (portraitsOnly) {
+      const exact = selection;
+      host.dataset.routes = host.dataset.models = host.dataset.reused = '0';
+      host.dataset.scene = 'loading';
+      Promise.all([skyReady, portraitsReady]).then(([plate]) => {
+        if (selection === exact && requestKey === id) host.dataset.scene = plate || !chart.sky.length ? 'native' : 'unavailable';
+      });
+      return;
+    }
+    if (shot) {
+      paint(shot);
       return;
     }
     host.dataset.scene = 'loading';
@@ -404,17 +399,25 @@ export function strategicPreview(host) {
   observer.observe(map);
   return {
     clear,
+    labelHit,
+    mark: id=>lettering?.select(id),
+    locate(id) {
+      const el = [...named.values()].find(node => node.dataset.planet === id);
+      if (!el || !el.style.left) return;
+      const z = Math.max(motion.pose.z, 2.4);
+      manual = true;
+      motion.set(chartPose(z, 0.5 - z * parseFloat(el.style.left) / 100, 0.5 - z * parseFloat(el.style.top) / 100), 200);
+    },
     setLibrary(profiles) {
       library = profiles;
       reusableSky = profiles.every(p => p.sheets && p.laneKit);
       const prev = onReturn.take(profiles);
-      chart = prev?.chart || galaxyChart(profiles);
-      if (prev?.plate) {
-        plates.set(...prev.plate);
-        host.dataset.backdropRenders = '0';
-      }
+      const opening = openingFrame(profiles);
+      chart = opening?.chart || prev?.chart || galaxyChart(profiles);
+      if (prev?.plate) plates.set(...prev.plate);
+      if (prev?.plate || opening?.plate) host.dataset.backdropRenders = '0';
       if (prev?.shot) shots.set(...prev.shot);
-      ghosts.library(profiles, prev?.images);
+      ghosts.library(profiles, opening?.images || prev?.images);
       contextKey = null;
     },
     dispose(remember = false) {
@@ -438,6 +441,7 @@ export function strategicPreview(host) {
       observer.disconnect();
       reduced.removeEventListener('change', settlePreference);
       ghosts.dispose();
+      lettering?.close();
       for (const c of [shots, plates]) {
         for (const r of c.values()) r.bitmap.close();
         c.clear();
@@ -478,7 +482,7 @@ export function strategicPreview(host) {
             named.set(i, el);
             el.dataset.planet = planet[0];
             el.textContent = planet[1] || planet[0];
-            if (!reduced.matches) el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 145, easing: 'ease-out' });
+            if (selection.transition && !selectable && !reduced.matches) el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 145, easing: 'ease-out' });
           }
           if (el.dataset.owner !== (o || '')) {
             el.dataset.owner = o || '';

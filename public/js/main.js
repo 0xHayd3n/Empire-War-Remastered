@@ -1,9 +1,12 @@
+import { viewOptions as viewPrefs } from './game/viewpreferences.js';
+import { battleMessage } from './game/battlemessages.js';
 import { tacticalIntro } from './game/tacticalintro.js';
 import { TacticalMarker } from './game/tacticalobjects.js';
 import { initCursorLock } from './cursorlock.js';
 import { discordSetting, setDiscord, initDiscord } from './discordpresence.js';
 import { inApp, topFrame } from './platform.js';
 import { colorizes } from './game/teamcolor.js';
+import { applySetupLiveries, slotLivery } from './game/liverytransport.js';
 import { setTacticalRules } from './game/tacticalrules.js';
 import { linkedParent, authoredMapOwner, ensureMissionPlayers } from './game/linktactical.js';
 import { mpBattleParent } from './game/galacticmpbattle.js';
@@ -11,9 +14,11 @@ import { startGalaxyFrame, galaxyFrameSetup } from './game/mpgalaxyframe.js';
 import { restoreFullscreen } from './pointertrap.js';
 import './touch.js';
 import * as THREE from 'three';
+import { prepareDetachments } from './game/skirmishdetachments.js';
 import { db, loadGameData, skirmishStation, skirmishFactions, autoColors, switchLanguage } from './gamedata.js';
 import { findFiles, fetchText, fromInstall, pendingFiles } from './vfs.js';
 import { gfx, storeGfx, pixelRatio } from './gfx.js';
+import { endorPreview,yavinPreview,tatooinePreview,hothPreview,geonosisPreview,nabooPreview,utapauPreview,landPreview,wreckBattle } from './endor-preview.js';
 import { loadMap, startEnvironment, skirmishMaps, mapTitle } from './ted.js';
 import { wreckType, stepBoarding } from './game/derelicttactical.js';
 import { hasStationOrder, tickStationOrder, supportHUD } from './game/stationsupport.js';
@@ -45,9 +50,12 @@ import { BenchOverlay } from './benchoverlay.js';
 import { texturesReady, eachTextureReady, loadTexture, textureBytes, dxtSupported } from './dds.js';
 import { loadParticles } from './particles.js';
 import { Advisor } from './game/advisor.js';
-import { FrontEnd } from './game/frontend.js';
+import { loadContent } from './content.js';
+import { setLiveryProfile } from './game/liveries.js';
+import { FrontEnd, titlePreviews } from './game/frontend.js';
 import { lastConquest, recentCampaign, modeSaves, isLoadMode } from './game/modesaves.js';
 import { InstantBattle, placeInstantBattle, shipsOf, leftOutOfInstant } from './game/instantbattle.js';
+import { authoredBattle, stagePlanetSkirmish } from './game/planetbattle.js';
 import { openInstantBattle as buildInstantBattle } from './game/instantmenu.js';
 import { isDynamic, dynamicMaps, warmDynamicMaps, dynamicMapStation } from './game/dynamicmap.js';
 import { showSummary } from './game/summary.js';
@@ -99,6 +107,9 @@ import { loadBlackMarket } from './game/blackmarket.js';
 import { giveFreeUpgrades } from './game/planetabilities.js';
 import { stageStart, unstash, setInPlace, toMainMenu } from './game/transit.js';
 import { TacticalCinematics } from './game/tacticalcinematics.js';
+import { usesBattleDestruction } from './game/rapier-runtime.js';
+import { wantsRamming } from './game/ram-impacts.js';
+import { motionRule, installBattlePhysics } from './game/battle-physics.js';
 import { stepDualFlash, tutorialFx } from './game/tutorialrewards.js';
 import { PALETTE as SLOT_COLORS, MAX_SLOTS } from './game/slotrows.js';
 import { leaveTo, guardLeaving } from './leaveguard.js';
@@ -191,8 +202,7 @@ function endGame(next) {
 
 const STAGES = {
   'Loading map': [0, 0.05],
-  'Loading models': [0.05, 0.14],
-  'Loading animations': [0.14, 0.21],
+  'Loading models': [0.05, 0.21],
   'Preparing effects and shaders': [0.21, 0.44],
   'Loading ships': [0.44, 0.97],
   'Preparing the battle': [0.97, 0.98]
@@ -367,6 +377,9 @@ function benchFleet(faction, pads = false) {
 
 const PREBUILD_SECONDS = 60;
 
+const mapRoleName = o => (o.role ? `TEAM_${String(o.team).padStart(2, '0')}_${o.role}` : o.type.name.toUpperCase());
+const omitInstantObject = (o, name = mapRoleName(o)) => /^TEAM_\d\d_/.test(name) || leftOutOfInstant(o.type);
+
 class Game {
   constructor(setup) {
     this.setup = setup;
@@ -379,20 +392,42 @@ class Game {
   }
 
   async start() {
+    try {
+      await this.loadBattle();
+    } finally {
+      // Until a ready mirror takes ownership, a failed map/renderer start must
+      // not leave a speculative worker or its VFS helper alive.
+      this.pendingSim?.worker.terminate();
+      this.pendingSim = null;
+    }
+  }
+
+  async loadBattle() {
+    await prepareDetachments(this.setup);
     const { mapFile, credits, popCap, teamFactions } = this.setup;
     $('lobby').classList.add('hidden');
     if (!this.setup.attract) this.finishSplash = showSplash(this.setup.restore ? 'save' : 'space', battleDestination(this.setup));
     progress('Loading map', 0);
     const map = await loadMap(mapFile, { teams: teamFactions.length, instant: !!this.setup.instant });
+    stagePlanetSkirmish(map, this.setup);
     ensureMissionPlayers(this.setup, map);
+    applySetupLiveries(this.setup);
     startEnvironment(map, this.setup);
     audio.useAudioMode('Space');
     this.map = map;
     Game.loading = this;
     await this.showLoading(map);
 
+    const query = new URLSearchParams(location.search), warm = !query.has('nowarm');
+    this.workerMode = this.wantsWorker();
+    const Mirror = this.workerMode && (await import('./game/spacemirror.js')).SpaceMirror;
+    if (Mirror) this.pendingSim = Mirror.prepare(!query.has('noscripts'));
+    const scriptInputs = !this.workerMode && !query.has('noscripts') && ScriptHost.prepare().catch(() => null);
+    // The command bar shares a base across factions. Read it alongside the map's
+    // models; the actual human player's skin is still chosen after seating.
+    void loadHudAssets().catch(() => {});
     const stationType = (f, marker = null) => skirmishStation(f, marker) || (!marker && isDynamic(mapFile) ? dynamicMapStation(f) : null);
-    const factions = (this.artFactions = [...new Set(teamFactions)]);
+    const factions = (this.artFactions = [...new Set([...teamFactions, ...this.setup.players.map(p => p.skirmishFaction).filter(Boolean)])]);
     const names = (this.artNames = new Set()),
       seen = (this.artSeen = new Set()),
       later = [];
@@ -427,7 +462,10 @@ class Game {
           if (t) modelsForType(t, factions, names, seen, later);
         }
     const isPad = t => (t.behaviors().has('TACTICAL_BUILD_OBJECTS') && !t.has('Tactical_Health')) || t.name.toUpperCase().endsWith('_PAD');
-    for (const o of map.objects) modelsForType(o.type, factions, names, seen, isPad(o.type) ? null : later);
+    for (const o of map.objects) {
+      if (instant && omitInstantObject(o)) continue;
+      modelsForType(o.type, factions, names, seen, isPad(o.type) ? null : later);
+    }
     if (this.setup.attract)
       for (const t of await scriptTypes(map.objects.map(o => o.type.str('Lua_Script').trim()))) modelsForType(t, null, names, seen, null);
     const tacticalWeapons = [...seen].filter(isTacticalSuperweapon),
@@ -462,18 +500,18 @@ class Game {
       const b = db.constants.str('WaypointFlagModelName').trim();
       if (b) names.add(b);
     }
-    await preloadModels(names, (d, n) => progress(`Loading models (${d}/${n})`, d / n));
-    await Promise.all(
-      [...superweaponAssets].filter(n => n && !getModelData(n)).map(n => Promise.resolve(loadParticles(n)).catch(() => null))
-    );
-    progress('Loading animations', 1);
-    this.artClips = new Set(
-      (await findFiles('MODELS\\\\[^\\\\]*_(IDLE|DIE|DEPLOY|UNDEPLOY|BUILD)_00\\.ALA$')).map(n => n.split('\\').pop())
-    );
-    await this.loadClips(names);
-    await this.loadSuperweaponClips(tacticalWeapons);
-
-    this.renderer = await Renderer.create($('view'), spareRenderer);
+    const [renderer] = await Promise.all([
+      Renderer.create($('view'), spareRenderer),
+      preloadModels(names, (d, n) => progress(`Loading models (${d}/${n})`, d / n)).then(() =>
+        Promise.all([...superweaponAssets].filter(n => n && !getModelData(n)).map(n => Promise.resolve(loadParticles(n)).catch(() => null)))
+      ),
+      findFiles('MODELS\\\\[^\\\\]*_(IDLE|DIE|DEPLOY|UNDEPLOY|BUILD)_00\\.ALA$').then(files => {
+        this.artClips = new Set(files.map(n => n.split('\\').pop()));
+        return this.loadClips(names);
+      }),
+      this.loadSuperweaponClips(tacticalWeapons)
+    ]);
+    this.renderer = renderer;
     spareRenderer = null;
     window.applyGraphics(this.renderer);
     if (/[?&]gfxinfo/.test(location.search)) {
@@ -490,10 +528,10 @@ class Game {
           (v ? 'v' + v[1] : 'no version');
     }
     this.renderer.setEnvironment(map.environment);
+    // Warm the local solver alongside ship art, before either direct or worker combat starts.
+    const destructionReady = usesBattleDestruction(this.setup) ? this.renderer.enableDestruction() : null;
     progress('Preparing effects and shaders', 1);
     const warmFrom = performance.now();
-    const query = new URLSearchParams(location.search),
-      warm = !query.has('nowarm');
     if (warm) await this.warmUp(names).catch(e => console.warn('warm-up', e));
     const cap = +query.get('preload');
     const budget = cap > 0 && !this.setup.net ? cap * 1048576 : this.setup.attract ? 256 * 1048576 : Infinity;
@@ -514,8 +552,11 @@ class Game {
     this.artState = new Map();
     for (const t of later) this.artState.set(t, 'later');
     const total = later.length;
+    // An uncapped launch will warm the entire roster. Amortize the fixed shader
+    // and offscreen-draw passes; keep capped loads at their original granularity.
+    const batchSize = Number.isFinite(budget) ? 6 : 18;
     while (later.length && textureBytes() < budget) {
-      const batch = later.splice(0, 6),
+      const batch = later.splice(0, batchSize),
         done = total - later.length - batch.length;
       progress(`Loading ships (${done}/${total})`, done / total);
       await this.fetchArt(batch, false, warm).catch(e => console.warn('preload', e));
@@ -530,13 +571,21 @@ class Game {
       seedSim(this.setup.seed >>> 0);
     }
     const world = (this.world = new World({ scene: this.renderer.scene, fx: this.renderer, audio, map }));
+    const R = await destructionReady;
+    const ram = wantsRamming(this.setup);
+    if (ram && !R && (this.setup.replay || this.setup.restore?.battle?.physicsRule)) throw Error('This battle requires the local Rapier simulation rules; it cannot resume with different physics.');
+    this.setup.ramRule = ram && R ? 1 : 0; // captured alongside the seed for new replays
+    // On a threaded restore, resolve saved contact IDs on the page once so
+    // the startup snapshot can remap them to the authoritative worker's IDs.
+    this.setup.battlePhysicsRule = R ? motionRule(this.setup) : 0;
+    if (this.setup.ramRule && (!this.workerMode || this.setup.restore)) installBattlePhysics(world,R,'space',this.setup.battlePhysicsRule);
+    world.presentArmorHits = !!this.renderer.armorDamage;
     world.colorize = colorizes(this.setup);
     world.bring = type => {
       this.bring(type);
     };
-    this.workerMode = this.wantsWorker();
-    if (!this.workerMode && !new URLSearchParams(location.search).has('noscripts'))
-      this.scriptsReady = ScriptHost.create(this)
+    if (!this.workerMode && !query.has('noscripts'))
+      this.scriptsReady = ScriptHost.create(this, scriptInputs)
         .then(h => {
           this.scripts = h;
           world.scripts = h;
@@ -555,6 +604,7 @@ class Game {
     this.setup.players.forEach((cfg, i) => {
       const p = world.addPlayer(
         new Player(i, teams[cfg.team], {
+          faction: cfg.skirmishFaction,
           human: !!cfg.human,
           credits,
           popCap,
@@ -563,6 +613,7 @@ class Game {
           name: cfg.human ? (this.setup.net ? cfg.name || 'Player' : 'You') : `Bot ${++bots}`
         })
       );
+      p.livery = slotLivery(cfg);
       if (cfg.human && (!this.setup.net || cfg.peer === this.setup.net.me || cfg.peers?.includes(this.setup.net.me))) this.human = p;
       else if (cfg.human && this.setup.net?.spectators?.includes(this.setup.net.me) && !this.human) {
         this.human = p;
@@ -682,16 +733,13 @@ class Game {
         );
       }
     this.ai = this.ais[0];
-    await loadBlobMaterials().catch(() => null);
-    await loadPrioritySets().catch(e => console.warn('targeting priorities not loaded', e));
-    await loadGameFonts();
-    await loadDialogs().catch(() => null);
+    [this.hudAssets] = await Promise.all([
+      loadHudAssets(human.factionName).catch(e => { console.warn('command bar', e); return null; }),
+      loadBlobMaterials().catch(() => null), loadPrioritySets().catch(e => console.warn('targeting priorities not loaded', e)),
+      loadGameFonts(), loadDialogs().catch(() => null)
+    ]);
     this.losses = new Map();
     this.renderer.setSelectionArt(human.faction);
-    this.hudAssets = await loadHudAssets(human.factionName).catch(e => {
-      console.warn('command bar', e);
-      return null;
-    });
     this.cine = new Cinematic(this);
     this.menus = new Menus(this);
     this.advisor = new Advisor(this);
@@ -783,10 +831,11 @@ class Game {
       }
     }
     if (this.workerMode) {
-      const { SpaceMirror } = await import('./game/spacemirror.js');
-      this.mirror = new SpaceMirror(this, this.loadedSave);
+      this.mirror = new Mirror(this, this.loadedSave, this.pendingSim);
       progress('Preparing the battle', 1);
-      await this.mirror.whenReady;
+      try { await this.mirror.whenReady; }
+      catch (e) { this.mirror.stop(); throw e; }
+      this.pendingSim = null;
     }
     if (this.setup.net) await this.prepareLockstep();
     this.finishSplash?.();
@@ -808,7 +857,6 @@ class Game {
     if (this.observer) this.spectatorView = new SpectatorView(this);
     this.reportView = this.spectatorView || (this.setup.benchmark || this.setup.attract ? null : new SpectatorView(this, 'space', { quiet: true }));
     this.last = performance.now();
-    requestAnimationFrame(this.frame);
     window.game = this;
     this.diag = diag;
     diag.attach(this.renderer.renderer, () => ({
@@ -818,6 +866,7 @@ class Game {
       time: +this.world.time.toFixed(0)
     }));
     Game.loading = null;
+    this.frame(this.last);
     await this.endLoading();
   }
 
@@ -835,6 +884,7 @@ class Game {
   }
 
   dispose(keep = false) {
+    this.world?.weaponCasts?.dispose();
     this.modeSuspended = true;
     this.over = true;
     clearInterval(this.attractCycle);
@@ -901,9 +951,14 @@ class Game {
   async warmUp(names) {
     const R = this.renderer,
       gl = R.renderer;
-    const files = await findFiles('MODELS\\\\P[A-Z]{0,2}_[^\\\\]*\\.ALO$').catch(() => []);
-    const defs = await Promise.all(files.map(f => Promise.resolve(loadParticles(f.split('\\').pop())).catch(() => null)));
-    for (const d of defs) if (d && d.emitters) for (const e of d.emitters) if (e.texture) loadTexture(e.texture, { repeat: false });
+    // Model materials and effect textures are independent. Queue both before
+    // the upload barrier instead of waiting for the last emitter to discover them.
+    const effects = findFiles('MODELS\\\\P[A-Z]{0,2}_[^\\\\]*\\.ALO$').catch(() => []).then(files =>
+      Promise.all(files.map(async f => {
+        const def = await Promise.resolve(loadParticles(f.split('\\').pop())).catch(() => null);
+        for (const e of def?.emitters || []) if (e.texture) loadTexture(e.texture, { repeat: false });
+      }))
+    );
     progress('Preparing effects and shaders', 0.3);
     const park = new THREE.Group();
     for (const n of names) {
@@ -913,6 +968,7 @@ class Game {
         park.add(buildModel(data, { teamColor: this.warmColor() }).root);
       } catch {}
     }
+    await effects;
     progress('Preparing effects and shaders', 0.45);
     this.artOnCard ||= new WeakSet();
     await eachTextureReady(t => {
@@ -999,7 +1055,7 @@ class Game {
     for (const m of names)
       for (const kind of ['IDLE', 'DIE', 'DEPLOY', 'UNDEPLOY', 'BUILD']) {
         const a = animName(m, kind);
-        if (this.artClips.has(a)) wanted.push(a);
+        if (this.artClips.has(a) || /^UXA/i.test(a)) wanted.push(a);
       }
     return Promise.all(wanted.map(loadALA));
   }
@@ -1039,14 +1095,16 @@ class Game {
     for (const n of fresh) this.artNames.add(n);
     if (!fresh.length) return;
     const breath = () => new Promise(r => requestAnimationFrame(() => r()));
-    if (gentle)
+    if (gentle) {
       for (const n of fresh) {
         await preloadModels([n]);
         await breath();
       }
-    else await preloadModels(fresh);
-    await this.loadClips(fresh);
-    await this.loadSuperweaponClips(tactical);
+      await this.loadClips(fresh);
+      await this.loadSuperweaponClips(tactical);
+    } else {
+      await Promise.all([preloadModels(fresh), this.loadClips(fresh), this.loadSuperweaponClips(tactical)]);
+    }
     if (tactical.length)
       await Promise.all(fresh.filter(n => !getModelData(n)).map(n => Promise.resolve(loadParticles(n)).catch(() => null)));
     if (!gpu) return;
@@ -1159,12 +1217,12 @@ class Game {
       return p;
     };
     for (const [mapIndex, o] of map.objects.entries()) {
-      const n = o.role ? `TEAM_${String(o.team).padStart(2, '0')}_${o.role}` : o.type.name.toUpperCase();
+      const n = mapRoleName(o);
       const heading = o.rot[2] * DEG;
       if (!again && (o.type.behaviors().has('MARKER') || o.type.bool('Is_Marker')))
         w.mapObjects.set(mapIndex, [new TacticalMarker(o, () => w.neutral)]);
       const team = /^TEAM_(\d\d)_/.exec(n);
-      if (this.setup.instant && (team || leftOutOfInstant(o.type))) continue;
+      if (this.setup.instant && omitInstantObject(o, n)) continue;
       if (team) {
         const t = teams[+team[1]];
         if (!t || !t.players.length) continue;
@@ -1904,19 +1962,8 @@ class Game {
     return showSummary(this, won, this.human.team);
   }
 
-  message(text, cls = '', color = '', life = 6000) {
-    const d = document.createElement('div');
-    d.textContent = text;
-    d.className = cls;
-    if (color) d.style.color = color;
-    const box = $('messages');
-    if (box.lastChild && box.lastChild.textContent === text) return;
-    const wrap = document.createElement('p');
-    wrap.style.margin = '0';
-    wrap.appendChild(d);
-    box.appendChild(wrap);
-    while (box.childElementCount > 5) box.firstChild.remove();
-    setTimeout(() => wrap.remove(), life);
+  message(text, cls, color, life) {
+    battleMessage($('messages'), text, cls, color, life);
   }
 
   resumeModeMusic() {
@@ -1941,7 +1988,7 @@ class Game {
     if (!m || this.over || this.victoryNotified || this.setup.attract || w.tacticalSuperweapons?.disableDepth) return;
     const fought = w.lastViewerCombat ?? -1e9;
     if (m.mode !== 'battle' && fought > (m.seen ?? -1e9)) this.setMusic('battle', true);
-    else if (m.mode === 'battle' && w.time - fought >= m.peace) this.setMusic('ambient', true);
+    else if (m.mode === 'battle' && w.time - fought >= m.peace * viewPrefs.peaceDelay) this.setMusic('ambient', true);
     m.seen = fought;
   }
 
@@ -2152,6 +2199,7 @@ class Game {
       (this.setup.spaceWorker !== undefined ? !!this.setup.spaceWorker : !new URLSearchParams(location.search).has('nospaceworker')) &&
       !this.setup.campaign &&
       !this.setup.linkedTactical &&
+      !(authoredBattle(this.setup) && !this.setup.instant) &&
       !this.setup.attract
     );
   }
@@ -2592,6 +2640,16 @@ class Game {
 }
 
 async function boot() {
+  // The ordinary Universal title mount can read its atlas while the game DB and
+  // interface load. Never compete with a ticketed campaign, save, or tactical boot.
+  const universalHost = document.querySelector('meta[name="swr-universal"]')?.content;
+  const profileId = document.querySelector('meta[name="swr-pack-revision"]')?.content.split(':')[0];
+  let earlyPreviews;
+  if (universalHost && topFrame() && (!location.search || location.search === '?universal-mode=profile-play')) {
+    try {
+      if (!sessionStorage.getItem('swr-load') && !sessionStorage.getItem('swr-start')) earlyPreviews = titlePreviews(profileId || 'stock');
+    } catch {}
+  }
   mark('Starting the service worker');
   await startServiceWorker();
   mark('Checking for a new build');
@@ -2614,13 +2672,22 @@ async function boot() {
     return;
   }
   try {
-    await loadGameData(progress);
+    await loadGameData(progress, { universalProfile: universalHost ? profileId || 'stock' : undefined });
     new Pointers(document.documentElement).set('POINTER_NORMAL');
     progress('Loading interface', 1);
     await loadIcons();
   } catch (e) {
     showMessage('Failed to load game data: ' + e.message);
     console.error(e);
+    return;
+  }
+  setLiveryProfile(await loadContent(), document.querySelector('meta[name="swr-pack-revision"]')?.content);
+  if (new URLSearchParams(location.search).has('army-painter')) {
+    $('loading').classList.add('hidden');
+    hideSplash();
+    const { openArmyPainter } = await import('./game/army-painter.js');
+    await openArmyPainter();
+    leaveTo('index.html');
     return;
   }
   FACTIONS.push(...skirmishFactions());
@@ -2817,7 +2884,7 @@ async function boot() {
       alert(why);
       return;
     }
-    if (!snap.campaign && snap.mode !== 'galactic' && !anyMap(snap.setup.mapFile)) {
+    if (!snap.campaign && snap.mode !== 'galactic' && !anyMap(snap.setup.mapFile) && !authoredBattle({...snap.setup,mode:snap.mode})) {
       alert('This save is on a map that is not in your game data.');
       return;
     }
@@ -2841,7 +2908,7 @@ async function boot() {
       launch({ ...snap.setup, mode: 'land', players: snap.setup.players.map(p => ({ ...p })), restore: snap });
       return;
     }
-    new Game({ ...snap.setup, players: snap.setup.players.map(p => ({ ...p })), restore: snap }).start().catch(e => {
+    new Game({ ...snap.setup, mode:'space', players: snap.setup.players.map(p => ({ ...p })), restore: snap }).start().catch(e => {
       console.error(e);
       showMessage('Failed to load the save: ' + e.message);
     });
@@ -3232,7 +3299,7 @@ async function boot() {
   }
   {
     const box = $('optExtraFx');
-    const on = extraFxSetting();
+    const on = landPreview ? true : endorPreview ? endorPreview==='ultra' : extraFxSetting();
     box.checked = on;
     window.extraFx = on;
     box.parentElement.title = EXTRA_FX_TIP;
@@ -3274,7 +3341,7 @@ async function boot() {
   }
   for (const [id, key, flag, def, min, max, scale, old, tip] of [
     ['optShooterCap', 'swr-shooter-cap', 'shooterCap', 50, 10, 200, 1, {}, 'With Battlefront mode on: the most soldiers each side has on the field at once. Fallen soldiers respawn until a side is back at this number. Vehicles and units from buildings are not counted.'],
-    ['optShooterTickets', 'swr-shooter-tickets', 'shooterTickets', 150, 50, 500, 1, { 0: 150, 1: 150 }, 'With Battlefront mode on: each side starts with this many reinforcement tickets. Every soldier lost costs one, every vehicle two, and a side holding more than half the points drains the others by one every 5 s. A side out of tickets loses.'],
+    ['optShooterTickets', 'swr-shooter-tickets', 'shooterTickets', 150, 50, 500, 1, { 0: 150, 1: 150 }, 'Starting reinforcement tickets in Battlefront. Standard losses cost one ticket per soldier and two per vehicle; a majority of unlocked points drains opponents by one every 5 s. Solo skirmish rules can change these costs and the drain. Empty teams cannot reinforce.'],
     ['optShooterConquest', 'swr-shooter-conquest', 'shooterConquest', 20, 10, 50, 10, {}, 'With Battlefront mode on, in conquest land battles: each infantry company a side sends is worth its soldier count times this many tickets. Vehicles are worth one each and do not respawn.'],
     ['optShooterFocus', 'swr-shooter-focus', 'shooterFocus', 100, 0, 100, 100, { 0: 0, 1: 100 }, 'With Battlefront mode on: how much the edges of the view soften while you aim down the sights. All the way left is off.'],
     ['optShooterBlur', 'swr-shooter-blur', 'shooterBlur', 0, 0, 100, 100, { 0: 0, 1: 100 }, 'With Battlefront mode on: how much fast camera turns smear the view. All the way left is off.']
@@ -3352,8 +3419,9 @@ async function boot() {
     };
   }
   $('loading').classList.add('hidden');
-  const lobby = cancel =>
+  const lobby = (cancel, profiles) =>
     openLobby({
+      profiles,
       maps: [...maps, ...dynamicMaps()],
       landMaps,
       customMaps,
@@ -3367,15 +3435,17 @@ async function boot() {
         launch(setup);
       }
     });
-  const instant = cancel =>
+  const instant = (cancel, profiles) =>
     openInstantBattle({
+      profiles,
       maps: [...maps, ...customMaps.space.filter(m => !maps.includes(m)), ...dynamicMaps()],
+      landMaps: [...landMaps, ...customMaps.land],
       factions: FACTIONS,
       audio,
       cancel,
       start: setup => {
         audio.unlock();
-        leaveFor('space');
+        leaveFor(setup.mode);
         launch(setup);
       }
     });
@@ -3434,15 +3504,13 @@ async function boot() {
       launch(setup);
     }
   };
-  const universalHost = document.querySelector('meta[name="swr-universal"]')?.content;
-  const profileId = document.querySelector('meta[name="swr-pack-revision"]')?.content.split(':')[0];
   let universal;
   if (universalHost && topFrame()) {
     const { universalModeNavigation } = await import('./game/universalmodes.js');
     addEventListener('swr-save-list-changed', () => recentCampaign().catch(() => {}));
-    universal = exits.universal = universalModeNavigation({current:profileId || 'stock', host:universalHost, setup:async (mode,back) => {
-      if (mode === 'skirmish') return lobby(back);
-      if (mode === 'instant') return instant(back);
+    universal = exits.universal = universalModeNavigation({current:profileId || 'stock', host:universalHost, setup:async (mode,back,profiles) => {
+      if (mode === 'skirmish') return lobby(back, profiles);
+      if (mode === 'instant') return instant(back, profiles);
       if (isLoadMode(mode)) {
         void recentCampaign().catch(()=>{}); // Backfill this era when browsing older saves.
         return universal.saves(await modeSaves(mode.slice(5)), loadSave, back, mode);
@@ -3454,10 +3522,8 @@ async function boot() {
       }
       const start = setup => { audio.unlock(); exits.start(setup); };
       if (mode === 'story') {
-        const {openMainCampaignMenu, mainCampaign} = await import('./game/storycampaignmenu.js');
-        const {loadCampaignData} = await import('./game/galaxy.js');
-        if (!mainCampaign((await loadCampaignData()).campaigns)) return false;
-        return openMainCampaignMenu({start,cancel:back,audio});
+        const { openMainCampaignMenu } = await import('./game/storycampaignmenu.js');
+        return openMainCampaignMenu({start, cancel: back, audio, profiles});
       }
       const { openUniversalCampaign } = await import('./game/universalcampaign.js');
       return openUniversalCampaign({ profileId, host: universalHost, back, start });
@@ -3468,7 +3534,9 @@ async function boot() {
     const deskEntry = universal && (entryMode === 'profile-play' ? 'play' : entryMode === 'customize' ? 'customize' : entryMode === 'campaigns' ? 'home' : null);
     if (universal && profileId && window.parent !== window && !deskEntry) { universal.home(); return; }
     if (!params.has('nomenu')) {
-      const front = await startFrontEnd(exits).catch(e => {
+      const previews = earlyPreviews;
+      earlyPreviews = null;
+      const front = await startFrontEnd(exits, previews).catch(e => {
         console.warn('main menu', e);
         return null;
       });
@@ -3548,6 +3616,19 @@ async function boot() {
     return;
   }
   if (topFrame()) watchForResume(() => window.game);
+  if(universal && (endorPreview||landPreview||wreckBattle)){
+    const planet=yavinPreview?'Yavin':tatooinePreview||wreckBattle?'Tatooine':hothPreview?'Hoth':geonosisPreview?'Geonosis':nabooPreview?'Naboo':utapauPreview?'Utapau':'Endor';
+    const mapFile=landMaps.find(m=>m.toUpperCase()===`_MP_LAND_${planet.toUpperCase()}.TED`);
+    const {groundForces}=await import('./game/planetbattle.js');
+    const mixed = ['combined','offensive'].includes(wreckBattle) && (await import('./game/combined-arms.js')).combinedArmies(wreckBattle === 'offensive');
+    const sides=[named('Empire'),named('Rebel')];
+    if(!mapFile||sides.some(s=>!s||!groundForces(s).length)){hideSplash();showMessage('Stock '+planet+' is unavailable in this installation.');return;}
+    hideSplash();await launch({mode:'land',type:'instant',mapFile,...(endorPreview==='ultra' && params.get('endor-forecast')==='showers'?{endorShowers:true}:{}),planetBattle:{id:planet,authored:false},credits:0,popCap:0,fog:false,preBuilt:false,teamFactions:sides,
+      players:[{human:true,team:0,auto:true,color:SLOT_COLORS[0]},{human:false,team:1,auto:true,difficulty:'medium',color:SLOT_COLORS[1]}],
+      instant: { domain: 'land', groundArmies: mixed || (wreckBattle === 'infantry' ? [Array(3).fill('Stormtrooper'), Array(3).fill('Rebel_Trooper')]
+        : wreckBattle === 'armor' ? [Array(3).fill('AT_ST_Walker'), Array(3).fill('T2B_Tank')] : sides.map(groundForces)),
+        ...(wreckBattle ? { physicsEncounter: wreckBattle } : {}) }});return;
+  }
   // A prepared start goes straight to its exact authored target, never through the board or a placeholder galaxy.
   if (universal && params.has('universal-start')) {
     const ticket = params.get('universal-start');
@@ -3637,14 +3718,20 @@ async function boot() {
   if (universal && requested && universal.supports(requested)) {
     hideSplash();
     history.replaceState(null, '', location.pathname);
-    await universal.run(requested);
+    let draft;
+    if (['skirmish','instant'].includes(requested) && params.has('field-draft')) {
+      try { draft = JSON.parse(params.get('field-draft').slice(0, 4096)); } catch {}
+    }
+    await universal.run(requested, undefined, params.has('world') ? {
+      world: params.get('world'), domain: params.get('domain'), file: params.get('field-map'), query: params.get('field-search') || '', draft
+    } : null);
     return;
   }
   showSplash('menu');
   await mainMenu();
 }
 
-async function startFrontEnd({ lobby, instant, multiplayer, playlist, mapRotation, load, start, universal }) {
+async function startFrontEnd({ lobby, instant, multiplayer, playlist, mapRotation, load, start, universal }, previews) {
   const front = (window.game = new FrontEnd(audio, {
     universal, load,
     skirmish: cancel => lobby(cancel),
@@ -3653,7 +3740,8 @@ async function startFrontEnd({ lobby, instant, multiplayer, playlist, mapRotatio
     start,
     leave: () => universal ? universal.home() : leaveTo('index.html')
   }));
-  if (!(await front.open())) return false;
+  front.previews = previews;
+  if (!(await front.open())) { previews?.close(); return false; }
   hideSplash();
   const put = await pendingResume();
   if (put && window.game === front)

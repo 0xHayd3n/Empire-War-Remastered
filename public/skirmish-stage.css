@@ -1,0 +1,348 @@
+/* Solo roster: the person is the player. Color grounds their portrait, never the entire table. */
+.op-team-list .op-roster-table > thead th:first-child {
+  width: 29%;
+}
+.op-player-tile {
+  position: relative;
+  max-width: 104px;
+  background: linear-gradient(to top, var(--seat-color) 0 9%, color-mix(in srgb, var(--seat-color) 74%, transparent) 27%, transparent 87%);
+  border-radius: 2px;
+}
+.op-setup .op-player-lift {
+  position: relative;
+  width: 100%;
+  height: 62px;
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  padding: 9px 0 0;
+  overflow: hidden;
+  cursor: grab;
+  color: white;
+  border: 0;
+  background: transparent;
+  touch-action: none;
+}
+.op-player-lift:active {
+  cursor: grabbing;
+}
+.op-player-lift :is(.op-commander-portrait, .uc-crest) {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: bottom;
+  pointer-events: none;
+}
+.op-player-lift .uc-crest {
+  max-height: 36px;
+  margin-bottom: 9px;
+}
+.op-player-call {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  max-width: calc(100% - 18px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font: 500 11px/1.4 var(--ui-font);
+  background: #10171bc7;
+  padding: 0 3px;
+  white-space: nowrap;
+}
+.op-player-name {
+  display: block;
+  text-align: left;
+  font: 500 12px/1.15 var(--ui-font);
+  padding-top: 3px;
+  overflow-wrap: anywhere;
+}
+.op-player-tile .op-color {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 16px;
+  height: 15px;
+  cursor: pointer;
+}
+.op-team-list .op-seat-faction::after {
+  content: '›';
+}
+.op-team-list .op-team-title {
+  font-size: 17px;
+}
+.op-team-list .op-team-drop,
+.op-team-create .op-create-drop,
+.op-carrying .op-create-rest {
+  display: none;
+}
+.op-carrying .op-create-drop,
+.op-carrying .op-team-drop {
+  display: block;
+}
+.op-team-list.op-carrying .op-team,
+.op-carrying .op-team-create {
+  outline: 1px dashed #b0a48b;
+  outline-offset: -1px;
+}
+.op-team-list .op-team-create {
+  justify-self: stretch;
+  text-align: left;
+  min-height: 30px;
+}
+.op-team-list .op-drag-over {
+  background-color: #484438;
+  outline: 2px solid #e2bd74 !important;
+}
+.op-team-list .op-lifted .op-player-lift {
+  outline: 2px solid #e2bd74;
+  outline-offset: -2px;
+}
+/* Keep pointer destinations stationary during the drag: the keyboard target overlays the team heading. */
+.op-carrying .op-team {
+  position: relative;
+}
+.op-carrying .op-team-drop {
+  position: absolute;
+  top: 0;
+  left: 10px;
+  right: 0;
+  height: 23px;
+  min-height: 0;
+  padding: 1px 5px;
+  background: #32383c;
+  text-align: left;
+}
+.op-panel.op-staging > .op-galaxy {
+  display: none;
+}
+.op-command-stage {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template: auto auto minmax(0, 1fr) / minmax(110px, 21%) minmax(0, 1fr);
+  gap: 10px 16px;
+  padding: clamp(12px, 2vw, 30px);
+  color: #edf1ef;
+  background: radial-gradient(ellipse at 68% 75%, #34424a 0%, #18212b 42%, #0b1119 85%);
+}
+.op-stage-head {
+  grid-column: 1/-1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #ffffff26;
+}
+.op-stage-head h2 {
+  font: 600 clamp(21px, 2.5vw, 36px) / 1.1 var(--ui-font);
+  margin: 0;
+}
+.op-stage-head small {
+  margin-left: auto;
+  font: 500 14px var(--ui-font);
+  color: #ced5d8;
+}
+.op-stage-back {
+  width: 36px;
+  height: 34px;
+  font-size: 26px;
+  line-height: 1;
+}
+.op-command-stage > .op-search {
+  grid-column: 1/-1;
+  max-width: 440px;
+}
+.op-stage-families {
+  grid-column: 1;
+  display: flex;
+  flex-flow: column;
+  gap: 2px;
+  overflow: auto;
+  min-height: 0;
+  scrollbar-width: thin;
+}
+.op-stage-families .op-stage-family {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: 500 14px/1.25 var(--ui-font);
+  padding: 6px;
+  min-height: 34px;
+}
+.op-stage-family .uc-crest,
+.op-stage-faction .uc-crest {
+  width: 21px;
+  height: 21px;
+  object-fit: contain;
+  flex: none;
+}
+.op-stage-families .op-stage-family[aria-pressed='true'],
+.op-stage-family:focus-visible {
+  background: #ffffff12;
+  box-shadow: inset 2px 0 #edc478;
+}
+.op-stage-lineup {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+  overflow: auto;
+  gap: 12px;
+}
+.op-stage-cards {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+.op-stage-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.op-stage-column .op-stage-alt {
+  align-self: center;
+  margin-top: 4px;
+  color: #d6dde1;
+  font-size: 12px;
+  padding: 3px 7px;
+}
+.op-stage-cards .op-stage-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  padding: 0 0 9px;
+  background: linear-gradient(to bottom, transparent 20%, #1018208c);
+  border: 0;
+  border-bottom: 2px solid #75838c6e;
+  text-align: center;
+  white-space: normal;
+}
+.op-stage-cards .op-stage-card[aria-pressed='true'] {
+  border-color: #e6bf76;
+  background: linear-gradient(to bottom, transparent 20%, #4c413291);
+}
+.op-stage-card:focus-visible,
+.op-stage-family:focus-visible,
+.op-player-lift:focus-visible {
+  outline: 2px solid #fff0bf;
+  outline-offset: -2px;
+}
+.op-stage-model {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: clamp(115px, 44vh, 500px);
+}
+.op-stage-model canvas,
+.op-stage-still {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.op-stage-model:not(.rendered) canvas,
+.op-stage-model.rendered .op-stage-still {
+  visibility: hidden;
+}
+.op-stage-still {
+  display: grid;
+  place-items: center;
+}
+.op-stage-still :is(img, svg) {
+  width: 72%;
+  height: 67%;
+  object-fit: contain;
+}
+.op-stage-card strong {
+  font: 500 clamp(15px, 1.65vw, 26px) / 1.16 var(--ui-font);
+  overflow-wrap: anywhere;
+  margin: 4px;
+}
+.op-stage-card strong .op-commander-portrait {
+  width: 26px;
+  height: 26px;
+  vertical-align: middle;
+  object-fit: contain;
+  margin-right: 5px;
+}
+.op-stage-art-label,
+.op-stage-meta {
+  color: #bcc6cc;
+  font-size: 12px;
+  line-height: 1.25;
+  margin: 2px 4px;
+}
+.op-stage-faction {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 2px 4px;
+  font-size: 14px;
+  line-height: 1.2;
+}
+.op-stage-pages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.op-stage-pages .op-action {
+  min-width: 36px;
+}
+@media (max-width: 680px) {
+  .op-setup.op-field-atlas .op-panel.op-staging {
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  }
+  .op-panel.op-staging > .op-rail {
+    display: none;
+  }
+  .op-command-stage {
+    grid-template: auto auto auto minmax(0, 1fr) / minmax(0, 1fr);
+    gap: 8px;
+    padding: 12px;
+  }
+  .op-stage-families {
+    grid-column: 1;
+    flex-direction: row;
+    overflow: auto;
+    max-height: 64px;
+  }
+  .op-stage-families .op-stage-family {
+    flex: none;
+    max-width: 150px;
+  }
+  .op-stage-lineup {
+    grid-column: 1;
+    justify-content: safe center;
+  }
+  .op-stage-model {
+    height: clamp(90px, 38vh, 280px);
+  }
+  .op-player-tile {
+    max-width: 88px;
+  }
+}
+@media (max-height: 520px) {
+  .op-stage-model {
+    height: 90px;
+  }
+  .op-command-stage {
+    gap: 4px;
+    padding: 6px;
+  }
+  .op-stage-head {
+    padding: 0;
+  }
+  .op-stage-lineup {
+    justify-content: safe center;
+  }
+}

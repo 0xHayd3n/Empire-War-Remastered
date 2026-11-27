@@ -1,3 +1,4 @@
+import {menuMotion} from './menumotion.js';
 import { db } from '../gamedata.js';
 import { onLanguageChange } from '../language.js';
 import { flightDeck } from './flightdeck.js';
@@ -70,7 +71,7 @@ export function titleMenu(def, audio, { singleDef, multiDef, instant, latest, fi
   veil.className = 'dlg-veil title-menu';
   veil.setAttribute('aria-label', 'Main menu');
   veil.innerHTML = `<header class="home-rail"><div class="title-bar"><div class="title-tools dock-bell"></div><nav aria-label="Home navigation"></nav><div class="title-tools dock-cog"></div></div></header>
-    <section class="home-body" aria-label="Home"><div class="home-feature"></div><div class="home-destinations" role="group" aria-label="Workshop and Customize"></div></section>
+    <section class="home-body" aria-label="Home"><div class="home-feature"></div><div class="home-destinations" role="group" aria-label="Workshop and Army Painter"></div></section>
     <section class="mode-body" hidden><div class="mode-heading"><button type="button" class="mode-back" aria-label="Back" title="Back">${glyph('back')}</button><h1></h1></div><div class="play-browser" hidden></div><section class="flight-deck" aria-label="Matchmaking" hidden></section><div class="mode-grid"></div><div class="command-desk" hidden></div></section>
     <div class="title-notices" hidden></div>
     <dialog class="title-drawer" aria-labelledby="drawer-heading"><button type="button" class="drawer-close" aria-label="Close sidebar" title="Close sidebar">${glyph('dismiss')}</button><small>Command interface</small><h2 id="drawer-heading"></h2><div class="drawer-items"></div></dialog>`;
@@ -121,7 +122,7 @@ export function titleMenu(def, audio, { singleDef, multiDef, instant, latest, fi
   const settle = (from, to) => {
     calm();
     if (from === to || typeof body.animate !== 'function' || !$('.flight-deck').hidden) return;
-    if (globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    if (menuMotion.matches) return;
     const depth = { home: 0, play: 1, workshop: 1, customize: 1, custom: 2, multi: 2 },
       forward = (depth[to] ?? 0) >= (depth[from] ?? 0),
       run = (to === 'home' ? $('.home-body') : body).animate(
@@ -282,7 +283,7 @@ export function titleMenu(def, audio, { singleDef, multiDef, instant, latest, fi
       }
       return settle(from, which);
     }
-    $('.mode-heading h1').textContent = play ? textPlay() : workbench ? (which === 'workshop' ? 'Workshop' : 'Customize') : 'Custom games';
+    $('.mode-heading h1').textContent = play ? textPlay() : workbench ? (which === 'workshop' ? 'Workshop' : 'Army Painter') : 'Custom games';
     const backId = which === 'multi' || which === 'custom' ? 'IDC_OK_MAIN' : 'TITLE_BACK';
     bind(back, backId);
     back.title = back.ariaLabel = text('IDC_BACK_BUTTON_MAIN', 'Back');
@@ -368,13 +369,14 @@ export function titleMenu(def, audio, { singleDef, multiDef, instant, latest, fi
   playButton.innerHTML = `<span>${glyph('launch')}<b class="play-label"></b></span>`;
   for (const [label, tag, copy, photo, scene] of [
     ['Workshop', 'Mod exchange', 'Browse mods and build playsets.', 'story', 'relay'],
-    ['Customize', 'Fleet registry', 'Inspect ships and prepare deployment orders.', 'archive', 'fleet']
+    ['Army Painter', 'Faction markings', 'Paint a livery for your armies and fleets.', 'archive', 'fleet']
   ]) {
-    const b = button($('.home-destinations'), 'TITLE_' + label.toUpperCase(), '');
+    const id = label === 'Army Painter' ? 'TITLE_CUSTOMIZE' : 'TITLE_WORKSHOP';
+    const b = button($('.home-destinations'), id, '');
     b.className = 'home-destination';
     artwork(b, photo, scene);
     b.setAttribute('aria-label', label);
-    const descId = 'destination-' + label.toLowerCase();
+    const descId = 'destination-' + id.toLowerCase();
     b.setAttribute('aria-describedby', descId);
     b.innerHTML = `<span class="destination-copy"><small>${tag}</small><strong>${label}</strong><span id="${descId}">${copy}</span></span><i aria-hidden="true">›</i>`;
     b.addEventListener('pointerenter', prefetch);

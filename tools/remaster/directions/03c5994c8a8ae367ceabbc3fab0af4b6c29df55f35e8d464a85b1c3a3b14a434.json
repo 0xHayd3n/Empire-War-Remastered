@@ -1,0 +1,260 @@
+{
+  "job": "03c5994c8a8ae367ceabbc3fab0af4b6c29df55f35e8d464a85b1c3a3b14a434",
+  "planet": "Geonosis",
+  "views": [
+    {
+      "page": "https://www.starwars.com/databank/geonosis",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/databank_geonosis_01_169_1d04e086.jpeg",
+      "sha256": "58aa62becd3087f4c4a748e404b98b3dd5d63f76b3eec3bcfb60658f6f61e45f",
+      "visible": "Geonosis establishing view: tapering hive spires rise from layered footings in a much wider dusty plain.",
+      "subject": "settlement-edge",
+      "people": "none",
+      "settingCue": "Ground stays open between groups of spires; the apron grades straight into rock rather than forming a paved city grid."
+    },
+    {
+      "page": "https://www.starwars.com/databank/geonosis",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/geonosis-bio-3_9178c82b.jpeg",
+      "sha256": "fec30775d694fbb9b705c74d6054329b7e43012c7e95353f8267d74573078467",
+      "visible": "Geonosis arena exterior court: stacked curved tiers sit inside the excavated red rock above a comparatively smooth open floor.",
+      "subject": "building",
+      "people": "incidental-native",
+      "settingCue": "The decorated columns and inhabited tiers have deliberate boundaries. Their wall texture is not a repeating street material.",
+      "nativeContext": "Distant Geonosian spectators give scale to the depth of the curved tiers; no individual is the subject."
+    },
+    {
+      "page": "https://www.starwars.com/series/clone-wars/weapons-factory-concept-art-gallery",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/open-uri20150608-27674-ill2as_f914f9d1.jpeg",
+      "sha256": "62882a56ffcbbcdf0d4921b07d67525ec13ab772a97618992f4a98482817198a",
+      "visible": "Official Weapons Factory concept view: the crevasse bridge lands on an irregular ledge among hive towers with bare ground beyond.",
+      "subject": "settlement-edge",
+      "people": "none",
+      "settingCue": "Carry the eroded bed up to an actual structure. The bridge is a settlement-edge reference, not permission to add a bridge to this board."
+    },
+    {
+      "page": "https://www.nps.gov/badl/learn/nature/index.htm",
+      "image": "https://www.nps.gov/badl/learn/nature/images/rainbow-window-trail_6041881786_o.jpg",
+      "sha256": "f38077692804603138932c013e3d789a183ac6a67f5c26eb663c2c8fc8b9bc02",
+      "visible": "Earth analogue, NPS Badlands: ledges stack below an isolated summit and break into shadowed gullies.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "A resistant bed can carry sideways to form a short bench before a saddle interrupts it. The rainbow is not a weather instruction."
+    },
+    {
+      "page": "https://www.nps.gov/badl/learn/nature/index.htm",
+      "image": "https://www.nps.gov/common/uploads/grid_builder/badl/crop1_1/6A7F5BE6-9E49-9FF1-5DB55B24A8EFDE56.jpg?width=640&quality=80&mode=crop&format=webp",
+      "sha256": "57cf94e85ee59467e598a7012e023d0a3d04299d61603a682df330c4bb92dfab",
+      "visible": "Earth analogue, NPS Badlands: loose angular blocks accumulate along a paler crumbling shoulder.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Concentrate coarse lag where the scarp sheds material. Do not import the photographed shrubs or pale rock color."
+    },
+    {
+      "page": "https://www.blm.gov/programs/national-conservation-lands/new-mexico/kasha-katuwe-tent-rocks-national-monument",
+      "image": "https://www.blm.gov/sites/default/files/styles/hero_lg_content/public/images/2025-01/kasha-katuew-tent-rocks-rpo-nm-2011.jpg?h=06ac0d8c&amp;itok=jhJpPkds",
+      "sha256": "5f287442f29cfe9de711485a352e20870ebc5b633372dd85ea9c8d9acc8c6ac7",
+      "visible": "Earth analogue, BLM Kasha-Katuwe: a cut bank resolves into fluted faces and free-standing cones beside a narrow wash.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Shallow tops and steep faces read at different scales. The cones are erosion evidence, not Geonosian buildings."
+    },
+    {
+      "page": "https://www.nps.gov/deva/planyourvisit/golden-canyon.htm",
+      "image": "https://www.nps.gov/deva/planyourvisit/images/IMG_1111_2.JPG?maxwidth=650&autorotate=false",
+      "sha256": "2b2f4d504b443dac53c6865dac6d175d2a38cff0c68d81a9723dff6b5579849b",
+      "visible": "Earth analogue, Golden Canyon: overlapping dissected slopes open onto a broad fine-grained fan beneath distant ridges.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "The gap between distant ridges matters as much as their height. Do not enclose the map within one continuous wall."
+    },
+    {
+      "page": "https://www.nps.gov/deva/planyourvisit/golden-canyon.htm",
+      "image": "https://www.nps.gov/deva/planyourvisit/images/IMG_0983_1.JPG?maxwidth=650&autorotate=false",
+      "sha256": "10a79cd76674ee30060498d6d6b688d3d6f2fe641eb5948c4831525fc598e6f9",
+      "visible": "Earth analogue, Golden Canyon: the broad shadowed wash has parallel runs of coarse sediment surrounded by fine ground.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Change the grain of the floor inside the same channel without painting a sharp border between shade and sun."
+    },
+    {
+      "page": "https://www.nps.gov/deva/planyourvisit/golden-canyon.htm",
+      "image": "https://www.nps.gov/deva/planyourvisit/images/IMG_1031.JPG?maxwidth=650&autorotate=false",
+      "sha256": "a5eba9e9ebc862cd0f5cf43689ad7eaa3d88dbcd36d339bf7971cb88e2b8f6e8",
+      "visible": "Earth analogue, Golden Canyon: the narrow floor bends out of sight under two close, sharply eroded walls.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Keep a fine, traversable strip at the foot of even a steep rock wall rather than projecting bare cliff across the entire bed."
+    },
+    {
+      "page": "https://www.blm.gov/visit/bisti-de-na-zin-wilderness",
+      "image": "https://www.blm.gov/sites/default/files/styles/hero_lg_content/public/2025-05/bisti-wilderness-area-blm-nm-ffo-2024.jpg?h=8faa3f92&itok=aUPIG7Yc",
+      "sha256": "9f0bc7d1398bc647390b8b254b1424d45100688ebb00dba06185c804c12b1f7a",
+      "visible": "Earth analogue, BLM Bisti/De-Na-Zin: low capstones overhang narrower bases above a coarse, level floor.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "An eroded shoulder opens onto a debris fan without alternating between sand dunes and masonry. The grey stone is not a color target."
+    }
+  ],
+  "ground": {
+    "decision": "Carry fine ochre sediment through open washes. Scoured crust and angular fan gravel give way to exposed rock on the scarps.",
+    "reject": "Not loose dune sand everywhere, alternating brick paving at every tower-textured vertex, or map-wide orange lighting baked into the albedo.",
+    "evidence": [
+      "58aa62becd3087f4c4a748e404b98b3dd5d63f76b3eec3bcfb60658f6f61e45f",
+      "62882a56ffcbbcdf0d4921b07d67525ec13ab772a97618992f4a98482817198a",
+      "57cf94e85ee59467e598a7012e023d0a3d04299d61603a682df330c4bb92dfab",
+      "2b2f4d504b443dac53c6865dac6d175d2a38cff0c68d81a9723dff6b5579849b",
+      "10a79cd76674ee30060498d6d6b688d3d6f2fe641eb5948c4831525fc598e6f9",
+      "a5eba9e9ebc862cd0f5cf43689ad7eaa3d88dbcd36d339bf7971cb88e2b8f6e8",
+      "9f0bc7d1398bc647390b8b254b1424d45100688ebb00dba06185c804c12b1f7a"
+    ]
+  },
+  "foliage": {
+    "decision": "Keep the dry flats, fissures and hive shoulders free of remaster vegetation. All eight mounted prop models are mineral, architecture or vents.",
+    "reject": "Do not transplant Earth brush or a decorative cover layer into this treeless board.",
+    "evidence": [
+      "58aa62becd3087f4c4a748e404b98b3dd5d63f76b3eec3bcfb60658f6f61e45f",
+      "62882a56ffcbbcdf0d4921b07d67525ec13ab772a97618992f4a98482817198a",
+      "f38077692804603138932c013e3d789a183ac6a67f5c26eb663c2c8fc8b9bc02",
+      "10a79cd76674ee30060498d6d6b688d3d6f2fe641eb5948c4831525fc598e6f9"
+    ],
+    "review": {
+      "disposition": "absent",
+      "basis": "The mounted scene has 681 clustered rock placements, 16 larger rock forms, 21 tower models and 23 fissure or steam placements; none is a plant. The cited Geonosis basin view has an open sediment floor.",
+      "forms": [],
+      "zones": {
+        "place": [],
+        "exclude": [
+          {
+            "where": "Across the basin, hive approaches, steam fissures and the outer tableland.",
+            "reason": "Exposed mineral ground connects the shelves with no observed planted zone.",
+            "evidence": [
+              "58aa62becd3087f4c4a748e404b98b3dd5d63f76b3eec3bcfb60658f6f61e45f",
+              "62882a56ffcbbcdf0d4921b07d67525ec13ab772a97618992f4a98482817198a",
+              "f38077692804603138932c013e3d789a183ac6a67f5c26eb663c2c8fc8b9bc02",
+              "10a79cd76674ee30060498d6d6b688d3d6f2fe641eb5948c4831525fc598e6f9"
+            ]
+          }
+        ]
+      },
+      "variation": {
+        "decision": "Vary the size and exposure of mineral deposits, not plant species or planting density.",
+        "limits": [
+          "Allocate no remaster plant, crown, grass or horizon-tree layer."
+        ],
+        "evidence": [
+          "58aa62becd3087f4c4a748e404b98b3dd5d63f76b3eec3bcfb60658f6f61e45f",
+          "62882a56ffcbbcdf0d4921b07d67525ec13ab772a97618992f4a98482817198a",
+          "f38077692804603138932c013e3d789a183ac6a67f5c26eb663c2c8fc8b9bc02",
+          "10a79cd76674ee30060498d6d6b688d3d6f2fe641eb5948c4831525fc598e6f9"
+        ]
+      }
+    }
+  },
+  "landmark": {
+    "decision": "Keep the actual tapering tower spires, natural rock forms and eastern fissure at their authored silhouettes and positions. Sediment reaches the foot of the towers.",
+    "reject": "Do not rebuild the film arena or foundry in this skirmish board, import Earth buildings, or grade the map to a movie frame.",
+    "evidence": [
+      "58aa62becd3087f4c4a748e404b98b3dd5d63f76b3eec3bcfb60658f6f61e45f",
+      "fec30775d694fbb9b705c74d6054329b7e43012c7e95353f8267d74573078467",
+      "62882a56ffcbbcdf0d4921b07d67525ec13ab772a97618992f4a98482817198a"
+    ]
+  },
+  "landUse": {
+    "natural": {
+      "decision": "Fine sediment and eroded hardpan meet rocky escarpments. Pale mineral traces in surveyed dry channels are not snow, water or a permanent river.",
+      "evidence": [
+        "58aa62becd3087f4c4a748e404b98b3dd5d63f76b3eec3bcfb60658f6f61e45f",
+        "57cf94e85ee59467e598a7012e023d0a3d04299d61603a682df330c4bb92dfab",
+        "2b2f4d504b443dac53c6865dac6d175d2a38cff0c68d81a9723dff6b5579849b",
+        "10a79cd76674ee30060498d6d6b688d3d6f2fe641eb5948c4831525fc598e6f9",
+        "a5eba9e9ebc862cd0f5cf43689ad7eaa3d88dbcd36d339bf7971cb88e2b8f6e8",
+        "9f0bc7d1398bc647390b8b254b1424d45100688ebb00dba06185c804c12b1f7a"
+      ]
+    },
+    "built": {
+      "decision": "The authored tower model provides the built boundary. No paved streets at the spire bases: slot 62 alone may acquire concrete through an actual construction receipt.",
+      "evidence": [
+        "58aa62becd3087f4c4a748e404b98b3dd5d63f76b3eec3bcfb60658f6f61e45f",
+        "fec30775d694fbb9b705c74d6054329b7e43012c7e95353f8267d74573078467",
+        "62882a56ffcbbcdf0d4921b07d67525ec13ab772a97618992f4a98482817198a"
+      ]
+    },
+    "transition": {
+      "decision": "Continue the local dusty apron to a hive wall; gravel and broken stone build near a change of grade rather than following a circular stamp around every prop.",
+      "evidence": [
+        "58aa62becd3087f4c4a748e404b98b3dd5d63f76b3eec3bcfb60658f6f61e45f",
+        "62882a56ffcbbcdf0d4921b07d67525ec13ab772a97618992f4a98482817198a",
+        "57cf94e85ee59467e598a7012e023d0a3d04299d61603a682df330c4bb92dfab",
+        "10a79cd76674ee30060498d6d6b688d3d6f2fe641eb5948c4831525fc598e6f9",
+        "a5eba9e9ebc862cd0f5cf43689ad7eaa3d88dbcd36d339bf7971cb88e2b8f6e8"
+      ]
+    }
+  },
+  "outskirts": {
+    "treatment": "foothills",
+    "foliage": [],
+    "skyline": "Uneven, broad-topped rock benches with low gaps carry the canyon country beyond the playable rim. The actual Geonosian spires remain the architectural landmarks.",
+    "join": "Start at the 1,240 authored rim vertices and copy seam heights, normals and cover. Carry loose and scoured deposits a short way out before the mantle thins on rocky steps.",
+    "reject": "No evergreen fringe, repeated needle wall, invented arena towers or uniform sand dunes on the horizon.",
+    "evidence": [
+      "58aa62becd3087f4c4a748e404b98b3dd5d63f76b3eec3bcfb60658f6f61e45f",
+      "62882a56ffcbbcdf0d4921b07d67525ec13ab772a97618992f4a98482817198a",
+      "57cf94e85ee59467e598a7012e023d0a3d04299d61603a682df330c4bb92dfab",
+      "2b2f4d504b443dac53c6865dac6d175d2a38cff0c68d81a9723dff6b5579849b",
+      "10a79cd76674ee30060498d6d6b688d3d6f2fe641eb5948c4831525fc598e6f9",
+      "a5eba9e9ebc862cd0f5cf43689ad7eaa3d88dbcd36d339bf7971cb88e2b8f6e8",
+      "9f0bc7d1398bc647390b8b254b1424d45100688ebb00dba06185c804c12b1f7a"
+    ]
+  },
+  "climate": {
+    "substrate": "Fine dust, firm broken crust and patchy washed gravel belong to one continuous mineral floor on both sides of the board.",
+    "lighting": "Keep all three authored clear skies, their orange volcanic light and planet rings. The TED names no precipitation scenario; do not stage rain or sandstorms.",
+    "exceptions": "Allow light on tilted faces, shadows at spire feet and subtle mineral deposits in dry channels. Preserve cliff exposures rather than covering them in red silt.",
+    "evidence": [
+      "58aa62becd3087f4c4a748e404b98b3dd5d63f76b3eec3bcfb60658f6f61e45f",
+      "62882a56ffcbbcdf0d4921b07d67525ec13ab772a97618992f4a98482817198a",
+      "57cf94e85ee59467e598a7012e023d0a3d04299d61603a682df330c4bb92dfab",
+      "2b2f4d504b443dac53c6865dac6d175d2a38cff0c68d81a9723dff6b5579849b",
+      "10a79cd76674ee30060498d6d6b688d3d6f2fe641eb5948c4831525fc598e6f9",
+      "a5eba9e9ebc862cd0f5cf43689ad7eaa3d88dbcd36d339bf7971cb88e2b8f6e8",
+      "9f0bc7d1398bc647390b8b254b1424d45100688ebb00dba06185c804c12b1f7a"
+    ],
+    "skies": [
+      "Geo_CLear",
+      "Sunrise_Clear",
+      "Noon_Clear"
+    ],
+    "pairs": [
+      {
+        "view": "command",
+        "points": [
+          [
+            555,
+            330
+          ],
+          [
+            785,
+            330
+          ]
+        ],
+        "basis": "Two open floor windows just above the deployed western infantry, clear of the outlying rubble cluster and the spire on the scarp.",
+        "limit": 0.105
+      },
+      {
+        "view": "eastern-wash",
+        "points": [
+          [
+            410,
+            335
+          ],
+          [
+            615,
+            325
+          ]
+        ],
+        "basis": "Two sediment windows west of the standing tower in the eastern wash, outside its shadow, rock clusters, unit silhouettes and HUD.",
+        "limit": 0.105
+      }
+    ]
+  },
+  "uncertain": "Reference spires and physical badland analogues establish a ground-to-wall relationship and erosion forms, not the location of fictional rooms, exact minerals, or a mandate to build another settlement."
+}

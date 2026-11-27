@@ -1,0 +1,20 @@
+[
+  {
+    "pack": "utapau-ground",
+    "id": "rim-talus",
+    "asset": "dry_river_pebbles",
+    "role": "rock",
+    "tileMeters": 2,
+    "colorHash": "6f12838d4df6a48fe6b4f14401dbd732e731828070cc868d47cc56079dd5bbf5",
+    "surfaceHash": "be4284733ea2f73f729e1d247fcc3ab82e34f84e37a6adc74486430594b8f4b8"
+  },
+  {
+    "pack": "utapau-ground",
+    "id": "deck-wear",
+    "asset": "concrete_floor_03",
+    "role": "concrete",
+    "tileMeters": 2.5,
+    "colorHash": "7ebdf4f9bb4e8d00333602f072d83b5b128b80be50a7b8c83897d4c9835ba326",
+    "surfaceHash": "6a70a3632b6e2b617145e476ec6f5314977988f66af9b83a4286d37d57b70c23"
+  }
+]

@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { openGame } from './megfs.mjs';
 
 const mod = process.argv.indexOf('--mod'),
-  archive = openGame(fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)), mod < 0 ? [] : [process.argv[mod + 1]]);
+  archive = openGame(process.env.SWR_GAME || fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)), mod < 0 ? [] : [process.argv[mod + 1]]);
 globalThis.fetch = async input => {
   const path = String(input);
   if (path.startsWith('api/find?q=')) {
@@ -232,9 +232,13 @@ const before = g.log.messages.length;
 log.message('normal', { urgent: false });
 log.message('urgent A');
 log.message('urgent B');
+const { setViewOption } = await import('../public/js/game/viewpreferences.js');
+setViewOption('advisorHold', 2);
 assert.equal(g.log.messages.length, before);
 log.update(0);
 assert.equal(g.log.messages.at(-1).text, 'urgent B');
+assert.equal(log.hold, 'urgent B'.length * db.constants.num('Advisor_Hint_Duration', 0.1) * 2);
+setViewOption('advisorHold', 1);
 assert.equal(played.at(-1), db.faction(me).str('SFXEvent_HUD_Advisor_Urgent'));
 log.update(1000);
 assert.equal(g.log.messages.at(-1).text, 'urgent A');

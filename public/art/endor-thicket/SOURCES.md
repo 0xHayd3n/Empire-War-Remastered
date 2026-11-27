@@ -1,0 +1,5 @@
+# Dense woodland
+
+The current runtime uses [the four baked CC0 geometry panels in `sprays.png`](SPRAYS.md). They replace, rather than add to, the old runtime atlas. The whole sapling supplies a connected stem, with additional bent boughs for overhead viewing. The shrubs and ferns use their own panel bounds. Verify with `python tools/cook-endor-sprays.py --verify`.
+
+The previous `boughs.png` is an atlas of four fixed branch/plant arrangements made from the actual [CC0 photographed pine, nettle and fern cutouts](../endor-plants/SOURCES.md), not screenshots or stock art. Run `python tools/cook-endor-boughs.py` with Pillow after generating that source atlas. The panels occupy many bent radial strips at different heights and angles. New woody trunks, root flares, fallen timber and stone groups are modeled in `public/js/game/endor-thicket.js`. Stones use 512px and smaller mips of the reviewed CC0 Mossy Rock terrain scan. Near-leaf inspection is supplemented by actual model geometry from [the grove pack](../endor-grove/SOURCES.md).

@@ -1,25 +1,30 @@
 // Switching lanes changes only the panel below the two buttons. No lobby, ticket or native dialog is opened here.
 export function playTabs(root, lanes, initial, render) {
+  return tabPanels(root, lanes, initial, render, { prefix: 'play', label: 'Play modes', panelClass: 'mode-grid' });
+}
+
+export function tabPanels(root, lanes, initial, render, { prefix, label, panelClass, vertical = false, retain = false, panelRoot = root }) {
   const list = document.createElement('div');
-  list.className = 'play-tabs';
+  list.className = prefix + '-tabs';
   list.setAttribute('role', 'tablist');
-  list.setAttribute('aria-label', 'Play modes');
+  list.setAttribute('aria-label', label);
+  if (vertical) list.setAttribute('aria-orientation', 'vertical');
   root.replaceChildren(list);
   const entries = lanes.map(({ key, action, label }) => {
     const tab = document.createElement('button'),
       panel = document.createElement('section');
     tab.type = 'button';
-    tab.id = `play-tab-${key}`;
-    tab.dataset.id = action;
+    tab.id = `${prefix}-tab-${key}`;
+    if (action) tab.dataset.id = action;
     tab.textContent = label;
     tab.setAttribute('role', 'tab');
-    panel.id = `play-panel-${key}`;
+    panel.id = `${prefix}-panel-${key}`;
     panel.setAttribute('role', 'tabpanel');
     panel.setAttribute('aria-labelledby', tab.id);
-    panel.className = 'mode-grid';
+    panel.className = panelClass;
     tab.setAttribute('aria-controls', panel.id);
     list.append(tab);
-    root.append(panel);
+    panelRoot.append(panel);
     return { key, tab, panel };
   });
   let selected;
@@ -31,7 +36,7 @@ export function playTabs(root, lanes, initial, render) {
       tab.tabIndex = current ? 0 : -1;
       tab.setAttribute('aria-selected', String(current));
       panel.hidden = !current;
-      if (!current) panel.replaceChildren();
+      if (!current && !retain) panel.replaceChildren();
     }
     render(entry.panel, entry.key);
   }
@@ -39,8 +44,8 @@ export function playTabs(root, lanes, initial, render) {
     entry.tab.onclick = () => select(entry);
     entry.tab.onkeydown = e => {
       const next = {
-        ArrowRight: (i + 1) % entries.length,
-        ArrowLeft: (i + entries.length - 1) % entries.length,
+        [vertical ? 'ArrowDown' : 'ArrowRight']: (i + 1) % entries.length,
+        [vertical ? 'ArrowUp' : 'ArrowLeft']: (i + entries.length - 1) % entries.length,
         Home: 0,
         End: entries.length - 1
       }[e.key];

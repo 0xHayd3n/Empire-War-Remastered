@@ -56,7 +56,9 @@ export class MpBattles {
       for (const p of b.setup.players)
         if (p.human) {
           const all = peers(p.faction);
-          Object.assign(p, { peer: all[0], peers: all, name: game.playerName(p.faction) });
+          // Co-op on one faction owns a single tactical army. Use its lead seat's livery on every peer.
+          const owner = game.setup.players.find(slot => slot.human && slot.peer === all[0]);
+          Object.assign(p, { peer: all[0], peers: all, name: game.playerName(p.faction), livery: owner?.livery || null });
         }
       b.setup.seed = (Math.imul((game.setup.seed >>> 0) ^ 0x9e3779b9, 31) + b.id * 0x85ebca6b) >>> 0;
       b.tag = 'b' + b.id;

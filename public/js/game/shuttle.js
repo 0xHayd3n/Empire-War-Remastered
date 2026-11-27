@@ -3,9 +3,10 @@ import { heightAt, CELL } from './terrain.js';
 import { TERRAIN } from './landtables.js';
 import { AnimState } from '../ala.js';
 import { TroopBay, bayExit } from './troopbay.js';
-import { buildsFor, isHeroCompany } from './land.js';
+import { isHeroCompany } from './land.js';
+import { standardRules } from './battlefrontrules.js';
 
-const WAVE = { every: 15, first: 3, cap: 8, gap: 3, unload: 0.6, ramp: 1.2, walk: 3.2, space: 110, rings: [1, 2, 3], linger: 2.5, out: 12 },
+const WAVE = { gap: 3, unload: 0.6, ramp: 1.2, walk: 3.2, space: 110, rings: [1, 2, 3], linger: 2.5, out: 12 },
   ROOM = { send: 0.1, shake: 0.012, fov: 70 },
   _c = new THREE.Vector3(),
   _p = new THREE.Vector3(),
@@ -14,6 +15,7 @@ const WAVE = { every: 15, first: 3, cap: 8, gap: 3, unload: 0.6, ramp: 1.2, walk
 export class ShuttleWaves {
   constructor(sh) {
     this.sh = sh;
+    this.rules = sh.rules ?? standardRules;
     this.queues = [];
     this.next = [];
     this.key = 0;
@@ -35,7 +37,7 @@ export class ShuttleWaves {
       n = Math.max(this.sh.game.factions?.length || 0, this.queues.length);
     for (let s = 0; s < n; s++) {
       this.queues[s] ||= [];
-      if (this.next[s] === undefined) this.next[s] = w.time + WAVE.first;
+      if (this.next[s] === undefined) this.next[s] = w.time + this.rules.shuttleFirst;
     }
   }
 
@@ -66,7 +68,7 @@ export class ShuttleWaves {
   }
 
   openFlight(side, z) {
-    for (const F of this.flights.values()) if (F.side === side && !F.launched && F.load.length < WAVE.cap && (!z || F.z === z)) return F;
+    for (const F of this.flights.values()) if (F.side === side && !F.launched && F.load.length < this.rules.shuttleSeats && (!z || F.z === z)) return F;
     return null;
   }
 
@@ -93,7 +95,7 @@ export class ShuttleWaves {
       F = this.flight(e.side, z, this.spot(z, face, this.takenSpots(), false), false);
       this.seat(F, e);
       const q = this.queues[e.side];
-      for (let i = 0; i < q.length && F.load.length < WAVE.cap; )
+      for (let i = 0; i < q.length && F.load.length < this.rules.shuttleSeats; )
         if (q[i].who === 'bot' && !q[i].car) this.seat(F, q.splice(i, 1)[0]);
         else i++;
       this.fly(F, this.launchIn(e.side) + early * WAVE.gap);
@@ -129,8 +131,8 @@ export class ShuttleWaves {
     this.clock();
     for (let s = 0; s < this.queues.length; s++) {
       if (now < this.next[s]) continue;
-      this.next[s] += WAVE.every;
-      if (this.next[s] <= now) this.next[s] = now + WAVE.every;
+      this.next[s] += this.rules.shuttleEvery;
+      if (this.next[s] <= now) this.next[s] = now + this.rules.shuttleEvery;
       this.launch(s, this.queues[s].splice(0));
     }
     this.shield();
@@ -264,7 +266,7 @@ export class ShuttleWaves {
     for (const F of open) F.launched = true;
     const rest = [];
     for (const e of entries) {
-      const F = !e.car && open.find(f => f.load.length < WAVE.cap);
+      const F = !e.car && open.find(f => f.load.length < this.rules.shuttleSeats);
       if (F) this.seat(F, e);
       else rest.push(e);
     }
@@ -285,7 +287,7 @@ export class ShuttleWaves {
     let i = open.length;
     for (const [z, g] of groups) {
       const loads = [];
-      for (let k = 0; k < g.foot.length; k += WAVE.cap) loads.push(g.foot.slice(k, k + WAVE.cap));
+      for (let k = 0; k < g.foot.length; k += this.rules.shuttleSeats) loads.push(g.foot.slice(k, k + this.rules.shuttleSeats));
       for (const e of g.car) loads.push([e]);
       const base = Math.atan2(w.n * 10 - z.y, w.n * 10 - z.x);
       for (const load of loads) {
@@ -481,11 +483,10 @@ export class ShuttleWaves {
   }
 
   anyTransportCompany(side) {
-    const w = this.sh.world,
-      faction = this.sh.game.factions[side];
+    const w = this.sh.world;
     for (const u of w.units) {
       if (u.dead || !u.structure || !w.ally(u.side, side)) continue;
-      for (const t of buildsFor(u.type, faction, w.campaign)) if (t.str('Company_Transport_Unit') && !isHeroCompany(t)) return t.name;
+      for (const t of w.productionFor(u, side)) if (t.str('Company_Transport_Unit') && !isHeroCompany(t)) return t.name;
     }
     return '';
   }
@@ -723,7 +724,7 @@ export class ShuttleWaves {
         landed
           ? ['RAMP DOWN', 'GO GO GO', `TROOPS ${n}`]
           : launch > 0
-            ? ['STANDBY', `LAUNCH IN ${launch}`, `TROOPS ${n} / ${WAVE.cap}`]
+            ? ['STANDBY', `LAUNCH IN ${launch}`, `TROOPS ${n} / ${this.rules.shuttleSeats}`]
             : ['DESCENT', `ALT ${Math.max(0, Math.round((floor - ground) / 4))}`, `LZ ${Math.round(Math.hypot(lz.x - c.x, lz.y - c.y) / 4)}`]
       );
     }

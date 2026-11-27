@@ -1,0 +1,38 @@
+[
+  {
+    "pack": "naboo-ground",
+    "id": "meadow-turf",
+    "asset": "forrest_ground_01",
+    "role": "grass",
+    "tileMeters": 2,
+    "colorHash": "32f088a894829ba4b0dbb284ca4c5e6a806d17636f01dd670c8dfe6a914bc010",
+    "surfaceHash": "58f9dcbd023b1ab476cab297888d9b159e3e8a8d182924545846ef7099fc822f"
+  },
+  {
+    "pack": "naboo-ground",
+    "id": "worn-track",
+    "asset": "grass_path_3",
+    "role": "soil",
+    "tileMeters": 1.0,
+    "colorHash": "97dd2dfc0ffabe3d28a4e0c5f1643e08fda72b772d74d56b94b5c544ffd73e4b",
+    "surfaceHash": "ffc6ee04d5e4667f98f42ae21539d838ca122ee5862aacae7c1074be38bc5027"
+  },
+  {
+    "pack": "naboo-ground",
+    "id": "bed-gravel",
+    "asset": "gravel_floor_02",
+    "role": "sand",
+    "tileMeters": 2.0,
+    "colorHash": "0dde67c805c338716f1971bf6dfa132737b045f93d486274e88c36d962df26e6",
+    "surfaceHash": "4e436da5d0208e5f3e0280bfeef021ff4e1c01cd8de18e8d627203a06795f5fd"
+  },
+  {
+    "pack": "naboo-ground",
+    "id": "court-sett",
+    "asset": "cobblestone_05",
+    "role": "concrete",
+    "tileMeters": 2.4,
+    "colorHash": "37735ae634379cdb60853332aad0bc19a2902158648070aceb010dd38903b36c",
+    "surfaceHash": "531a31ab64743d071ad640500141dc0b2653d8b128793a5f95dfdffcd084ecc2"
+  }
+]

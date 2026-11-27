@@ -1119,6 +1119,7 @@
           <div class="what">Game data</div>
           <div id="current" class="state">Checking…</div>
           <div id="storeNote" class="store"></div>
+          <a id="armyPainterLink" class="ask hidden" href="play.html?army-painter">Army Painter</a>
           <a id="modelViewer" class="ask hidden" href="viewer.html">Open model viewer</a>
         </div>
         <a id="play" class="launch hidden" href="play.html">Launch</a>
@@ -2092,6 +2093,7 @@
               ? `Browser storage ${mb(est.usage || 0)} used of ${mb(est.quota)}`
               : '';
         $('play').classList.toggle('hidden', !ok);
+        $('armyPainterLink').classList.toggle('hidden', !ok);
         $('modelViewer').classList.toggle('hidden', !ok);
         showInstall(own);
         showStored(info);

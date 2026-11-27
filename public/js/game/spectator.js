@@ -1,4 +1,7 @@
+import { viewOptions as display } from './viewpreferences.js';
 import { db } from '../gamedata.js';
+import { spectatorTeamVision, observerDisplay, logFilters } from './spectatorpreferences.js';
+import { keysOf, keyNames, pressed, onBindingsChange, withKey } from './keybinds.js';
 import { iconUrl } from '../icons.js';
 import { iconNameFor } from './hud.js';
 import { isUpgradeType } from './sim.js';
@@ -57,6 +60,7 @@ const GRAPHS = [
   { tab: 'Losses', title: 'Own units lost', value: (h, k, i) => h[k].l?.[i] || 0, fmt: v => num(v) },
   { tab: 'Units lost', title: 'Units lost over time (hover a dot to see which)', lanes: true }
 ];
+export const reportGraphs = GRAPHS.map(g=>g.tab);
 const short = n => (n >= 100000 ? `${(n / 1000).toFixed(0)}k` : n >= 10000 ? `${(n / 1000).toFixed(1)}k` : num(n));
 const colorHex = c => (c && c.getHexString ? '#' + c.getHexString() : '#c3ab02');
 const nameOf = type => T(type.str('Text_ID'), type.name.replace(/_/g, ' '));
@@ -285,13 +289,14 @@ class SpaceSource {
     return f && Number.isFinite(f.x) ? { x: f.x, y: f.y } : null;
   }
 
-  look(at, e) {
+  look(at, e, locationOnly) {
     const rig = this.game.renderer?.rig;
     if (!rig) return;
     rig.x = at.x;
     rig.y = at.y;
     const ui = this.game.ui;
     if (ui?.track?.on) ui.endTrack();
+    if (locationOnly && ui) ui.following = null;
     if (!e || e.dead || !e.player) return;
     const v = this.world.viewer,
       seen = !v || e.player.team === v.team || (e.isSquad ? e.fighters?.some(f => f.seenBy & v.bit) : e.seenBy & v.bit);
@@ -521,11 +526,12 @@ class LandSource {
     return u && Number.isFinite(u.x) ? { x: u.x, y: u.y } : null;
   }
 
-  look(at, q) {
+  look(at, q, locationOnly) {
     const g = this.game,
       v = g.view;
     if (!v) return;
     if (g.track?.on) g.endTrack();
+    if (locationOnly) g.following = null;
     v.x = at.x;
     v.y = at.y;
     if (q && !q.dead && q.members?.length) g.following = q;
@@ -552,9 +558,11 @@ export class SpectatorView {
     this.teams = this.src.teams;
     this.tracked = 0;
     this.fogAvailable = this.src.fogAvailable;
-    this.fogOn = false;
+    this.fogOn = !quiet && this.fogAvailable && spectatorTeamVision();
     this.offset = 0;
-    this.filter = 'all';
+    const prefs=observerDisplay();
+    this.filter = logFilters.some(([v])=>v===prefs.filter) ? prefs.filter : 'all';
+    this.graphTab = Math.max(0,reportGraphs.indexOf(prefs.graph));
     this.log = [];
     this.winner = null;
     this.stats = this.teams.map(() => ({ credits: -1, power: -1, out: null, rate: null, pop: null, ups: null, income: 0, peak: 0 }));
@@ -571,6 +579,13 @@ export class SpectatorView {
     document.body.classList.add('spectating');
     this.buildTop();
     this.buildLog();
+    this.applyDisplay(prefs);
+    const refreshHints = () => {
+      for (const card of this.cards) card.refreshKey();
+      this.clampOffset();
+      this.fogBtn.title = withKey('Toggle fog of war', 'WATCH_FOG');
+    };
+    this.unbindHints = onBindingsChange(refreshHints);
     this.onKey = e => this.key(e);
     addEventListener('keydown', this.onKey, true);
     this.onResize = () => this.layout();
@@ -634,6 +649,13 @@ export class SpectatorView {
     if (i >= 0) this.track(i, true);
   }
 
+  applyDisplay(prefs) {
+    if(this.quiet)return;
+    this.logBox.style.display = prefs.log ? '' : 'none';
+    this.balance.style.display = prefs.balance ? '' : 'none';
+    this.clockEl.style.display = prefs.clock ? '' : 'none';
+  }
+
   buildTop() {
     const hud = document.getElementById('hud');
     const root = (this.top = el('div', 'sp-top', hud));
@@ -691,12 +713,17 @@ export class SpectatorView {
       const meter = el('span', 'sp-meter', c);
       const fill = el('i', '', meter);
       const badge = el('span', 'sp-badge', c);
-      el('span', 'sp-key', c, String((i + 1) % 10));
-      c.title = `${this.teamLabel(i)} · ${this.factionLabel(team)}\n${names}\nClick or press ${(i + 1) % 10} to follow this team`;
+      const key = el('span', 'sp-key', c);
+      const refreshKey = () => {
+        const shortcuts = keysOf(`WATCH_TEAM_${i + 1}`);
+        key.textContent = shortcuts.length ? keyNames(shortcuts) : '';
+        c.title = `${this.teamLabel(i)} · ${this.factionLabel(team)}\n${names}\nClick${shortcuts.length ? ' or press ' + key.textContent : ''} to follow this team`;
+      };
+      refreshKey();
       c.onclick = () => this.track(i);
-      return { c, crN, pwN, incN, popN, upN, fill, badge };
+      return { c, crN, pwN, incN, popN, upN, fill, badge, refreshKey };
     });
-    const balance = el('div', 'sp-balance', root);
+    const balance = this.balance = el('div', 'sp-balance', root);
     this.segments = this.teams.map((team, i) => {
       const s = el('button', 'sp-seg', balance);
       s.type = 'button';
@@ -729,11 +756,7 @@ export class SpectatorView {
     const head = el('div', 'sp-log-head', box);
     el('b', '', head, 'Battle log');
     const tabs = el('span', 'sp-tabs', head);
-    this.tabs = [
-      ['all', 'All teams'],
-      ['tracked', 'Followed team'],
-      ['production', 'Production']
-    ].map(([k, label]) => {
+    this.tabs = logFilters.map(([k, label]) => {
       const b = el('button', '', tabs, label);
       b.type = 'button';
       b.onclick = () => {
@@ -824,9 +847,14 @@ export class SpectatorView {
     this.prevBtn.disabled = !paged || this.offset <= 0;
     this.nextBtn.disabled = !paged || this.offset >= this.teams.length - this.visible;
     this.strip.classList.toggle('paged', paged);
-    this.pager.innerHTML =
-      (paged ? `<span>Teams ${this.offset + 1}–${this.offset + this.visible} of ${this.teams.length}</span>` : '') +
-      '<span><kbd>Tab</kbd> next team</span><span><kbd>1</kbd>–<kbd>0</kbd> pick team</span><span><kbd>F</kbd> fog of war</span><span><kbd>C</kbd> follow selected</span>';
+    this.pager.replaceChildren();
+    if (paged) el('span', '', this.pager).textContent = `Teams ${this.offset + 1}–${this.offset + this.visible} of ${this.teams.length}`;
+    for (const [id, label] of [['WATCH_NEXT', 'next team'], ['WATCH_FOG', 'fog of war'], ['WATCH_FOLLOW', 'follow selected']]) {
+      if (!keysOf(id).length) continue;
+      const hint = el('span', '', this.pager);
+      el('kbd', '', hint).textContent = keyNames(keysOf(id));
+      hint.append(' ' + label);
+    }
   }
 
   scroll(d) {
@@ -869,7 +897,7 @@ export class SpectatorView {
       : on
         ? `${SVG.eyeOff}<span>Fog of war <b>On</b> · seeing as ${this.teamLabel(this.tracked)}</span>`
         : `${SVG.eye}<span>Fog of war <b>Off</b> · full vision</span>`;
-    this.fogBtn.title = 'Toggle fog of war [F]';
+    this.fogBtn.title = withKey('Toggle fog of war', 'WATCH_FOG');
   }
 
   key(e) {
@@ -877,16 +905,16 @@ export class SpectatorView {
     if ((menu && !menu.classList.contains('hidden')) || this.game.menus?.stack?.length) return;
     const t = e.target;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
     let hit = true;
-    if (e.code === 'Tab') this.track(this.tracked + (e.shiftKey ? -1 : 1));
-    else if (/^Digit\d$/.test(e.code) && !e.shiftKey) {
-      const n = +e.code.slice(5),
-        i = n === 0 ? 9 : n - 1;
-      if (i < this.teams.length) this.track(i);
-    } else if (e.code === 'KeyF' && !e.shiftKey) this.toggleFog();
-    else if (e.code === 'KeyC' && !e.shiftKey) hit = this.src.cinema();
-    else hit = false;
+    if (pressed(e, 'WATCH_PREVIOUS')) this.track(this.tracked - 1);
+    else if (pressed(e, 'WATCH_NEXT')) this.track(this.tracked + 1);
+    else if (pressed(e, 'WATCH_FOG')) this.toggleFog();
+    else if (pressed(e, 'WATCH_FOLLOW')) hit = this.src.cinema();
+    else {
+      const i = this.teams.findIndex((_, n) => n < 10 && pressed(e, `WATCH_TEAM_${n + 1}`));
+      if (i !== -1) this.track(i);
+      else hit = false;
+    }
     if (hit) {
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -1365,7 +1393,7 @@ export class SpectatorView {
       last.kind === item.kind &&
       last.who === item.who &&
       last.type === item.type &&
-      item.time - last.time < 2
+      display.logMerge > 0 && item.time - last.time < display.logMerge
     ) {
       last.count += item.count;
       last.time = item.time;
@@ -1380,7 +1408,7 @@ export class SpectatorView {
     if (this.shows(item)) {
       this.list.prepend(this.row(item));
       this.empty.remove();
-      while (this.list.childElementCount > 120) {
+      while (this.list.childElementCount > display.logRows) {
         const r = this.list.lastElementChild;
         const it = this.log.find(x => x.row === r);
         if (it) it.row = null;
@@ -1454,7 +1482,7 @@ export class SpectatorView {
     let n = 0;
     for (const item of this.log) {
       item.row = null;
-      if (n >= 120 || !this.shows(item)) continue;
+      if (n >= display.logRows || !this.shows(item)) continue;
       this.list.appendChild(this.row(item));
       n++;
     }
@@ -1463,10 +1491,11 @@ export class SpectatorView {
 
   look(item) {
     const e = item.entity;
-    const live = this.src.where(e),
-      at = live || (Number.isFinite(item.x) ? { x: item.x, y: item.y } : null);
+    const locationOnly = display.logLocation,
+      live = !locationOnly && this.src.where(e),
+      at = live || (Number.isFinite(item.x) && Number.isFinite(item.y) ? { x: item.x, y: item.y } : null);
     if (!at) return;
-    this.src.look(at, live ? e : null);
+    this.src.look(at, live ? e : null, locationOnly);
     item.row?.classList.add('flash');
     setTimeout(() => item.row?.classList.remove('flash'), 600);
     this.game.audio?.play?.('GUI_Button_Press_2_SFX');
@@ -1474,6 +1503,7 @@ export class SpectatorView {
 
   destroy() {
     clearInterval(this.timer);
+    this.unbindHints?.();
     removeEventListener('keydown', this.onKey, true);
     removeEventListener('resize', this.onResize);
     this.top?.remove();

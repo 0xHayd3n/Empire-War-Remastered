@@ -1,11 +1,14 @@
 import * as THREE from '../../vendor/three/build/three.module.js';
+import { incidentWG, colorEmitter } from '../sceneenergy.js';
 import { families, PARAMS } from './programs.js';
 import './programs-galactic.js';
 import { env, webkit, dropGPU } from './env.js';
+import { gfx, isGameCanvas, markHDROutput } from '../gfx.js';
+import { configureExtended, createHDRPass, hdrDisplay } from '../hdr.js';
 
 const SLOT = 256;
 const SLOTS = 4096;
-const PASS = 1024;
+const PASS = 1536; // Pass uniforms padded to a 256-byte dynamic offset
 const PASSES = 64;
 const BONES = 1536;
 const ARENA = 8 << 20;
@@ -216,12 +219,9 @@ export class GPURenderer {
 
   init(device) {
     this.device = device;
-    this.context.configure({
-      device,
-      format: this.format,
-      alphaMode: 'opaque',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
-    });
+    this.hdrRequested = null;
+    this.hdrPass = null;
+    this.configureSDR();
     this.capabilities = { isWebGL2: true, maxTextureSize: device.limits.maxTextureDimension2D, getMaxAnisotropy: () => 16 };
     this.clears = new Map();
     this.unsupported = new Map();
@@ -267,6 +267,32 @@ export class GPURenderer {
     });
   }
 
+  configureSDR() {
+    this.format = navigator.gpu.getPreferredCanvasFormat();
+    this.context.configure({
+      device: this.device,
+      format: this.format,
+      alphaMode: 'opaque',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+    });
+  }
+
+  syncOutput() {
+    // Only the main-thread gameplay canvas participates. Atlas thumbnails, WebGL and worker mirrors stay SDR.
+    const wanted = gfx.hdrMode === 'auto' && !!hdrDisplay?.matches && isGameCanvas(this.domElement);
+    if (this.hdrRequested === wanted) return;
+    this.hdrRequested = wanted;
+    if (wanted && configureExtended(this.context, this.device)) {
+      this.format = 'rgba16float';
+      this.hdrPass = createHDRPass(this.device);
+    } else if (wanted || this.hdrPass) {
+      this.hdrPass?.dispose();
+      this.hdrPass = null;
+      this.configureSDR();
+    }
+    if (isGameCanvas(this.domElement)) markHDROutput(this.domElement, this.hdrPass ? 'extended' : wanted ? 'unsupported' : 'sdr');
+  }
+
   async restore() {
     if (++this.losses > LOSSES) return dropGPU();
     const device = await GPURenderer.open(RESTORE_WAIT_MS).catch(() => null);
@@ -286,7 +312,10 @@ export class GPURenderer {
         { binding: 1, visibility: V, texture: { sampleType: 'depth' } },
         { binding: 2, visibility: V, sampler: { type: 'comparison' } },
         { binding: 3, visibility: V, texture: { sampleType: 'float' } },
-        { binding: 4, visibility: V, sampler: { type: 'filtering' } }
+        { binding: 4, visibility: V, sampler: { type: 'filtering' } },
+        { binding: 5, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'depth' } },
+        ...[6,8,9].map(binding=>({binding,visibility:GPUShaderStage.FRAGMENT,texture:{sampleType:'float'}})),
+        ...[7,10].map(binding=>({binding,visibility:GPUShaderStage.FRAGMENT,sampler:{type:'filtering'}}))
       ]
     });
     this.g2 = d.createBindGroupLayout({
@@ -434,6 +463,7 @@ export class GPURenderer {
 
   begin() {
     if (this.encoder) return;
+    this.syncOutput();
     this.encoder = this.device.createCommandEncoder();
     this.frameNo++;
     this.chunkAt = 0;
@@ -452,15 +482,19 @@ export class GPURenderer {
     }
     const q = this.device.queue,
       enc = this.encoder;
+    if (this.hdrPass && this.canvasTex) {
+      this.hdrPass.draw(enc, this.canvasTex.createView(), this.canvasState.hdrView, gfx);
+    }
     let shot = null;
     if (this.capture && this.canvasTex) {
       const t = this.canvasTex,
         w = t.width,
         h = t.height,
-        row = Math.ceil((w * 4) / 256) * 256;
+        half = t.format === 'rgba16float',
+        row = Math.ceil((w * (half ? 8 : 4)) / 256) * 256;
       const buf = this.device.createBuffer({ size: row * h, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
       enc.copyTextureToBuffer({ texture: t }, { buffer: buf, bytesPerRow: row }, [w, h]);
-      shot = { buf, w, h, row, done: this.capture, bgra: this.format === 'bgra8unorm' };
+      shot = { buf, w, h, row, half, ...this.capture, bgra: this.format === 'bgra8unorm' };
       this.capture = null;
     }
     for (const c of this.chunks) if (c.used) q.writeBuffer(c.buffer, 0, c.f32, 0, (c.used * SLOT) / 4);
@@ -490,12 +524,21 @@ export class GPURenderer {
     this.trash.length = 0;
     if (shot)
       shot.buf.mapAsync(GPUMapMode.READ).then(() => {
-        const src = new Uint8Array(shot.buf.getMappedRange()),
-          out = new Uint8Array(shot.w * shot.h * 4);
+        const data = shot.buf.getMappedRange(),
+          src = shot.half ? new Uint16Array(data) : new Uint8Array(data),
+          wide = shot.half && shot.extended,
+          out = wide ? new Float32Array(shot.w * shot.h * 4) : new Uint8Array(shot.w * shot.h * 4);
         for (let y = 0; y < shot.h; y++)
           for (let x = 0; x < shot.w; x++) {
-            const s = (shot.h - 1 - y) * shot.row + x * 4,
+            const s = (shot.h - 1 - y) * (shot.row / src.BYTES_PER_ELEMENT) + x * 4,
               o = (y * shot.w + x) * 4;
+            if (shot.half) {
+              for (let k = 0; k < 4; k++) {
+                const v = THREE.DataUtils.fromHalfFloat(src[s + k]);
+                out[o + k] = wide ? v : Math.round(Math.min(1, Math.max(0, v)) * 255);
+              }
+              continue;
+            }
             out[o] = src[s + (shot.bgra ? 2 : 0)];
             out[o + 1] = src[s + 1];
             out[o + 2] = src[s + (shot.bgra ? 0 : 2)];
@@ -516,23 +559,25 @@ export class GPURenderer {
     await Promise.race([d.queue.onSubmittedWorkDone().catch(() => {}), d.lost]);
   }
 
-  readNext() {
+  readNext({ extended = false } = {}) {
     return new Promise(done => {
-      this.capture = done;
+      this.capture = { done, extended };
     });
   }
 
   async readRenderTargetPixelsAsync(t, x, y, w, h, buffer) {
     const s = this.targets.get(t);
     if (!s || !s.color) return buffer;
+    const half=s.format==='rgba16float',bytes=half ? 8 : 4;
+    if(half && !(buffer instanceof Uint16Array)) throw new TypeError('Half-float target readback needs Uint16Array');
     this.begin();
-    const row = Math.ceil((w * 4) / 256) * 256,
+    const row = Math.ceil((w * bytes) / 256) * 256,
       buf = this.device.createBuffer({ size: row * h, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
     this.encoder.copyTextureToBuffer({ texture: s.color, origin: [x, y] }, { buffer: buf, bytesPerRow: row }, [w, h]);
     this.endFrame();
     await buf.mapAsync(GPUMapMode.READ);
-    const src = new Uint8Array(buf.getMappedRange());
-    for (let j = 0; j < h; j++) buffer.set(src.subarray(j * row, j * row + w * 4), j * w * 4);
+    const src = half ? new Uint16Array(buf.getMappedRange()) : new Uint8Array(buf.getMappedRange()),stride=row/src.BYTES_PER_ELEMENT;
+    for (let j = 0; j < h; j++) buffer.set(src.subarray(j * stride, j * stride + w * 4), j * w * 4);
     buf.destroy();
     return buffer;
   }
@@ -543,8 +588,8 @@ export class GPURenderer {
         w = c.width,
         h = c.height;
       let s = this.canvasState;
-      if (!s || s.w !== w || s.h !== h) {
-        if (s) this.later(s.color, s.depth);
+      if (!s || s.w !== w || s.h !== h || s.format !== this.format) {
+        if (s) this.later(s.color, s.depth, s.hdrColor);
         const usage = GPUTextureUsage.RENDER_ATTACHMENT;
         s = this.canvasState = {
           depthRead: null,
@@ -563,23 +608,29 @@ export class GPURenderer {
         };
         s.colorView = s.color.createView();
         s.depthView = s.depth.createView();
+        if (this.hdrPass) {
+          s.hdrColor = this.device.createTexture({ size: [w, h], format: this.format, usage: usage | GPUTextureUsage.TEXTURE_BINDING });
+          s.hdrView = s.hdrColor.createView();
+        }
         s.key = 'canvas|' + this.format + '|' + this.depthFormat;
       }
       return s;
     }
     let s = this.targets.get(t);
-    const samples = t.samples > 1 && !t.depthTexture ? MSAA : 1;
-    if (!s || s.w !== t.width || s.h !== t.height || s.samples !== samples) {
+    // Contact shading can load a depth sample directly from the multisampled scene. Shadow samplers still need single-sample depth.
+    const samples = t.samples > 1 && (!t.depthTexture || t.depthTexture.format === THREE.DepthStencilFormat) ? MSAA : 1;
+    const format = t.texture.type === THREE.HalfFloatType || this.hdrPass && t.texture.userData.hdrColor ? 'rgba16float' : 'rgba8unorm';
+    if (!s || s.w !== t.width || s.h !== t.height || s.samples !== samples || s.format !== format) {
       if (s) this.later(s.color, s.depth, s.multisampled);
       const usage = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC;
       const tx = t.texture,
         levels = tx.generateMipmaps && MIP_FILTERS.has(tx.minFilter) ? Math.floor(Math.log2(Math.max(t.width, t.height))) + 1 : 1;
-      s = { w: t.width, h: t.height, samples, format: 'rgba8unorm', resolve: null, multisampled: null, gen: (s ? s.gen : 0) + 1, levels };
-      s.color = this.device.createTexture({ size: [t.width, t.height], format: 'rgba8unorm', mipLevelCount: levels, usage });
+      s = { w: t.width, h: t.height, samples, format, resolve: null, multisampled: null, gen: (s ? s.gen : 0) + 1, levels };
+      s.color = this.device.createTexture({ size: [t.width, t.height], format, mipLevelCount: levels, usage });
       if (samples > 1) {
         s.multisampled = this.device.createTexture({
           size: [t.width, t.height],
-          format: 'rgba8unorm',
+          format,
           sampleCount: samples,
           usage: GPUTextureUsage.RENDER_ATTACHMENT
         });
@@ -596,7 +647,8 @@ export class GPURenderer {
         });
         s.depthView = s.depth.createView();
       }
-      s.key = 'rt|rgba8unorm|' + (t.depthBuffer ? 'd' : '') + (samples > 1 ? '|ms' + samples : '');
+      s.incident = !!tx.userData.incidentScene;
+      s.key = (s.incident ? 'incident|' : 'rt|') + format + '|' + (t.depthBuffer ? 'd' : '') + (samples > 1 ? '|ms' + samples : '');
       this.targets.set(t, s);
       if (t.depthTexture && s.depth)
         this.depthViews.set(t.depthTexture, { view: s.depth.createView({ aspect: 'depth-only' }), gen: s.gen });
@@ -612,7 +664,14 @@ export class GPURenderer {
     return s;
   }
 
-  render(scene, camera) {
+  // Opt-in for a depth-neutral background with its own self-contained shader.
+  // Encode it first against the *same* freshly cleared MSAA attachments as the
+  // world. Nothing samples an intermediate resolve between these two draws.
+  renderWithBackdrop(scene, camera, backdrop) {
+    return this.render(scene, camera, backdrop);
+  }
+
+  render(scene, camera, backdrop = null) {
     if (this.lost) return;
     this.begin();
     if (scene.matrixWorldAutoUpdate === true) scene.updateMatrixWorld();
@@ -626,6 +685,10 @@ export class GPURenderer {
     L.opaque.length = 0;
     L.transparent.length = 0;
     L.n = 0;
+    if (backdrop) {
+      backdrop.updateMatrixWorld();
+      this.project(backdrop, camera, -Infinity);
+    }
     this.project(scene, camera, 0);
     if (this.sortObjects) {
       L.opaque.sort(painterSortStable);
@@ -637,7 +700,7 @@ export class GPURenderer {
     this.clears.delete(this.target);
     if (!this.target) {
       if (!this.canvasTex) this.canvasTex = this.context.getCurrentTexture();
-      T.resolve = this.canvasTex.createView();
+      T.resolve = T.hdrView || this.canvasTex.createView();
     }
     const soft = this.softWanted(L.transparent, T);
     this.softNow = soft;
@@ -696,7 +759,7 @@ export class GPURenderer {
   }
 
   softWanted(list, T) {
-    if (!this.softOn || env.soft === false || !T.depth || !list.length || (this.target && this.target.depthTexture)) return false;
+    if (!this.softOn || env.soft === false || !T.depth || !list.length || (this.target?.depthTexture && this.target.depthTexture.format !== THREE.DepthStencilFormat)) return false;
     for (const it of list) {
       const S = this.stateOf(it.material);
       if (S.fam && S.fam.soft && S.fam.soft(it.material)) return true;
@@ -757,9 +820,7 @@ export class GPURenderer {
     rp.draw(3);
     rp.end();
     const pass = this.encoder.beginRenderPass({
-      colorAttachments: [
-        { view: T.colorView, resolveTarget: T.samples > 1 ? T.resolve : undefined, loadOp: 'load', storeOp: 'store' }
-      ],
+      colorAttachments: [{ view: T.colorView, resolveTarget: T.samples > 1 ? T.resolve : undefined, loadOp: 'load', storeOp: 'store' }],
       depthStencilAttachment: {
         view: T.depthView,
         depthLoadOp: 'load',
@@ -777,9 +838,19 @@ export class GPURenderer {
     this.curLight = this.lighting;
   }
 
+  // A private render target can leave before the renderer/device does (battle → menu).
+  releaseTarget(target) {
+    const s = this.targets.get(target);
+    if (!s) return;
+    this.later(s.color, s.depth, s.multisampled);
+    this.targets.delete(target);
+    this.textures.delete(target.texture);
+    if (target.depthTexture) this.depthViews.delete(target.depthTexture);
+  }
+
   contextOf(camera, T) {
     let byT = this.ctxs.get(camera);
-    if (!byT) this.ctxs.set(camera, (byT = new Map()));
+    if (!byT) this.ctxs.set(camera, (byT = new WeakMap()));
     let list = byT.get(T);
     if (!list) byT.set(T, (list = []));
     if (this.ctxFrame !== this.frameNo) {
@@ -833,9 +904,25 @@ export class GPURenderer {
     v3(64, L.fillColor.value);
     f[o + 67] = this.softNow ? 1 : 0;
     v3(68, L.ambient.value);
+    f[o + 71] = L.textureCubic?.value || 0;
     v3(72, L.fogTint.value);
+    f[o + 75] = L.orbitalKey?.value || 0;
+    f[o + 87] = L.orbitHDR?.value || 0;
+    if (f[o + 75] >= 3 || L.landProbeOn?.value>0 || (L === this.lighting && env.refitOrbit)) {
+      v3(248, L.orbitDir.value);
+      v3(252, L.orbitRadiance.value);
+      // WGSL mat3 columns are padded to vec4; Three.Matrix3 stores packed columns.
+      for (let i=0; i<9; i++) {
+        const j = i + Math.floor(i / 3);
+        f[o + 224 + j] = L.orbitPos.value.elements[i];
+        f[o + 236 + j] = L.orbitNeg.value.elements[i];
+      }
+    }
     f[o + 76] = L.fogRange.value.x;
     f[o + 77] = L.fogRange.value.y;
+    f[o + 78] = L.surfaceLook?.value.x || 0;
+    f[o + 79] = L.surfaceLook?.value.y || 0;
+    f[o + 223] = L.materialFinish?.value || 0;
     v3(80, L.fillDir2.value);
     f[o + 83] = L.fillWrap.value;
     v3(84, L.fillColor2.value);
@@ -864,10 +951,46 @@ export class GPURenderer {
       fow = this.texture(L.fowMap.value, '2d');
     const shadow = sh || { view: this.noDepth, gen: 0 };
     const out = this.passOut || (this.passOut = {});
+    const nearTex = L.hullShadowParams?.value.x > 0 && L.hullShadowMap?.value;
+    const near = nearTex && this.target?.depthTexture !== nearTex && this.depthViews.get(nearTex);
+    f[o+272] = 0;
+    if (near) {
+      L.hullShadowMatrix.value.toArray(f,o+256);
+      v3(272,L.hullShadowParams.value);
+    }
+    const blasts = env.blasts, count = L === this.lighting ? blasts?.blastCount.value || 0 : 0;
+    f[o + 275] = count;
+    for (let i = 0; i < count; i++) {
+      blasts.blastSource.value[i].toArray(f, o + 276 + 4*i);
+      blasts.blastEnergy.value[i].toArray(f, o + 292 + 4*i);
+    }
+    f[o+311]=0;
+    f[o+319]=0;
+    if(L.fieldLook) L.fieldLook.value.toArray(f,o+320); else f.fill(0,o+320,o+324);
+    if(L.fieldWind) L.fieldWind.value.toArray(f,o+324); else f.fill(0,o+324,o+328);
+    if(L.landGround?.value.w>0)L.landGround.value.toArray(f,o+316);
+    if (L.planetDisk?.value.w>0) {
+      L.planetDisk.value.toArray(f,o+308);
+      v3(312,L.planetRadiance.value);
+    }
+    if(L.receiverMap)L.receiverMap.value.toArray(f,o+328);else f.fill(0,o+328,o+332);
+    if(L.receiverMode)L.receiverMode.value.toArray(f,o+332);else f.fill(0,o+332,o+336);
+    if(L.landStyle)L.landStyle.value.toArray(f,o+336);else f.fill(0,o+336,o+340);
+    if(L.forestWeather)L.forestWeather.value.toArray(f,o+340);else f.fill(0,o+340,o+344);
+    if(L.wideShadow)L.wideShadow.value.toArray(f,o+344);else f.fill(0,o+344,o+347);
+    f[o+347]=L.landProbeOn?.value||0;
+    if(L.canopyView)L.canopyView.value.toArray(f,o+348);else f.fill(0,o+348,o+352);
+    f[o+352] = L.sceneryWet?.value || 0;
+    out.cloudTex=f[o+330]>0?L.fieldCloud?.value:null;out.cloud=this.texture(out.cloudTex,'2d');
+    const probe=f[o+334], useSoil=f[o+331]>0 || probe<0;
+    out.soil=this.texture(useSoil?L.fieldSoil?.value:null,'2d');out.sky=this.texture(probe!==0?L.fieldSky?.value:null,'2d');
+    out.near = near?.view || this.noDepth;
+    if(!near?.view && f[o+319]>1.5)f[o+319]=1; // No current fine map on this device: sample only the wide cascade.
     out.shadow = shadow;
     out.fow = fow;
     out.fowTex = L.fowMap.value;
-    out.key = (sh ? 1 : 0) + '|' + shadow.gen + '|' + fow.gen + '|' + fow.id;
+    out.key = (sh ? L.shadowMap.value.id : 0) + '|' + shadow.gen + '|' + fow.gen + '|' + fow.id + '|' + (near ? nearTex.id + ':' + near.gen : '-');
+    if(out.cloudTex||useSoil||probe!==0)out.key+=`|${out.cloud.id}:${out.cloud.gen}|${out.soil.id}:${out.soil.gen}|${out.sky.id}:${out.sky.gen}`;
     return out;
   }
 
@@ -879,7 +1002,10 @@ export class GPURenderer {
         { binding: 1, resource: s.shadow.view },
         { binding: 2, resource: this.compareSampler },
         { binding: 3, resource: s.fow.view },
-        { binding: 4, resource: this.sampler(s.fowTex, s.fow.levels) }
+        { binding: 4, resource: this.sampler(s.fowTex, s.fow.levels) },
+        { binding: 5, resource: s.near },
+        { binding: 6, resource:s.cloud.view },{binding:7,resource:this.sampler(s.cloudTex,s.cloud.levels)},
+        { binding: 8, resource:s.soil.view },{binding:9,resource:s.sky.view},{binding:10,resource:this.sampler(null,1)}
       ]
     });
   }
@@ -1331,11 +1457,12 @@ export class GPURenderer {
     }
     const fam = S.fam,
       d = this.device,
-      code = fam.code(m, instanced),
-      skey = fam.key(m, instanced);
+      incident = T.incident && colorEmitter(m),
+      skey = fam.key(m, instanced) + (incident ? '|incident' : '');
     let mod = this.modules.get(skey);
     if (!mod) {
-      mod = d.createShaderModule({ code, label: skey });
+      const source=fam.code(m,instanced,incident);
+      mod = d.createShaderModule({ code:incident ? incidentWG(source) : source, label: skey });
       mod.getCompilationInfo().then(info => {
         for (const e of info.messages) if (e.type === 'error') console.error('webgpu', skey, e.lineNum + ':' + e.linePos, e.message);
       });
@@ -1691,10 +1818,17 @@ export class GPURenderer {
     if (!t) return { view: kind === 'unfilterable-float' ? this.empty['unfilterable-float'] : this.empty[dim], gen: 0, id: 0, levels: 1 };
     const dv = this.depthViews.get(t);
     if (dv) return dv;
-    if (t.isDepthTexture) return { view: kind === 'depth' ? this.noDepth : kind === 'unfilterable-float' ? this.empty['unfilterable-float'] : this.empty[dim], gen: 0, id: 0, levels: 1 };
+    if (t.isDepthTexture)
+      return {
+        view: kind === 'depth' ? this.noDepth : kind === 'unfilterable-float' ? this.empty['unfilterable-float'] : this.empty[dim],
+        gen: 0,
+        id: 0,
+        levels: 1
+      };
     let e = this.textures.get(t);
     if (e && e.rt) return e;
-    if (t.isRenderTargetTexture) return { view: kind === 'unfilterable-float' ? this.empty['unfilterable-float'] : this.empty[dim], gen: 0, id: 0, levels: 1 };
+    if (t.isRenderTargetTexture)
+      return { view: kind === 'unfilterable-float' ? this.empty['unfilterable-float'] : this.empty[dim], gen: 0, id: 0, levels: 1 };
     if (!e) {
       e = { id: attrId(t), gen: 0, version: 0, view: null, tex: null, levels: 1, w: 0, h: 0, fmt: '' };
       this.textures.set(t, e);

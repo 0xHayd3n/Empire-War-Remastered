@@ -1,0 +1,5 @@
+# Yavin low foliage at distance
+
+These four cutouts are derived from the **same** licensed [Poly Haven Fern 02](https://polyhaven.com/a/fern_02) used in [endor-grove](../endor-grove/SOURCES.md) and three [Anthurium variants](../yavin-jungle/SOURCES.md) used in Yavin's detailed understory. The existing packs document the original artists, licence and source files. No reference photographs, stock textures, new species or gameplay entities are included.
+
+`python tools/cook-yavin-groundcover.py --repo .` reconstructs the proxies offline from the packed donor meshes and their diffuse/alpha maps. `--verify --out public/art/yavin-groundcover` checks the packed result. Each is eight triangles: three vertical silhouettes and a top view of the same plant. The atlas includes transparent gutters with extended leaf color. `models.json` records donor bounds, source and output hashes, scale and UV registration. Run `node tools/remaster/bind-yavin.mjs` after intentional, reviewed changes; a changed or missing asset leaves the mounted scene original.

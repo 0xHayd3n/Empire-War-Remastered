@@ -25,6 +25,7 @@ const homeYaw = -2.14,
   homePitch = 0.32;
 const direction = (yaw, pitch) => new T.Vector3(Math.cos(yaw) * Math.cos(pitch), Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch));
 async function open(q) {
+  const {usePageRefit}=await import('../texture-showcase/store.js');usePageRefit(q.refit);
   const [{ loadModel, lighting, updateBillboards }, { texturesReady }, { animName, loadALA, AnimState }] = await Promise.all([
     import('../model.js'),
     import('../dds.js'),

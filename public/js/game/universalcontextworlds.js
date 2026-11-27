@@ -1,3 +1,4 @@
+import {menuMotion} from './menumotion.js';
 import { contextNames } from './universalcontextnames.js';
 import { portraitBank, planetDiameter, contextNameSize, nameSize, labelPixels } from './universalplanetart.js';
 // Regional aliases may share a display name. Coalesce only background worlds, never the map's actual locations.
@@ -10,12 +11,12 @@ export function inactiveWorlds(catalog, excluded, activeNames) {
     return true;
   });
 }
-export function contextWorlds(canvas, front, labels) {
+export function contextWorlds(canvas, front, labels, diameter = planetDiameter) {
   const ctx = canvas.getContext('2d'),
     fg = front.getContext('2d'),
     art = portraitBank(schedule),
     names = contextNames(),
-    reduced = matchMedia('(prefers-reduced-motion: reduce)');
+    reduced = menuMotion;
   let points = [],
     centers = [],
     active = null,
@@ -58,13 +59,14 @@ export function contextWorlds(canvas, front, labels) {
   function draw() {
     raf = 0;
     if (!view) return;
-    canvas.hidden = front.hidden = false;
+    canvas.hidden = !points.length;
+    front.hidden = false;
     const { w, h, x, y, z } = view,
       d = Math.min(devicePixelRatio || 1, 2),
-      size = planetDiameter * z,
+      size = diameter * z,
       r = size / 2,
       pt = (labelPixels(z) * contextNameSize) / nameSize;
-    prepare(canvas, ctx, w, h, d);
+    if (points.length) prepare(canvas, ctx, w, h, d);
     prepare(front, fg, w, h, d);
     index = [];
     if (!w || !h) return;
@@ -73,8 +75,8 @@ export function contextWorlds(canvas, front, labels) {
       if (r < 0 || b < 0 || l > w || t > h) return;
       protectedRects.push([l, t, r - l, b - t]);
     }
-    const rect = canvas.getBoundingClientRect();
-    for (const el of labels.children) {
+    const rect = points.length && canvas.getBoundingClientRect();
+    for (const el of points.length ? labels.children : []) {
       const b = el.getBoundingClientRect();
       protect(b.left - rect.left - 1.5, b.top - rect.top - 1.5, b.right - rect.left + 1.5, b.bottom - rect.top + 1.5);
     }
@@ -84,16 +86,23 @@ export function contextWorlds(canvas, front, labels) {
       const [u, v] = centers[i],
         X = x + u * w * z,
         Y = y + v * h * z;
+      if (X+r<0 || Y+r<0 || X-r>w || Y-r>h) continue;
       if (active) {
         art.draw(fg, active[i], X, Y, size);
         if (art.has(active[i])) detailed++;
       }
-      const pad = r + 2;
-      protect(X - pad, Y - pad, X + pad, Y + pad);
+      if (points.length) {
+        const pad = r + 2;
+        protect(X - pad, Y - pad, X + pad, Y + pad);
+      }
     }
     front.dataset.diameter = String(size);
     front.dataset.detailed = String(detailed);
     front.dataset.worlds = String(centers.length);
+    if (!points.length) {
+      canvas.dataset.visible = canvas.dataset.detailed = '0';
+      return;
+    }
     ctx.textBaseline = 'middle';
     ctx.font = `${pt}px system-ui`;
     ctx.fillStyle = '#eee';
@@ -130,12 +139,16 @@ export function contextWorlds(canvas, front, labels) {
       preload = [...new Set(profiles.flatMap(p => p.sheets || []))];
       canvas.dataset.sheetCount = String(preload.length);
     },
-    set(catalog, excluded, positions, names, activeArt) {
+    set(catalog, excluded, positions, activeNames, activeArt) {
       // A slow decode or a selection arriving inside rAF must not leave the previous
       // map's portrait pixels visible beside the incoming owners and names.
       canvas.hidden = front.hidden = true;
       ctx.font = '32px system-ui';
-      points = inactiveWorlds(catalog, excluded, positions.length ? names : []);
+      points = inactiveWorlds(catalog, excluded, positions.length ? activeNames : []);
+      if (!points.length) {
+        names.clear();
+        canvas.removeAttribute('data-names-fading');
+      }
       for (const p of points) p.em ??= ctx.measureText(p.name).width / 32;
       centers = positions;
       active = activeArt;

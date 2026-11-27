@@ -1,3 +1,4 @@
+import { eraCard } from './universalera.js';
 import { mapTable } from './universalmaptable.js';
 import { yearTrack } from './universalyeartrack.js';
 import { sidebarTabs } from './universalsidebartabs.js';
@@ -13,12 +14,6 @@ function group(title, cls) {
   n.setAttribute('aria-label', title);
   return n;
 }
-const heraldry = {
-  'Old Republic': ['old-republic', 'Jedi Order / Sith Empire'],
-  'Clone Wars': ['clone-wars', 'Galactic Republic / Separatist Alliance'],
-  'Galactic Civil War': ['galactic-civil-war', 'Rebel Alliance / Galactic Empire'],
-  'New Republic': ['new-republic-era', 'New Republic / Imperial Remnant']
-};
 export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickDate, clearChoice }) {
   const cards = group('Era', 'uc-era-strip'),
     calendar = group('Starting period', 'uc-calendar'),
@@ -39,23 +34,10 @@ export function campaignRoster(host, eras, { pickEra, pickPeriod, pickMap, pickD
   tabs.panels[0].append(calendar);
   host.append(cards, tabs.bar, ...tabs.panels);
   for (const e of eras) {
-    const b = node('button', 'uc-era-card');
-    b.type = 'button';
-    b.onclick = () => pickEra(e);
-    b.dataset.era = e.name;
-    const [id, pair] = heraldry[e.name],
-      ns = 'http://www.w3.org/2000/svg',
-      art = document.createElementNS(ns, 'svg'),
-      use = document.createElementNS(ns, 'use');
-    art.classList.add('uc-era-crest');
-    art.setAttribute('viewBox', '0 0 100 100');
-    art.setAttribute('aria-hidden', 'true');
-    use.setAttribute('href', '/art/era-crests.svg#' + id);
-    art.append(use);
-    b.append(art, node('span', '', e.name));
+    const b = eraCard(e.name, () => pickEra(e));
     b.disabled = !e.views.length;
     b.classList.toggle('uc-discovery-era', !e.first && e.offers.length > 0);
-    b.title = [pair, ...e.missing].join('\n');
+    b.title = [b.title, ...e.missing].join('\n');
     cards.append(b);
   }
   return {

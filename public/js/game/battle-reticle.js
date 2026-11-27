@@ -16,8 +16,9 @@ export class BattleReticle {
     parent.appendChild(el);
     this.ticks = [...el.querySelectorAll('.bf-heat rect')];
   }
-  draw(mode, style, size, heat, hot) {
+  draw(mode, style, size, heat, hot, opacity = 0.2) {
     const el = this.el;
+    if (opacity !== this.opacity) el.style.opacity = String((this.opacity = opacity));
     if (mode !== this.mode) el.dataset.target = this.mode = mode;
     if (style !== this.style) el.dataset.shape = this.style = style;
     if (size !== this.size) el.style.width = `${(this.size = size)}px`;

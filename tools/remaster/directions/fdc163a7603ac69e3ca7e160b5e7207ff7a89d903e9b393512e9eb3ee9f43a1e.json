@@ -1,0 +1,266 @@
+{
+  "job": "fdc163a7603ac69e3ca7e160b5e7207ff7a89d903e9b393512e9eb3ee9f43a1e",
+  "planet": "Hoth",
+  "views": [
+    {
+      "page": "https://www.starwars.com/databank/ion-cannon",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/ion-cannon_af46d6df.jpeg",
+      "sha256": "a71612c4093c8f0e6993d56fd3063b9b5e178dd63fcf4e6ed613d19c004f4c1d",
+      "visible": "The domed ion installation stands against an ice face with snow banked around it.",
+      "subject": "settlement-edge",
+      "people": "none",
+      "settingCue": "Hoth exterior: the continuous snowy approach meets the actual structure, not a paved plaza."
+    },
+    {
+      "page": "https://www.starwars.com/databank/hoth",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/Hoth_d074d307.jpeg",
+      "sha256": "197832ae07433b2a50a722ac5b7a69cacbec509743036bab8d21ecb67480ab51",
+      "visible": "Rounded wind-shaped crests rise against a broken cloud deck, with blue shaded hollows.",
+      "subject": "landscape",
+      "people": "incidental-native",
+      "settingCue": "Hoth establishing illustration: keep the snow mantle continuous over the skyline and let light supply the blue.",
+      "nativeContext": "The small tauntaun and its rider establish the height of the snow crest, not a reason to place animals or actors in the scene."
+    },
+    {
+      "page": "https://www.nps.gov/kefj/learn/nature/glaciers.htm",
+      "image": "https://www.nps.gov/kefj/learn/nature/images/KEFJ_2013_GAC_HardingIcefield_MassBalance_KurtzD_20131026-shrunk-test.jpg?maxwidth=650&autorotate=false",
+      "sha256": "5d53ec1503b26497c05ed426b76f4d0f85a97f6ce6f81861127b24999cf1617b",
+      "visible": "Folded snow and long wind-cut flutes lead toward isolated peaks.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "NPS analogue: directional surface relief, rather than alternating grey and white terrain paint."
+    },
+    {
+      "page": "https://www.nps.gov/kefj/learn/nature/glaciers.htm",
+      "image": "https://www.nps.gov/kefj/learn/nature/images/ed48c28a-f879-4ab0-994a-4db0beb23a4bOriginal.jpg?maxwidth=1300&maxheight=1300&autorotate=false&format=webp",
+      "sha256": "2297f8f508901faf6edb4aa7537366d6a89754ea33e04d24305f6a18bce2e96f",
+      "visible": "A rolling icefield runs between a near rocky crest and distant peaks.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "NPS analogue: shelter allows snow to fill the basin while the steeper shoulder breaks through."
+    },
+    {
+      "page": "https://www.nps.gov/kefj/learn/nature/glaciers.htm",
+      "image": "https://www.nps.gov/kefj/learn/nature/images/KEFJ_BearGlacier_SfMFlight_DKurtz_20190927-112-shrink-test.jpg?maxwidth=650&autorotate=false",
+      "sha256": "0671c426f0ce65c24da125564d548c7d6865cc2f89e1244c6a97a9b3f407ab8a",
+      "visible": "A pale glacier sweeps through dark rock walls, with narrow debris lines.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "NPS analogue: mineral debris stays tied to a physical exposure rather than staining the whole traverse."
+    },
+    {
+      "page": "https://www.nps.gov/mora/learn/nature/glaciers.htm",
+      "image": "https://www.nps.gov/mora/learn/nature/images/2014-7-18_Emmons-Sunrise_KLoving_web2_sml.jpeg?maxwidth=1300&maxheight=1300&autorotate=false&format=webp",
+      "sha256": "9fb87681ec5a28e31564ba861a6e9382f0745b1188a0d4a22849bbbe7ab7094a",
+      "visible": "A broad white ice cap breaks across steep, dark exposed rock.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "NPS analogue: carry snow up the face, then show bedrock at real high-gradient sections."
+    },
+    {
+      "page": "https://www.antarctica.gov.au/antarctic-operations/stations/mawson/",
+      "image": "https://www.antarctica.gov.au/site/assets/files/49478/commbay.440x314.jpg",
+      "sha256": "a7a9ff58c56b4d3deb539947faefd30d2415a60e5e6f9680a3cabfc9296472da",
+      "visible": "Bare black islands and shallow ridges interrupt a low white polar landscape.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Australian Antarctic Program field analogue: leave low open gaps between the distant massifs."
+    },
+    {
+      "page": "https://www.antarctica.gov.au/antarctic-operations/stations/mawson/",
+      "image": "https://www.antarctica.gov.au/site/assets/files/49706/rs7095_2010_antarctica_3751.440x314.jpg",
+      "sha256": "7c53cedd024fceaedf7243f0fba3566ed03e31de92d377dc3805d69238db85d3",
+      "visible": "A low cluster of research buildings sits beyond an uninterrupted snow plain in low light.",
+      "subject": "settlement-edge",
+      "people": "none",
+      "settingCue": "Antarctic station analogue: warm light belongs to the sky and architecture rather than a permanent pigment in the snow."
+    },
+    {
+      "page": "https://www.antarctica.gov.au/antarctic-operations/stations/mawson/",
+      "image": "https://www.antarctica.gov.au/site/assets/files/48844/rs24868_mg_0018.440x314.jpg",
+      "sha256": "5536ed1f1e594c1dd11044379354c9d40f3efece1a39f41fcda13156ab874f08",
+      "visible": "A long raised building has windblown snow around its foot and a compact access route.",
+      "subject": "building",
+      "people": "none",
+      "settingCue": "Antarctic station analogue: a hard building edge and packed outdoor snow can coexist without a road."
+    },
+    {
+      "page": "https://www.antarctica.gov.au/antarctic-operations/stations/mawson/",
+      "image": "https://www.antarctica.gov.au/site/assets/files/49481/domea.440x314.jpg?nc=782c",
+      "sha256": "842d4e57837ea338bc563b4f54cd1c080dd12483d2f2864cf15abc98cb15a1b7",
+      "visible": "An isolated service hut and slender instruments stand on a pale open surface.",
+      "subject": "building",
+      "people": "none",
+      "settingCue": "Antarctic station analogue: preserve isolated equipment silhouettes and an unplanted approach."
+    },
+    {
+      "page": "https://www.antarctica.gov.au/antarctic-operations/stations/mawson/",
+      "image": "https://www.antarctica.gov.au/site/assets/files/52905/rs87704.440x314.jpg?nc=8abe",
+      "sha256": "9b821e851d8ffdf68641a58f3569bfcd90008cc540718e5f8817d09d946675bf",
+      "visible": "A gate and work buildings sit on snowy ground beneath a steep rock shoulder.",
+      "subject": "settlement-edge",
+      "people": "none",
+      "settingCue": "Antarctic station analogue: retain constructed geometry while keeping the outdoor substrate largely snow."
+    }
+  ],
+  "ground": {
+    "decision": "A continuous cold snow mantle accumulates in hollows and covers shallow rocky paint. Use rougher packed firn at the existing service areas and fractured rock only where a steep face actually sheds snow.",
+    "reject": "Do not import a muddy field, tire ruts or a permanent blue tint. Preserve shallow grain, genuine shade and the difference between open snow and exposed rock.",
+    "evidence": [
+      "a71612c4093c8f0e6993d56fd3063b9b5e178dd63fcf4e6ed613d19c004f4c1d",
+      "197832ae07433b2a50a722ac5b7a69cacbec509743036bab8d21ecb67480ab51",
+      "5d53ec1503b26497c05ed426b76f4d0f85a97f6ce6f81861127b24999cf1617b",
+      "2297f8f508901faf6edb4aa7537366d6a89754ea33e04d24305f6a18bce2e96f",
+      "0671c426f0ce65c24da125564d548c7d6865cc2f89e1244c6a97a9b3f407ab8a",
+      "9fb87681ec5a28e31564ba861a6e9382f0745b1188a0d4a22849bbbe7ab7094a"
+    ]
+  },
+  "foliage": {
+    "decision": "Retain the treeless and shrubless glacial battlefield. Mounted outcrops, equipment and bones are not vegetation.",
+    "reject": "No evergreen belt, dead tree scatter or tuft quota. Dry exposed stone does not indicate tundra planting.",
+    "evidence": [
+      "a71612c4093c8f0e6993d56fd3063b9b5e178dd63fcf4e6ed613d19c004f4c1d",
+      "197832ae07433b2a50a722ac5b7a69cacbec509743036bab8d21ecb67480ab51",
+      "5d53ec1503b26497c05ed426b76f4d0f85a97f6ce6f81861127b24999cf1617b",
+      "2297f8f508901faf6edb4aa7537366d6a89754ea33e04d24305f6a18bce2e96f",
+      "a7a9ff58c56b4d3deb539947faefd30d2415a60e5e6f9680a3cabfc9296472da"
+    ],
+    "review": {
+      "disposition": "absent",
+      "basis": "The Hoth exterior and exposed polar ice views show bare snow and rock without woody cover; the mounted starting inventory contains only rocks, equipment and bones. This is the surveyed board, not a claim about all polar terrain.",
+      "forms": [],
+      "zones": {
+        "place": [],
+        "exclude": [
+          {
+            "where": "Entire playable snowfield and its glacier-ridge surroundings.",
+            "reason": "Open polar snow, stone and working surfaces remain visible to the horizon.",
+            "evidence": [
+              "a71612c4093c8f0e6993d56fd3063b9b5e178dd63fcf4e6ed613d19c004f4c1d",
+              "197832ae07433b2a50a722ac5b7a69cacbec509743036bab8d21ecb67480ab51",
+              "5d53ec1503b26497c05ed426b76f4d0f85a97f6ce6f81861127b24999cf1617b",
+              "2297f8f508901faf6edb4aa7537366d6a89754ea33e04d24305f6a18bce2e96f",
+              "a7a9ff58c56b4d3deb539947faefd30d2415a60e5e6f9680a3cabfc9296472da"
+            ]
+          }
+        ]
+      },
+      "variation": {
+        "decision": "Keep variation in snow, striation and outcrop shapes, not vegetation types.",
+        "limits": [
+          "Allocate no grass, shrub, tree or scenic crown layers."
+        ],
+        "evidence": [
+          "a71612c4093c8f0e6993d56fd3063b9b5e178dd63fcf4e6ed613d19c004f4c1d",
+          "5d53ec1503b26497c05ed426b76f4d0f85a97f6ce6f81861127b24999cf1617b",
+          "a7a9ff58c56b4d3deb539947faefd30d2415a60e5e6f9680a3cabfc9296472da"
+        ]
+      }
+    }
+  },
+  "landmark": {
+    "decision": "Keep the mounted ion cannon, cargo, pipes, skeleton and rocks at their authored roots. Existing large structures should read across the clearing.",
+    "reject": "Do not reconstruct Echo Base or add trench networks, vehicles or a station building from reference photographs.",
+    "evidence": [
+      "a71612c4093c8f0e6993d56fd3063b9b5e178dd63fcf4e6ed613d19c004f4c1d",
+      "7c53cedd024fceaedf7243f0fba3566ed03e31de92d377dc3805d69238db85d3",
+      "5536ed1f1e594c1dd11044379354c9d40f3efece1a39f41fcda13156ab874f08",
+      "842d4e57837ea338bc563b4f54cd1c080dd12483d2f2864cf15abc98cb15a1b7",
+      "9b821e851d8ffdf68641a58f3569bfcd90008cc540718e5f8817d09d946675bf"
+    ]
+  },
+  "landUse": {
+    "natural": {
+      "decision": "Continuous snow covers flats, with relatively blue shade, wind-lined depressions, and darker rock exposures allowed on steep faces.",
+      "evidence": [
+        "197832ae07433b2a50a722ac5b7a69cacbec509743036bab8d21ecb67480ab51",
+        "5d53ec1503b26497c05ed426b76f4d0f85a97f6ce6f81861127b24999cf1617b",
+        "2297f8f508901faf6edb4aa7537366d6a89754ea33e04d24305f6a18bce2e96f",
+        "0671c426f0ce65c24da125564d548c7d6865cc2f89e1244c6a97a9b3f407ab8a",
+        "9fb87681ec5a28e31564ba861a6e9382f0745b1188a0d4a22849bbbe7ab7094a",
+        "a7a9ff58c56b4d3deb539947faefd30d2415a60e5e6f9680a3cabfc9296472da"
+      ]
+    },
+    "built": {
+      "decision": "Retain building geometry and its silhouette. Only actual construction can license a concrete footing. No photographed polar building grants permission to pave a mount.",
+      "evidence": [
+        "a71612c4093c8f0e6993d56fd3063b9b5e178dd63fcf4e6ed613d19c004f4c1d",
+        "5536ed1f1e594c1dd11044379354c9d40f3efece1a39f41fcda13156ab874f08",
+        "842d4e57837ea338bc563b4f54cd1c080dd12483d2f2864cf15abc98cb15a1b7"
+      ]
+    },
+    "transition": {
+      "decision": "The exterior working court remains packed snow up to the equipment feet. Restore rougher snow where traffic ends; keep the boundary at actual structures.",
+      "evidence": [
+        "a71612c4093c8f0e6993d56fd3063b9b5e178dd63fcf4e6ed613d19c004f4c1d",
+        "7c53cedd024fceaedf7243f0fba3566ed03e31de92d377dc3805d69238db85d3",
+        "5536ed1f1e594c1dd11044379354c9d40f3efece1a39f41fcda13156ab874f08",
+        "9b821e851d8ffdf68641a58f3569bfcd90008cc540718e5f8817d09d946675bf"
+      ]
+    }
+  },
+  "outskirts": {
+    "treatment": "mountains",
+    "foliage": [],
+    "skyline": "A low open snow basin leads to irregular overlapping ridges, glacial shoulders and passes. Snow accumulates on shallow slopes between exposed faces.",
+    "join": "Continue the exact snowy perimeter and normal field into the mountain basin. The exterior is renderer-only and has no collision, scripts, fog reveal or artificial planting.",
+    "reject": "No smooth cone wall, planted rim or flat tabletop against the sky.",
+    "evidence": [
+      "197832ae07433b2a50a722ac5b7a69cacbec509743036bab8d21ecb67480ab51",
+      "5d53ec1503b26497c05ed426b76f4d0f85a97f6ce6f81861127b24999cf1617b",
+      "2297f8f508901faf6edb4aa7537366d6a89754ea33e04d24305f6a18bce2e96f",
+      "9fb87681ec5a28e31564ba861a6e9382f0745b1188a0d4a22849bbbe7ab7094a",
+      "a7a9ff58c56b4d3deb539947faefd30d2415a60e5e6f9680a3cabfc9296472da"
+    ]
+  },
+  "climate": {
+    "skies": [
+      "Sunrise_Snow",
+      "Noon_Snow",
+      "Nighttime_Snow"
+    ],
+    "substrate": "A single mineral-poor snowfield links the muster and rib basins; roughness and grain may vary without painting alternating hues into the ice.",
+    "lighting": "Use the real Hoth skies and SNOW_RANDOM schedule. Compare snow on both sides of each basin, including the natural clear interval. Blue shadow and warm direct sunlight are light, not dyed snow.",
+    "exceptions": "Keep hard rock silhouettes, shadow beneath equipment and compacted firn in yards. Warm or blue light can change value and chroma; do not white-balance it away.",
+    "evidence": [
+      "a71612c4093c8f0e6993d56fd3063b9b5e178dd63fcf4e6ed613d19c004f4c1d",
+      "197832ae07433b2a50a722ac5b7a69cacbec509743036bab8d21ecb67480ab51",
+      "5d53ec1503b26497c05ed426b76f4d0f85a97f6ce6f81861127b24999cf1617b",
+      "9fb87681ec5a28e31564ba861a6e9382f0745b1188a0d4a22849bbbe7ab7094a",
+      "7c53cedd024fceaedf7243f0fba3566ed03e31de92d377dc3805d69238db85d3"
+    ],
+    "pairs": [
+      {
+        "view": "command",
+        "points": [
+          [
+            510,
+            180
+          ],
+          [
+            945,
+            215
+          ]
+        ],
+        "basis": "Two open snow windows beyond the deployed eastern infantry. Both exclude units, the service props, the HUD and the near rock face.",
+        "limit": 0.09
+      },
+      {
+        "view": "rib-basin",
+        "points": [
+          [
+            570,
+            185
+          ],
+          [
+            838,
+            255
+          ]
+        ],
+        "basis": "Visible snow mass on either side of the rib basin, above the mounted bones and away from the dark exposed faces.",
+        "limit": 0.1
+      }
+    ]
+  },
+  "uncertain": "Polar field photographs are analogues for the shape of snow, escarpments and service access, not fictional architecture or exact snow colour. The original map dictates base and equipment positions."
+}

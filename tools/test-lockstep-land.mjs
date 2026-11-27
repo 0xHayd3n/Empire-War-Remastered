@@ -22,8 +22,8 @@ const HASH_EVERY = 30,
 
 if (!flag('--child')) {
   const pass = process.argv.slice(2).filter(a => a !== '--update' && a !== '--verbose');
-  const run = () => {
-    const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--child', ...pass], { encoding: 'utf8', maxBuffer: 64 << 20 });
+  const run = (flags = []) => {
+    const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--child', ...pass, ...flags], { encoding: 'utf8', maxBuffer: 64 << 20 });
     const line = (r.stdout || '').trim().split('\n').reverse().find(l => l.startsWith('{"result"'));
     if (!line) {
       console.error((r.stderr || r.stdout || '').slice(-3000));
@@ -33,7 +33,11 @@ if (!flag('--child')) {
   };
   const t0 = performance.now();
   const a = run(),
-    b = run();
+    b = run(flag('--compare-physics') ? ['--with-rapier'] : []);
+  if (flag('--compare-physics')) {
+    if (!(b.physicsNodes === 10 && a.physicsNodes === 0)) throw Error('Comparison did not exercise a real infantry ragdoll');
+    console.log('Compared the same confirmed casualty on peers with and without a local ten-body Rapier ragdoll.');
+  }
   let diff = -1;
   for (let i = 0; i < Math.max(a.log.length, b.log.length); i++)
     if (a.log[i] !== b.log[i]) {
@@ -42,17 +46,21 @@ if (!flag('--child')) {
     }
   const mean = l => l.reduce((x, y) => x + y, 0) / Math.max(1, l.length);
   const pct = (l, p) => [...l].sort((x, y) => x - y)[Math.min(l.length - 1, Math.floor(l.length * p))];
-  let worst = 30,
-    worstAt = 0;
-  for (let i = 0; i + 30 <= a.ms.length; i += 30) {
-    const tps = (30 * 1000) / Math.max(1000, a.ms.slice(i, i + 30).reduce((x, y) => x + y, 0));
-    if (tps < worst) [worst, worstAt] = [tps, i / 30];
+  function metrics(run) {
+    let worst=30, worstAt=0;
+    for (let i=0;i+30<=run.ms.length;i+=30) {
+      const tps=30000 / Math.max(1000,run.ms.slice(i,i+30).reduce((x,y)=>x+y,0));
+      if(tps<worst) [worst,worstAt]=[tps,i/30];
+    }
+    return {stepMs:+mean(run.ms).toFixed(2),p99:+pct(run.ms,0.99).toFixed(2),worst:+worst.toFixed(1),worstAt};
   }
-  const now = { stepMs: +mean(a.ms).toFixed(2), p99: +pct(a.ms, 0.99).toFixed(2), worst: +worst.toFixed(1) };
+  const now=metrics(a), peer=metrics(b), {worstAt}=now;
+  if (arg('--report')) writeFileSync(arg('--report'), JSON.stringify({fixture:'headless-land-lockstep',map:a.map,companies,steps,minTps,authority:'legacy lockstep (no Rapier movement)',runs:[now,peer],matched:diff<0,hashes:a.log},null,2)+'\n');
   console.log(
     `land lockstep: ${a.map}, ${a.sides.join(' vs ')}, ${a.steps} steps, ${a.squads} squads and ${a.units} units at the end, ${a.lost} fewer units than at the start, ${a.scripts} Lua scripts, ${a.log.length} checkpoints, ${Math.round((performance.now() - t0) / 1000)} s`
   );
   console.log(`  step ${now.stepMs} ms (p99 ${now.p99}), worst second ${now.worst} ticks/s (second ${worstAt})`);
+  if (arg('--report')) console.log(`  repeat: step ${peer.stepMs} ms (p99 ${peer.p99}), worst second ${peer.worst} ticks/s (second ${peer.worstAt})`);
   if (verbose) console.log('  hashes', a.log.slice(0, 6).join(' '));
   const fails = [];
   if (diff >= 0) fails.push(`the same land battle ran differently twice: checkpoint ${diff} (step ${diff * HASH_EVERY}) differs`);
@@ -80,7 +88,7 @@ if (!flag('--child')) {
   process.exit(0);
 }
 
-const archive = openGame(fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)), mod ? [mod] : []);
+const archive = openGame(process.env.SWR_GAME || fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)), mod ? [mod] : []);
 globalThis.fetch = async input => {
   const path = String(input);
   if (path.startsWith('file:')) {
@@ -120,7 +128,7 @@ console.info = () => {};
 const errorOut = console.error;
 console.error = (...x) => errorOut(...x.map(v => (v && v.stack) || v));
 globalThis.window = globalThis;
-globalThis.document = nothing;
+globalThis.document = new Proxy({ fonts: { load: async () => [] } }, { get: (doc, key) => doc[key] ?? nothing[key] });
 globalThis.location = { search: '?nomenu&nowarm', href: 'http://localhost/play.html', pathname: '/play.html' };
 globalThis.requestAnimationFrame = () => 0;
 globalThis.cancelAnimationFrame = () => {};
@@ -182,6 +190,7 @@ const setup = {
 const audio = new Proxy({}, { get: (t, k) => (k === 'then' ? undefined : k === 'audioXml' || k === 'useAudioMode' ? () => Promise.resolve(null) : nothing) });
 const g = new LandGame(setup, { audio, progress() {} });
 await g.start();
+if (g.vehicleWrecks || g.armorDamage || g.craters) throw new Error('Headless land simulations must not allocate visual destruction');
 const w = g.world,
   L = g.lock;
 const centre = side => {
@@ -210,6 +219,18 @@ for (const [side, f] of sides.entries()) {
 }
 const startUnits = w.units.filter(u => !u.dead).length;
 const humans = setup.players.map((p, i) => (p.human ? i : -1)).filter(i => i >= 0);
+// Differential presentation check on two independent, seeded lockstep peers, without a GPU.
+let layer, physicsNodes = 0;
+if (flag('--with-rapier')) {
+  const { VehicleWrecks, loadWreckPhysics } = await import('../public/js/game/vehicle-wrecks.js');
+  const { heightAt } = await import('../public/js/game/terrain.js');
+  const { InfantryBlast } = await import('../public/js/game/infantry-blast.js');
+  layer = g.vehicleWrecks = new VehicleWrecks(await loadWreckPhysics(), w.scene, (x,y)=>heightAt(w.terrain,x,y,true), (x,y)=>w.viewFogged(x,y), ()=>true);
+  g.infantryBlast = new InfantryBlast();
+  g.craters = {hit(){}}; // headless peer has no rendered terrain mesh
+}
+const ports = () => process.getActiveResourcesInfo().filter(k=>k==='MessagePort').length;
+const startPorts = ports();
 const ms = [];
 for (let step = 0; step < steps; step++) {
   if (step % ORDER_EVERY === 0)
@@ -219,6 +240,14 @@ for (let step = 0; step < steps; step++) {
         mine = w.squads.filter(q => q.side === side && !q.dead && q.isMobile && !q.native && q.members.length);
       if (mine.length) L.collected.push([pid, { c: 'move', u: mine.map(q => q.id), x: foe.x, y: foe.y, mode: (step / ORDER_EVERY) % 2 ? 'move' : 'attackmove' }]);
     }
+  if (step === 10 && flag('--compare-physics')) {
+    const u = w.units.find(u=>u.side===g.me && u.foot && !u.dead && !u.inside && u.inst?.root && u.holder?.visible && !w.viewFogged(u.x,u.y));
+    if (!u) throw Error('Comparison needs a visible allied infantry unit');
+    w.hurt(u,1e9,null);
+    if (!u.dead) throw Error('Controlled casualty did not occur');
+    physicsNodes = layer?.live.find(r=>r.u===u)?.doll?.nodes.length || 0;
+  }
+  layer?.step(1/30);
   const before = L.tick,
     t0 = performance.now();
   g.owed = 1 / 30;
@@ -226,11 +255,17 @@ for (let step = 0; step < steps; step++) {
   ms.push(performance.now() - t0);
   if (L.tick === before) throw new Error('the land lockstep did not step at ' + step + ': ' + L.blocked);
 }
+// One turn for Node's close callbacks; this is outside every timed tick.
+await new Promise(r=>setImmediate(r));
+const extraPorts=ports()-startPorts;
+if (extraPorts > 2) throw Error(`land tick yields retained ${extraPorts} message ports`);
 console.log = quiet;
 console.log(
   JSON.stringify({
     result: {
       map: mapFile,
+      physicsNodes,
+      extraPorts,
       sides,
       steps,
       log: L.log,

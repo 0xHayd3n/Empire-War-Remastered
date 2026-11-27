@@ -42,14 +42,14 @@ function copy(text, root, status) {
     }
   };
 }
-export function mountSocial(root, { room, kind, beforeJoin = join => join() } = {}) {
+export function mountSocial(root, { room, kind, settingsOnly = false, beforeJoin = join => join() } = {}) {
   const abort = new AbortController(),
     signal = abort.signal;
   let state = null,
     timer,
     busy = false,
     first = true,
-    view = 'roster',
+    view = settingsOnly ? 'settings' : 'roster',
     peer = null,
     history = [],
     serial = 0;
@@ -159,7 +159,7 @@ export function mountSocial(root, { room, kind, beforeJoin = join => join() } = 
       btn(d, 'Use relay', async () => {
         setRelay(i.value);
         state = null;
-        view = 'roster';
+        view = settingsOnly ? 'settings' : 'roster';
         peer = null;
         render();
         const next = await call('state');
@@ -200,7 +200,7 @@ export function mountSocial(root, { room, kind, beforeJoin = join => join() } = 
       const me = state.me,
         top = line(body, me.name, 'Friend code · ' + me.id);
       btn(top, 'Copy friend code', copy(me.id, body, status));
-      btn(top, view === 'settings' ? 'Back to roster' : 'Manage', () => change(view === 'settings' ? 'roster' : 'settings'));
+      if (!settingsOnly) btn(top, view === 'settings' ? 'Back to roster' : 'Manage', () => change(view === 'settings' ? 'roster' : 'settings'));
       if (view === 'settings') {
         relaySettings();
         const nm = field(body, 'Change callsign', me.name);

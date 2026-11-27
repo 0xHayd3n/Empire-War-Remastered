@@ -1,0 +1,399 @@
+{
+  "chrome": "158.0.8127.38",
+  "viewport": [
+    1280,
+    720
+  ],
+  "frames": 960,
+  "warm": 360,
+  "rounds": 2,
+  "backend": "webgpu",
+  "hashes": {
+    "before": {
+      "model.js": "58c1b87dcaba318086784f02a5c6f749cd2ba2e82827a7d5f3efb6c3f0814ae1",
+      "gpu/programs.js": "84012f64e0466008a3b0c08e8dbdf78856f2a40b21f0c4c64a39b1903bfce3ee",
+      "landlight.js": "91e493ab3a8be6da2a57549a5c971cfbe261c94ec676d6b8a5f619429d5d3c8a",
+      "game/terrain.js": "0b5a9c4d83d8c2502772bdd4f70c653fc762f05b3b311b31760ed0a2f047443f",
+      "game/endor-relief.js": "da42bb3e769c909475fcae7c7343b00a3db003c570268c0ba81a5de11f7b26bb"
+    },
+    "after": {
+      "model.js": "eaad50d0305257659784ea3c5e36d687cd2914ea32cf1ca58278f4d8c8486b6a",
+      "gpu/programs.js": "ba6a47a61317321f3b07999e297f3a86aae6b917c1dde17834c952de961ef937",
+      "landlight.js": "52d7642c4659d30b15779f39b7cd4ea178535fd8ee1cce672c4046804b162ec6",
+      "game/terrain.js": "ffedbe01d85d9583bfb8a797ba62d997b888e718c6a407bfb40aa141e5297b18",
+      "game/endor-relief.js": "a2f89c1267068b3c4baf95aff19a34f160ca4f54f45886033ad4e3c215fd7604"
+    }
+  },
+  "summary": {
+    "endor": {
+      "before": 111.26796803827618,
+      "after": 138.73789701529262,
+      "change": 24.688083606925204,
+      "paired": [
+        23.172516260671784,
+        26.19750547336299
+      ]
+    },
+    "yavin": {
+      "before": 171.76858120046558,
+      "after": 175.16306358373595,
+      "change": 1.9761951571974468,
+      "paired": [
+        6.237756035677999,
+        -2.078784064435868
+      ]
+    },
+    "hoth": {
+      "before": 178.88237645237118,
+      "after": 176.41594469360132,
+      "change": -1.378800867745944,
+      "paired": [
+        -3.3100644265567247,
+        0.6226956472114686
+      ]
+    },
+    "tatooine": {
+      "before": 179.6239124333427,
+      "after": 179.6265171774874,
+      "change": 0.0014501099043107146,
+      "paired": [
+        -0.41415096717695166,
+        0.4187830821759997
+      ]
+    },
+    "overall": {
+      "before": 154.04432545233473,
+      "after": 165.615486341844,
+      "change": 7.511578797551799,
+      "paired": [
+        7.466297908321851,
+        7.55669631748388
+      ]
+    }
+  },
+  "gpu": "NVIDIA GeForce RTX 3070",
+  "cpu": "Intel Core i7-12700KF",
+  "reference": "post-shadow-correction, before shading-work optimization",
+  "runs": [
+    {
+      "map": "endor",
+      "version": "before",
+      "pair": 1,
+      "fps": 112.86635271793348,
+      "p95ms": 11.170000000000073,
+      "elapsed": 8505.634999999998,
+      "canvas": [
+        2560,
+        1440
+      ],
+      "pivot": [
+        1460,
+        3120
+      ],
+      "units": 90,
+      "env": "Noon_Clear",
+      "shadowSize": 2048,
+      "nearSize": 1024
+    },
+    {
+      "map": "endor",
+      "version": "after",
+      "pair": 1,
+      "fps": 139.02032665432378,
+      "p95ms": 11.145000000000437,
+      "elapsed": 6905.465,
+      "canvas": [
+        2560,
+        1440
+      ],
+      "pivot": [
+        1460,
+        3120
+      ],
+      "units": 90,
+      "env": "Noon_Clear",
+      "shadowSize": 2048,
+      "nearSize": 1024
+    },
+    {
+      "map": "yavin",
+      "version": "after",
+      "pair": 1,
+      "fps": 179.62492071243736,
+      "p95ms": 5.644999999998618,
+      "elapsed": 5344.469999999999,
+      "canvas": [
+        1280,
+        720
+      ],
+      "pivot": [
+        1233,
+        3406
+      ],
+      "units": 66,
+      "env": "Sunrise_Rain",
+      "shadowSize": 2048,
+      "nearSize": 1024
+    },
+    {
+      "map": "yavin",
+      "version": "before",
+      "pair": 1,
+      "fps": 169.078233026791,
+      "p95ms": 11.075000000000728,
+      "elapsed": 5677.844999999999,
+      "canvas": [
+        1280,
+        720
+      ],
+      "pivot": [
+        1233,
+        3406
+      ],
+      "units": 66,
+      "env": "Sunrise_Rain",
+      "shadowSize": 2048,
+      "nearSize": 1024
+    },
+    {
+      "map": "hoth",
+      "version": "before",
+      "pair": 1,
+      "fps": 179.25413474869413,
+      "p95ms": 5.665000000000873,
+      "elapsed": 5355.525,
+      "canvas": [
+        1280,
+        720
+      ],
+      "pivot": [
+        2845,
+        2231
+      ],
+      "units": 68,
+      "env": "Sunrise_Snow",
+      "shadowSize": 2048,
+      "nearSize": 1024
+    },
+    {
+      "map": "hoth",
+      "version": "after",
+      "pair": 1,
+      "fps": 173.32070740124556,
+      "p95ms": 5.760000000000218,
+      "elapsed": 5538.865,
+      "canvas": [
+        1280,
+        720
+      ],
+      "pivot": [
+        2845,
+        2231
+      ],
+      "units": 68,
+      "env": "Sunrise_Snow",
+      "shadowSize": 2048,
+      "nearSize": 1024
+    },
+    {
+      "map": "tatooine",
+      "version": "after",
+      "pair": 1,
+      "fps": 179.25380004051883,
+      "p95ms": 5.645000000000437,
+      "elapsed": 5355.535,
+      "canvas": [
+        1280,
+        720
+      ],
+      "pivot": [
+        755,
+        1691
+      ],
+      "units": 73,
+      "env": "Sunrise_Sandstorm",
+      "shadowSize": 2048,
+      "nearSize": 1024
+    },
+    {
+      "map": "tatooine",
+      "version": "before",
+      "pair": 1,
+      "fps": 179.9992687529707,
+      "p95ms": 5.625,
+      "elapsed": 5333.355,
+      "canvas": [
+        1280,
+        720
+      ],
+      "pivot": [
+        755,
+        1691
+      ],
+      "units": 73,
+      "env": "Sunrise_Sandstorm",
+      "shadowSize": 2048,
+      "nearSize": 1024
+    },
+    {
+      "map": "tatooine",
+      "version": "before",
+      "pair": 2,
+      "fps": 179.2501183330859,
+      "p95ms": 5.6299999999992,
+      "elapsed": 5355.645,
+      "canvas": [
+        1280,
+        720
+      ],
+      "pivot": [
+        755,
+        1691
+      ],
+      "units": 73,
+      "env": "Sunrise_Sandstorm",
+      "shadowSize": 2048,
+      "nearSize": 1024
+    },
+    {
+      "map": "tatooine",
+      "version": "after",
+      "pair": 2,
+      "fps": 180.00078750344534,
+      "p95ms": 5.6200000000008,
+      "elapsed": 5333.3099999999995,
+      "canvas": [
+        1280,
+        720
+      ],
+      "pivot": [
+        755,
+        1691
+      ],
+      "units": 73,
+      "env": "Sunrise_Sandstorm",
+      "shadowSize": 2048,
+      "nearSize": 1024
+    },
+    {
+      "map": "hoth",
+      "version": "after",
+      "pair": 2,
+      "fps": 179.6237443879274,
+      "p95ms": 5.635000000000218,
+      "elapsed": 5344.505000000001,
+      "canvas": [
+        1280,
+        720
+      ],
+      "pivot": [
+        2845,
+        2231
+      ],
+      "units": 68,
+      "env": "Sunrise_Snow",
+      "shadowSize": 2048,
+      "nearSize": 1024
+    },
+    {
+      "map": "hoth",
+      "version": "before",
+      "pair": 2,
+      "fps": 178.512156956814,
+      "p95ms": 5.6599999999998545,
+      "elapsed": 5377.785,
+      "canvas": [
+        1280,
+        720
+      ],
+      "pivot": [
+        2845,
+        2231
+      ],
+      "units": 68,
+      "env": "Sunrise_Snow",
+      "shadowSize": 2048,
+      "nearSize": 1024
+    },
+    {
+      "map": "yavin",
+      "version": "before",
+      "pair": 2,
+      "fps": 174.54593057981066,
+      "p95ms": 5.68999999999869,
+      "elapsed": 5499.985000000001,
+      "canvas": [
+        1280,
+        720
+      ],
+      "pivot": [
+        1233,
+        3406
+      ],
+      "units": 66,
+      "env": "Sunrise_Rain",
+      "shadowSize": 2048,
+      "nearSize": 1024
+    },
+    {
+      "map": "yavin",
+      "version": "after",
+      "pair": 2,
+      "fps": 170.91749758979626,
+      "p95ms": 10.93500000000131,
+      "elapsed": 5616.744999999999,
+      "canvas": [
+        1280,
+        720
+      ],
+      "pivot": [
+        1233,
+        3406
+      ],
+      "units": 66,
+      "env": "Sunrise_Rain",
+      "shadowSize": 2048,
+      "nearSize": 1024
+    },
+    {
+      "map": "endor",
+      "version": "after",
+      "pair": 2,
+      "fps": 138.4566126012825,
+      "p95ms": 11.145000000000437,
+      "elapsed": 6933.579999999998,
+      "canvas": [
+        2560,
+        1440
+      ],
+      "pivot": [
+        1460,
+        3120
+      ],
+      "units": 90,
+      "env": "Noon_Clear",
+      "shadowSize": 2048,
+      "nearSize": 1024
+    },
+    {
+      "map": "endor",
+      "version": "before",
+      "pair": 2,
+      "fps": 109.714223020444,
+      "p95ms": 11.264999999999418,
+      "elapsed": 8750.005,
+      "canvas": [
+        2560,
+        1440
+      ],
+      "pivot": [
+        1460,
+        3120
+      ],
+      "units": 90,
+      "env": "Noon_Clear",
+      "shadowSize": 2048,
+      "nearSize": 1024
+    }
+  ]
+}

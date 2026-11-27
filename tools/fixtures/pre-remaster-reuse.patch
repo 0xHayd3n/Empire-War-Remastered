@@ -1,0 +1,140 @@
+--- a/forestfloor.js
++++ b/forestfloor.js
+@@ -70,15 +70,9 @@
+     if (nearRelief>0.01) {
+       ${wg ? 'let' : 'vec2'} ray=clamp(viewTS.xy/max(0.28,viewTS.z),${v2}(-2.2),${v2}(2.2))*relief/6.0;
+-      // The entry height is only used when the very first step crosses the surface.
+-      // Keep the original UV (adding ray back could round differently on a tile edge).
+-      ${wg ? 'let' : 'vec2'} entryUV=uv;
+-      ${mut} gap=0.0;
++      ${mut} gap=1.0-${sample('soilColor', 'uv')}.a;
+       for (${wg ? 'var k=1' : 'int k=1'}; k<=6; k++) {
+-        ${mut} previous=gap; uv-=ray;
++        ${f} previous=gap; uv-=ray;
+         gap=1.0-${sample('soilColor', 'uv')}.a-${wg ? 'f32' : 'float'}(k)/6.0;
+-        if (gap<=0.0) {
+-          if(k==1){previous=1.0-${sample('soilColor', 'entryUV')}.a;}
+-          uv+=ray*clamp(-gap/max(previous-gap,0.00001),0.0,1.0); break;
+-        }
++        if (gap<=0.0) { uv+=ray*clamp(-gap/max(previous-gap,0.00001),0.0,1.0); break; }
+       }
+     }
+@@ -102,6 +96,5 @@
+     ${f} fresnel=0.04+0.96*pow(1.0-vh,5.0);
+     ${mut} contact=1.0;
+-    // Height self-shadowing modulates only direct*nl, never the sky or soil fill.
+-    if (nearRelief>0.01 && lightTS.z>0.04 && nl>0.0 && any(${wg?'direct!='+v3+'(0.)':'notEqual(direct,'+v3+'(0.))'})) {
++    if (nearRelief>0.01 && lightTS.z>0.04) {
+       ${wg ? 'let' : 'vec2'} along=lightTS.xy*relief;
+       ${f} rim=max(${sample('soilColor', 'uv+along*0.28')}.a-albedoHeight.a-0.28*lightTS.z, ${sample('soilColor', 'uv+along*0.65')}.a-albedoHeight.a-0.65*lightTS.z);
+--- a/game/endor-relief.js
++++ b/game/endor-relief.js
+@@ -121,14 +121,10 @@
+   // Fixed-size scrolling cache of *untapered* displacement. Each cell in the
+   // window owns a unique ring slot. A shifted rim must still be tapered anew.
+-  // Keep a one-window margin for reversing a pan. Store derived vertices by
+-  // world cell, never by camera or frame. Space stays bounded on any map.
+-  const cacheSide = cells * 2, cacheCells = cacheSide * cacheSide, cachePoints = cacheCells * verticesPerCell;
+-  const owners = new Int32Array(cacheCells).fill(-1), rawHeight = new Float64Array(cachePoints),
+-    finalMask = new Uint8Array(cacheCells), finalPosition = new Float32Array(cachePoints * 3),
+-    reliefMin = new Float64Array(cacheCells), reliefMax = new Float64Array(cacheCells);
++  const owners = new Int32Array(cells * cells).fill(-1),
++    rawHeight = new Float64Array(points);
+   // Interpolated normals and authored shade follow the world cell, not the rim.
+   // Keep one bounded block per ring slot; never copy final tapered heights.
+-  const normRing = new Float32Array(cachePoints * 3),
+-    shadeRing = donorBySlot ? new Float32Array(cachePoints) : null;
++  const normRing = new Float32Array(points * 3),
++    shadeRing = donorBySlot ? new Float32Array(points) : null;
+   if (!shadeRing) attributes.shade.array.fill(1);
+   let lastNormal = -1,
+@@ -180,5 +176,5 @@
+             allMud = slots.every(s => s === BED),
+             a = cy * t.size + cx,
+-            ring = (cy % cacheSide) * cacheSide + (cx % cacheSide),
++            ring = (cy % cells) * cells + (cx % cells),
+             cached = owners[ring] === a,
+             hs = [h[a], h[a + 1], h[a + t.size], h[a + t.size + 1]];
+@@ -193,17 +189,4 @@
+             if (shadeRing) attributes.shade.array.set(shadeRing.subarray(block, end), begin);
+           } else for (let q = 0; q < 4; q++) firstCorner[q] = slots.indexOf(slots[q]);
+-          // The four draw slots are constant throughout one TED cell. Replicate
+-          // that tuple with bulk copies rather than 169 calls into BufferAttribute.
+-          const dst = attributes.layers.array, at = begin * 4;
+-          dst.set(slots, at);
+-          for (let n = 1; n < verticesPerCell; n *= 2)
+-            dst.copyWithin(at + n * 4, at, at + 4 * Math.min(n, verticesPerCell - n));
+-          if (cached && finalMask[ring] === mask) {
+-            attributes.position.array.set(finalPosition.subarray(3 * block, 3 * end), 3 * begin);
+-            lo = Math.min(lo, reliefMin[ring]); hi = Math.max(hi, reliefMax[ring]);
+-            o += verticesPerCell;
+-            continue;
+-          }
+-          let cellLo = Infinity, cellHi = -Infinity;
+           for (let iy = 0; iy <= div; iy++)
+             for (let ix = 0; ix <= div; ix++) {
+@@ -331,11 +314,10 @@
+               const toRim = Math.min(i + fx, j + fy, cells - i - fx, cells - j - fy);
+               dz *= Math.max(0, Math.min(1, (toRim * div - 1) / (div - 1)));
+-              cellLo = Math.min(cellLo, dz); cellHi = Math.max(cellHi, dz);
+-              attributes.position.setXYZ(o++, x, y, z + dz);
++              lo = Math.min(lo, dz);
++              hi = Math.max(hi, dz);
++              attributes.position.setXYZ(o, x, y, z + dz);
++              attributes.layers.setXYZW(o, slots[0], slots[1], slots[2], slots[3]);
++              o++;
+             }
+-          finalMask[ring] = mask;
+-          reliefMin[ring] = cellLo; reliefMax[ring] = cellHi;
+-          lo = Math.min(lo, cellLo); hi = Math.max(hi, cellHi);
+-          finalPosition.set(attributes.position.array.subarray(3 * begin, 3 * o), 3 * block);
+           if (!cached) {
+             normRing.set(attributes.normal.array.subarray(3 * begin, 3 * o), 3 * block);
+--- a/gpu/renderer.js
++++ b/gpu/renderer.js
+@@ -665,12 +665,5 @@
+   }
+ 
+-  // Opt-in for a depth-neutral background with its own self-contained shader.
+-  // Encode it first against the *same* freshly cleared MSAA attachments as the
+-  // world. Nothing samples an intermediate resolve between these two draws.
+-  renderWithBackdrop(scene, camera, backdrop) {
+-    return this.render(scene, camera, backdrop);
+-  }
+-
+-  render(scene, camera, backdrop = null) {
++  render(scene, camera) {
+     if (this.lost) return;
+     this.begin();
+@@ -686,8 +679,4 @@
+     L.transparent.length = 0;
+     L.n = 0;
+-    if (backdrop) {
+-      backdrop.updateMatrixWorld();
+-      this.project(backdrop, camera, -Infinity);
+-    }
+     this.project(scene, camera, 0);
+     if (this.sortObjects) {
+--- a/game/landgame.js
++++ b/game/landgame.js
+@@ -3484,6 +3484,4 @@
+     const draw = (eye, main = false) => {
+       for (const d of this.sky.children) d.position.setFromMatrixPosition(eye.matrixWorld);
+-      const fused = main && this.remasteredGround && this.activeSky?.sky === this.sky && R.renderWithBackdrop && !nearShadow && !eye.userData.plain;
+-      if (!fused) {
+       const field=lighting.fieldLook.value, density=field.x, filter=field.z;
+       const mode=lighting.receiverMode.value,coord=lighting.receiverMap.value,skyMode=this.skyMode ||= new THREE.Vector4(),skyCoord=this.skyCoord ||= new THREE.Vector4();
+@@ -3492,5 +3490,4 @@
+       try { drawSky(R, this.sky, eye); } finally { field.x=density; field.z=filter;mode.copy(skyMode);coord.copy(skyCoord); }
+       R.clearDepth();
+-      }
+       if (main && this.blastField) this.blastField.bind(blastLights, w, eye);
+       // Only the player's tactical colour draw. Reflections and sun maps should
+@@ -3502,6 +3499,5 @@
+       }
+       try {
+-        if (fused) R.renderWithBackdrop(this.scene, eye, this.sky);
+-        else if (main && nearShadow) this.closeShadow.renderScene(R, this.scene, eye, lighting);
++        if (main && nearShadow) this.closeShadow.renderScene(R, this.scene, eye, lighting);
+         else R.render(this.scene, eye);
+       } finally { canopy.w = 0; blastLights.blastCount.value = 0; }

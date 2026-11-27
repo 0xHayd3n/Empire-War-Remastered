@@ -32,21 +32,15 @@ const assert = require('node:assert/strict'),
     await f.locator('[data-id="TITLE_PLAY"]').click();
     await f.locator('[data-id="IDC_MAIN_MENU_SINGLE_PLAYER_GAMES"]').click();
     if (process.env.SWR_TEST_ALL_ERAS) {
-      const eras = f.locator('[data-universal-screen="eras"]');
-      async function choose(period, name) {
-        await eras.getByRole('option', { name: period, exact: true }).click();
-        await eras.getByRole('option', { name, exact: true }).click();
-        await eras.getByRole('button', { name: 'Continue' }).click();
-      }
+      const skirmish = f.locator('[data-universal-screen="skirmish"]');
       await f.locator('[data-id="IDC_SKIRMISH_GAMES_BUTTON"]').filter({ hasNotText: 'Instant Battle' }).click();
-      await choose('Old Republic', 'Revan’s Revenge');
-      await f.locator('[data-id="IDC_SKIRMISH_START_GAME_BUTTON"]').waitFor();
-      await f.locator('[data-id="IDC_CANCEL_BUTTON"]').click();
-      await eras.getByRole('button', { name: 'Back' }).click();
-      await f.getByText('Instant Battle', { exact: true }).click();
-      await choose('Galactic Civil War', 'Forces of Corruption');
-      await f.locator('#instantBattle').getByRole('button', { name: 'Back', exact: true }).click();
-      await eras.getByRole('button', { name: 'Back' }).click();
+      await skirmish.locator('[data-planet-group]').first().waitFor();
+      assert(await skirmish.locator('.op-go').isDisabled());
+      assert.equal(await skirmish.getByRole('combobox', { name: 'Game profile' }).count(), 0);
+      assert.equal(await skirmish.locator('[data-era]').count(), 0);
+      await skirmish.getByRole('button', { name: 'Back', exact: true }).click();
+      await f.locator('[data-id="IDC_INSTANT_BATTLE_BUTTON"]').click();
+      await f.locator('[data-universal-screen="instant"]').getByRole('button', { name: 'Back', exact: true }).click();
     }
     await f.locator('[data-id="IDC_CUSTOM_CAMPAIGN_BUTTON"]').click();
     const board = f.locator('[data-universal-screen="campaign"]'),
@@ -79,8 +73,8 @@ const assert = require('node:assert/strict'),
         );
       };
     await current.waitFor();
-    // Escape leaves setup without a visible Back control.
-    await page.keyboard.press('Escape');
+    // The chart chevron follows the same route as Escape.
+    await board.locator('.uc-map-heading').getByRole('button', { name: 'Back', exact: true }).click();
     await board.waitFor({ state: 'detached' });
     await f.locator('[data-id="IDC_CUSTOM_CAMPAIGN_BUTTON"]').click();
     await current.waitFor();
@@ -604,7 +598,7 @@ const assert = require('node:assert/strict'),
     assert.equal(await revan.locator('.uc-map-choice').count(), 1);
     assert(await field('credits').isHidden());
     await setup('Faction').click();
-    assert.equal(await field('faction').getByRole('radio').count(), 3);
+    assert.equal(await field('faction').getByRole('radio',{disabled:false}).count(), 3);
     await setup('Settings').click();
     await selectPeriod('Scenario starts');
     assert.equal(await field('credits').inputValue(), '');
@@ -640,7 +634,7 @@ const assert = require('node:assert/strict'),
         assert(await current.evaluate(b => !!b.closest('tr').nextElementSibling?.querySelector('.uc-branches')));
         assert.equal(await board.getAttribute('data-campaign'), selectedTarget);
       }
-      assert.equal(await field('faction').getByRole('radio').count(), 1);
+      assert.equal(await field('faction').getByRole('radio',{disabled:false}).count(), 1);
     }
     const opening = process.env.SWR_TEST_FTGU;
     if (opening) {
@@ -695,7 +689,9 @@ const assert = require('node:assert/strict'),
     );
     const stars = await board.locator('[data-planet]').evaluateAll(es => es.map(e => [e.dataset.planet, e.dataset.owner]));
     assert(stars.length > 10 && new Set(stars.map(p => p[1])).size > 1);
-    assert.equal(await board.getByRole('button', { name: /Zoom|Fit|Configure|Back/i }).count(), 0);
+    assert.equal(await board.getByRole('button', { name: /Zoom|Fit|Configure/i }).count(), 0);
+    assert.equal(await board.getByRole('button', { name: 'Back', exact: true }).count(), 1);
+    assert.equal(await board.locator('aside h1, aside .uc-map-back').count(), 0);
     await setup('Settings').click();
     assert.equal(await field('difficulty').getByRole('radio').count(), 3);
     assert.equal(await slider('preset').getAttribute('aria-valuetext'), 'Campaign defaults');
@@ -741,6 +737,10 @@ const assert = require('node:assert/strict'),
     await snap('rule-controls');
     await page.setViewportSize({ width: 390, height: 844 });
     assert(await inline());
+    assert(await board.locator('.uc-map-heading').evaluate(el => {
+      const heading = el.getBoundingClientRect(), canvas = el.parentElement.getBoundingClientRect();
+      return heading.left >= canvas.left && heading.right <= canvas.right && heading.top - canvas.top < 12;
+    }));
     assert.equal(await checkedValue('difficulty'), 'hard');
     await setup('Faction').click();
     await field('faction').scrollIntoViewIfNeeded();

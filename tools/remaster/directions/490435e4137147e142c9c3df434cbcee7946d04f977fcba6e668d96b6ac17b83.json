@@ -1,0 +1,287 @@
+{
+  "job": "490435e4137147e142c9c3df434cbcee7946d04f977fcba6e668d96b6ac17b83",
+  "planet": "Naboo",
+  "views": [
+    {
+      "page": "https://www.starwars.com/databank/theed-royal-palace",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/theed-palace_84f09a19.jpeg",
+      "sha256": "23b932f6291ed333eb704204cad22f0467c03edbf6ae83fa524c8e91d57ae45a",
+      "visible": "Elevated view of Theed: green copper domes, royal palace facade, paved plaza with statues, gardens and a ring of trees; three small airspeeders high in the sky.",
+      "subject": "building",
+      "people": "incidental-native",
+      "settingCue": "Urban: stone plaza, domed sandstone/copper-roofed classical architecture, planted terraces, wooded hills beyond",
+      "nativeContext": "Distant people in Theed give scale to the width of the court and the clear space before the portico."
+    },
+    {
+      "page": "https://www.starwars.com/databank/naboo",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/databank_naboo_01_169_6cd7e1e0.jpeg",
+      "sha256": "0b1533e519476ae8de7b1a0b8682d789dd2c7a0a81d49aca2307cdfadf1990e4",
+      "visible": "Wide view of the Theed palace complex across a green canal ringed by balustraded walkways, patterned plazas, fountains and trees.",
+      "subject": "settlement-edge",
+      "people": "incidental-native",
+      "settingCue": "Urban + water: canal beds, stone balustrades, formal parterres, river city",
+      "nativeContext": "Tiny pedestrians show that the raised canal walks are deliberate public approaches, not bare natural ground."
+    },
+    {
+      "page": "https://commons.wikimedia.org/wiki/File:Villa_del_Balbaniello_from_Lake_Como_ferry.jpg",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f5/Villa_del_Balbaniello_from_Lake_Como_ferry.jpg/1920px-Villa_del_Balbaniello_from_Lake_Como_ferry.jpg",
+      "sha256": "221e89414283da2d586b048a3abb8d64bb6081adb9f8c73be370c860850c7c3c",
+      "visible": "Earth analogue, Lake Como, Lenno (Villa del Balbianello): Wide panorama from the lake: wooded headland rising from blue water, small pastel villas at the shoreline, hazy blue mountains behind.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Shore/beds + wooded slopes: open water, tree-covered slope, waterfront village edge"
+    },
+    {
+      "page": "https://commons.wikimedia.org/wiki/File:Balbianello_IMG_1535.JPG",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b9/Balbianello_IMG_1535.JPG/1920px-Balbianello_IMG_1535.JPG",
+      "sha256": "c74ebc83f5b0aa5fbba9f3d1dccfc9348001d3d35219a228e295c4fa0d322350",
+      "visible": "Earth analogue, Lake Como, Lenno (Villa del Balbianello): Villa del Balbianello seen from below: pale stone loggia tower with a crenellated pinnacle, ochre plaster wing, red tile roof, ivy-clad arches, flowering shrubs.",
+      "subject": "building",
+      "people": "none",
+      "settingCue": "Architecture analogue: pale stone/plaster villa, arcade, terraced garden on a wooded slope"
+    },
+    {
+      "page": "https://commons.wikimedia.org/wiki/File:Villa_Balbianello_3683_Panini_4.jpg",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a6/Villa_Balbianello_3683_Panini_4.jpg/1920px-Villa_Balbianello_3683_Panini_4.jpg",
+      "sha256": "a911c9fe1719f6599bff09c6337bbae5727b0a2d36ac5fa6c6e5ed07fd9afbb0",
+      "visible": "Earth analogue, Lake Como, Lenno (Villa del Balbianello): Gravel terrace path curving along clipped hedges and a low iron railing above the lake; fan palms and a gnarled pine frame the water, villa edge and green mountains behind.",
+      "subject": "settlement-edge",
+      "people": "none",
+      "settingCue": "Shore/beds + terraced garden: lake edge, clipped hedges, wooded mountain slopes"
+    },
+    {
+      "page": "https://www.nps.gov/cato/learn/nature/forests.htm",
+      "image": "https://www.nps.gov/cato/learn/nature/images/Caption-Hog-Rock-Trail.png",
+      "sha256": "3098b45cb2d09d11d6cce2514282a27b4142b41d698c14447be906a29d681157",
+      "visible": "Earth analogue, Catoctin Mountain Park, NPS: Narrow dirt trail passing a mossy boulder into a dense deciduous wood; sunlight through green and early-autumn canopy, understory ferns and saplings.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Wooded slopes analogue: mixed hardwood canopy, rock outcrop, leaf litter"
+    },
+    {
+      "page": "https://www.nps.gov/cuva/learn/nature/index.htm",
+      "image": "https://www.nps.gov/cuva/learn/nature/images/17-2-51-NPS-COLLECTION_3.JPG",
+      "sha256": "27d72a566a8c13d20e5cb35362deb01b961b620be2f08e498f75ac0e3422c43c",
+      "visible": "Earth analogue, Cuyahoga Valley National Park, NPS: Aerial of a brown river meandering in two tight bends through continuous green forest, with pale sand/gravel point bars inside each curve.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Shore/beds: exposed riverine sediment bars, wooded banks; aerial scale"
+    },
+    {
+      "page": "https://commons.wikimedia.org/wiki/File:Spray_Park_trail_leads_through_subalpine_wildflower_meadows._(a239fa4e-1c31-43a5-9ab0-9a7c317a32dc).JPG",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c0/Spray_Park_trail_leads_through_subalpine_wildflower_meadows._%28a239fa4e-1c31-43a5-9ab0-9a7c317a32dc%29.JPG/1920px-Spray_Park_trail_leads_through_subalpine_wildflower_meadows._%28a239fa4e-1c31-43a5-9ab0-9a7c317a32dc%29.JPG",
+      "sha256": "f642259752748c0da1cdc02f4f1dcff2eb2f674b37d5a2e6fd5fc2e5d44d1340",
+      "visible": "Earth analogue, Mount Rainier National Park, NPS: Subalpine wildflower meadow of white and magenta blooms crossed by a sandy trail, dark conifer clumps and scattered grey rock, deep blue sky.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Grassy plains analogue: low herb/grass layer, meadow horizon, conifer tree line"
+    },
+    {
+      "page": "https://commons.wikimedia.org/wiki/File:Owyhigh_Lakes_trail_reaches_a_subalpine_meadow_with_numerous_wildflowers_in_summer_that_transitions_into_colorful_fall_foliage._(55b1cc4a-f4c0-4b98-9488-8d7e6ae72d41).JPG",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b5/Owyhigh_Lakes_trail_reaches_a_subalpine_meadow_with_numerous_wildflowers_in_summer_that_transitions_into_colorful_fall_foliage._%2855b1cc4a-f4c0-4b98-9488-8d7e6ae72d41%29.JPG/1920px-thumbnail.jpg",
+      "sha256": "fd4e25a8976340b587d6d850127d3e289629f395deef72dd2beed6b682a8fed1",
+      "visible": "Earth analogue, Mount Rainier National Park, NPS: Dirt trail climbing a dry golden-green meadow slope, seed heads and grasses, dark spruce/fir woodland edge and forested ridge line behind.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Grassy plains + wooded slopes analogue: dry grass texture, tree line, ridge"
+    },
+    {
+      "page": "https://www.nps.gov/cuva/learn/nature/rivers.htm",
+      "image": "https://www.nps.gov/cuva/learn/nature/kidsyouth/images/CVNP_summer_Cuyahoga_River2_D.J._Reiser_1.JPG",
+      "sha256": "efba37d71c03bb1fa05b681469ace465babfde585aa1c80562247cd7b76c5733",
+      "visible": "Earth analogue, Cuyahoga Valley National Park, NPS: Calm green-brown river filling the lower frame, its far bank a wall of leafy trees and shrubs below a low wooded ridge and stacked cumulus clouds.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Shore/beds + wooded slopes: water surface, bank vegetation, forested hill behind"
+    }
+  ],
+  "ground": {
+    "decision": "Connect green meadow and worn sward across flat and convex terraces. Rooted soil, gravel incisions and inclined rock break up the lawn for local physical reasons.",
+    "reject": "Reject isolated squares of street paving across distant grass and a uniform bright green lawn in the cut beds.",
+    "evidence": [
+      "3098b45cb2d09d11d6cce2514282a27b4142b41d698c14447be906a29d681157",
+      "27d72a566a8c13d20e5cb35362deb01b961b620be2f08e498f75ac0e3422c43c",
+      "f642259752748c0da1cdc02f4f1dcff2eb2f674b37d5a2e6fd5fc2e5d44d1340",
+      "fd4e25a8976340b587d6d850127d3e289629f395deef72dd2beed6b682a8fed1"
+    ]
+  },
+  "foliage": {
+    "decision": "Retain the round deciduous crowns and low clumps on the real grass terraces and sheltered banks. Keep the approaches open.",
+    "reject": "Do not turn the rural deployment into a dense forest or import alpine conifers, palms or exotic species from location analogues.",
+    "evidence": [
+      "23b932f6291ed333eb704204cad22f0467c03edbf6ae83fa524c8e91d57ae45a",
+      "221e89414283da2d586b048a3abb8d64bb6081adb9f8c73be370c860850c7c3c",
+      "3098b45cb2d09d11d6cce2514282a27b4142b41d698c14447be906a29d681157",
+      "f642259752748c0da1cdc02f4f1dcff2eb2f674b37d5a2e6fd5fc2e5d44d1340",
+      "fd4e25a8976340b587d6d850127d3e289629f395deef72dd2beed6b682a8fed1"
+    ],
+    "review": {
+      "disposition": "retain",
+      "basis": "The mounted board has several deciduous singles, canopy and cluster models plus four different low ground-cover models. Their spacing leaves the channel and the palace readable.",
+      "forms": [
+        {
+          "id": "broadleaf",
+          "form": "Single deciduous trees and connected copses.",
+          "silhouette": "Rounded broadleaf crowns separate above the lower bank and cast uneven shade across the grass.",
+          "variation": "Keep the authored single, cluster, canopy and occasional yellow forms at their placed scales and roots.",
+          "disposition": "retain",
+          "reason": "Existing foliage frames the field and court without blocking travel. A procedural plantation would repeat the silhouette.",
+          "evidence": [
+            "23b932f6291ed333eb704204cad22f0467c03edbf6ae83fa524c8e91d57ae45a",
+            "221e89414283da2d586b048a3abb8d64bb6081adb9f8c73be370c860850c7c3c",
+            "3098b45cb2d09d11d6cce2514282a27b4142b41d698c14447be906a29d681157"
+          ]
+        },
+        {
+          "id": "ground-herbs",
+          "form": "Low discontinuous tufts and herbaceous clumps.",
+          "silhouette": "The short grass tips gather in small clumps below foot soldiers, with open ground between them.",
+          "variation": "Four mounted low-cover shapes break into uneven small patches, rather than rows of identical flowers.",
+          "disposition": "retain",
+          "reason": "These authored clumps supply height at foot level. Keep their placements rather than scattering a second layer.",
+          "evidence": [
+            "f642259752748c0da1cdc02f4f1dcff2eb2f674b37d5a2e6fd5fc2e5d44d1340",
+            "fd4e25a8976340b587d6d850127d3e289629f395deef72dd2beed6b682a8fed1"
+          ]
+        }
+      ],
+      "zones": {
+        "place": [
+          {
+            "where": "On the real grass terraces and at the edge of the authored copses, following existing roots only.",
+            "forms": [
+              "broadleaf",
+              "ground-herbs"
+            ],
+            "evidence": [
+              "221e89414283da2d586b048a3abb8d64bb6081adb9f8c73be370c860850c7c3c",
+              "3098b45cb2d09d11d6cce2514282a27b4142b41d698c14447be906a29d681157",
+              "f642259752748c0da1cdc02f4f1dcff2eb2f674b37d5a2e6fd5fc2e5d44d1340"
+            ]
+          }
+        ],
+        "exclude": [
+          {
+            "where": "Unplanted stone courts, trampled access, exposed gravel and steep falls.",
+            "reason": "Manufactured ground and incised mineral beds are readable breaks in the planted cover.",
+            "evidence": [
+              "23b932f6291ed333eb704204cad22f0467c03edbf6ae83fa524c8e91d57ae45a",
+              "0b1533e519476ae8de7b1a0b8682d789dd2c7a0a81d49aca2307cdfadf1990e4",
+              "27d72a566a8c13d20e5cb35362deb01b961b620be2f08e498f75ac0e3422c43c"
+            ]
+          }
+        ]
+      },
+      "variation": {
+        "decision": "Preserve varied crown widths, isolated trees and low clustered grass. No additional forest outside the surveyed tree roots.",
+        "limits": [
+          "Do not scatter through the palace court or extend the deciduous trees as a uniform rim wall."
+        ],
+        "evidence": [
+          "23b932f6291ed333eb704204cad22f0467c03edbf6ae83fa524c8e91d57ae45a",
+          "3098b45cb2d09d11d6cce2514282a27b4142b41d698c14447be906a29d681157",
+          "f642259752748c0da1cdc02f4f1dcff2eb2f674b37d5a2e6fd5fc2e5d44d1340",
+          "fd4e25a8976340b587d6d850127d3e289629f395deef72dd2beed6b682a8fed1"
+        ]
+      }
+    }
+  },
+  "landmark": {
+    "decision": "Retain the domed Theed palace, the outer walls and the smaller urban court. Use real aligned stone within their painted extent.",
+    "reject": "Do not add canals or a city grid from the reference; this battlefield has a much smaller settlement and no liquid sheet.",
+    "evidence": [
+      "23b932f6291ed333eb704204cad22f0467c03edbf6ae83fa524c8e91d57ae45a",
+      "0b1533e519476ae8de7b1a0b8682d789dd2c7a0a81d49aca2307cdfadf1990e4",
+      "c74ebc83f5b0aa5fbba9f3d1dccfc9348001d3d35219a228e295c4fa0d322350",
+      "a911c9fe1719f6599bff09c6337bbae5727b0a2d36ac5fa6c6e5ed07fd9afbb0"
+    ]
+  },
+  "landUse": {
+    "natural": {
+      "decision": "Both armies muster on broad pasture. The branching low rocky bed remains distinct from the pasture above it.",
+      "evidence": [
+        "3098b45cb2d09d11d6cce2514282a27b4142b41d698c14447be906a29d681157",
+        "27d72a566a8c13d20e5cb35362deb01b961b620be2f08e498f75ac0e3422c43c",
+        "f642259752748c0da1cdc02f4f1dcff2eb2f674b37d5a2e6fd5fc2e5d44d1340",
+        "fd4e25a8976340b587d6d850127d3e289629f395deef72dd2beed6b682a8fed1"
+      ]
+    },
+    "built": {
+      "decision": "The positive controls are the painted stone court of the actual palace and the two groups of Theed houses. Outside them field paint is not evidence of a city. Concrete follows live construction only.",
+      "evidence": [
+        "23b932f6291ed333eb704204cad22f0467c03edbf6ae83fa524c8e91d57ae45a",
+        "0b1533e519476ae8de7b1a0b8682d789dd2c7a0a81d49aca2307cdfadf1990e4",
+        "c74ebc83f5b0aa5fbba9f3d1dccfc9348001d3d35219a228e295c4fa0d322350"
+      ]
+    },
+    "transition": {
+      "decision": "The edge of each built apron ends at the local grass, skirt of trees or compacted path rather than at a planet-wide paving threshold.",
+      "evidence": [
+        "23b932f6291ed333eb704204cad22f0467c03edbf6ae83fa524c8e91d57ae45a",
+        "0b1533e519476ae8de7b1a0b8682d789dd2c7a0a81d49aca2307cdfadf1990e4",
+        "a911c9fe1719f6599bff09c6337bbae5727b0a2d36ac5fa6c6e5ed07fd9afbb0",
+        "f642259752748c0da1cdc02f4f1dcff2eb2f674b37d5a2e6fd5fc2e5d44d1340"
+      ]
+    }
+  },
+  "outskirts": {
+    "treatment": "foothills",
+    "foliage": [],
+    "skyline": "Continue the outer grass shoulders into open rolling fields with low breaks. The palace ridge and the actual tree groups remain the high landmarks.",
+    "join": "Join all 992 surveyed rim vertices with their normals, heights and turf cover. The nearest authored crown root is 114 units inside the rim. Continue the open sward beyond that outer verge, not another band of trees.",
+    "reject": "No alpine wall, continuous wooded fringe, canal or duplicated palace beyond the map.",
+    "evidence": [
+      "23b932f6291ed333eb704204cad22f0467c03edbf6ae83fa524c8e91d57ae45a",
+      "221e89414283da2d586b048a3abb8d64bb6081adb9f8c73be370c860850c7c3c",
+      "f642259752748c0da1cdc02f4f1dcff2eb2f674b37d5a2e6fd5fc2e5d44d1340",
+      "fd4e25a8976340b587d6d850127d3e289629f395deef72dd2beed6b682a8fed1"
+    ]
+  },
+  "climate": {
+    "substrate": "Fine meadow turf, short worn grass and a little earth share the same temperate soils on the two terrace floors.",
+    "lighting": "Read the real Sunrise_Clear and Noon_Clear light and sky colors. Neither environment declares a weather scenario.",
+    "exceptions": "Shadows beneath broadleaf trees, lighter gravel in the cut bed and the aligned pale palace court are intentional changes, not a field color fault.",
+    "skies": [
+      "Sunrise_Clear",
+      "Noon_Clear"
+    ],
+    "pairs": [
+      {
+        "view": "command",
+        "points": [
+          [
+            680,
+            260
+          ],
+          [
+            765,
+            300
+          ]
+        ],
+        "basis": "Two open patches between the wooded western shoulder and the bed, above the deployed troops. The second window stays on grass, inset from the pale gravel transition visible at noon.",
+        "limit": 0.11
+      },
+      {
+        "view": "east-meadow",
+        "points": [
+          [
+            775,
+            300
+          ],
+          [
+            990,
+            326
+          ]
+        ],
+        "basis": "Clear grass to the right of the large crown, above the eastern soldiers and outside the building approach.",
+        "limit": 0.11
+      }
+    ],
+    "evidence": [
+      "3098b45cb2d09d11d6cce2514282a27b4142b41d698c14447be906a29d681157",
+      "f642259752748c0da1cdc02f4f1dcff2eb2f674b37d5a2e6fd5fc2e5d44d1340",
+      "fd4e25a8976340b587d6d850127d3e289629f395deef72dd2beed6b682a8fed1"
+    ]
+  },
+  "uncertain": "The references show the spatial relationship of court, pasture and woodland; they do not determine the exact grass species, geology or canal plan for this dry stock skirmish."
+}

@@ -1,3 +1,4 @@
+import {landPreview} from './endor-preview.js';
 const KEY = 'swr.game';
 
 export const EDITIONS = [
@@ -6,6 +7,7 @@ export const EDITIONS = [
 ];
 
 export function edition() {
+  if(landPreview)return 'foc'; // fixed session only; preserve the user's launcher edition
   try {
     return localStorage.getItem(KEY) === 'eaw' ? 'eaw' : 'foc';
   } catch {

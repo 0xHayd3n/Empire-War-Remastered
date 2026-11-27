@@ -37,6 +37,18 @@ A second run alternated opt-in and full detail **at every camera pose in the sam
 
 The zoom check inspects the actual instanced geometry pools. It does not certify visual quality across all resolutions, optics, units, or GPUs. Draw calls didn't fall in these comparisons. The [follow-up at 1080p and 720p](fleet-render-passes.md) separates ship submission from shadow-map work without turning off the shadows that ships receive.
 
+## Cinematic preset at fleet scale
+
+In mounted Universal, open **Settings → Video → Graphics Quality → Space battle look → Cinematic**. Compare the same ship at strategy zoom and close up; switch back with **Use battlefield settings**. This is a lighting change, not a mesh LOD or a replacement texture pack.
+
+With Universal running on port 8590, local Chrome and `playwright-core` available, run `LOOK_FLEET=1 node tools/check-battlefield-appearance.cjs` (add `LOOK_BACKEND=webgl` for the fallback). The check launches a stock Abregado-rae Instant Battle from the setup board with 100 entries per fleet, changes the preset through the pause menu, and captures the same Star Destroyer and wide fleet view before/after. Both views restored pixel-for-pixel on both backends at 1280×720. The optional timings alternate 20 warmed draws per look on a frozen scene; they are not live battle FPS. Captures stay local.
+
+The same test also compares **Cinematic → Cinematic · corrected color → Cinematic · orbital lighting**. Set `LOOK_WORLD=Kuat` to repeat at a second mounted battlefield. The corrected shader decodes painted RGB, leaves gloss/normal/alpha as data, and outputs display-referred color for the existing effects chain. A gentle SDR highlight shoulder preserves midtones; extended WebGPU output instead retains headroom for the existing HDR presenter. Neither path converts engine sprites or the HUD. The test checks the real hull shader on a half-lit white patch (188/255) and gray patch (128/255 paint → 92/255), in addition to ship and fleet captures. Orbital lighting reduces a one-time sky/planet capture to six directional averages and a broad highlight; it is not a mirror and does not reflect moving ships.
+
+**Deep space** changes the exposure of the mounted skydome separately from the fleet. Faint, broad dust is subdued while compact bright points, separate additive star/sun cards and modeled planets stay luminous. Embedded planets painted into one sky texture cannot be separated perfectly. The darker sky has its own cached light probe. A shadow blocks direct sunlight, not nearby bolt lighting or engine emission; a little indirect fill keeps silhouettes readable. With bloom enabled, saturated hot cores can bloom without lifting dim hulls. The mounted appearance check compares the same close and wide views, measures the sky light and sunlit/shaded paint, and switches back to Orbital. No gameplay, visibility rules or map files are changed.
+
+For the separate **Star Destroyer close-ups** option, see [the mounted flyby, roughness atlas and live timings](destroyer-flyby.md). It leaves the stock fleet LOD and existing lighting presets intact.
+
 ## Reproduce
 
 Install Node dependencies with `npm ci`. The optional measurement harness also needs local Chrome and `playwright-core` (e.g. `npm install --no-save --package-lock=false playwright-core`), your own game install, and any Workshop primaries you want to test. Reads local Steam libraries or `SWR_GAME`, serves each checkout on a fresh loopback origin, and closes its browser and server afterward. No asset exports.

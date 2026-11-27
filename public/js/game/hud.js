@@ -19,6 +19,7 @@ import { loadBarSkins, textureKey, decodeSkinIcons } from './barskins.js';
 
 const BAR_H = 330,
   BAR_W = 1080;
+const creditFormat = new Intl.NumberFormat('en-US');
 const PT = 1.5;
 const PT_OWN = 1.6;
 const el = (cls, parent) => {
@@ -1588,13 +1589,16 @@ export class CommandBar {
   }
 
   refreshCredits() {
-    const credits = Math.floor(this.player.credits).toLocaleString('en-US');
-    if (credits === this.creditText) return;
-    this.creditText = this.tCredits.textContent = credits;
+    const amount = Math.floor(this.player.credits);
+    if (amount === this.creditAmount) return;
+    this.creditAmount = amount;
+    const credits = creditFormat.format(amount);
     if (!this.measure) this.measure = document.createElement('canvas').getContext('2d');
     const style = getComputedStyle(this.tCredits);
     this.measure.font = `${style.fontSize} ${style.fontFamily}`;
-    this.tCreditIcon.style.left = this.creditRight - this.measure.measureText(credits).width - 9 - 9 + 'px';
+    const left = this.creditRight - this.measure.measureText(credits).width - 18;
+    this.tCredits.textContent = credits;
+    this.tCreditIcon.style.left = left + 'px';
   }
 
   refresh() {

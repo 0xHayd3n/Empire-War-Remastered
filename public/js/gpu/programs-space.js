@@ -1,5 +1,10 @@
 import { families, simple } from './programs.js';
+import { impactVertex, impactFragment } from '../impactshader.js';
 import './programs-galactic.js';
+import { spatialShader } from '../spatialupscale.js';
+import { closeAreaShader, CLOSE_RESOLVE } from '../closeedges.js';
+import { cubicShader, postVertex as POST_VERT } from '../imagesampling.js';
+import { contactWGSL } from '../game/contactshade.js';
 
 const f32 = (...xs) => {
   let v = Math.fround(xs[0]);
@@ -7,6 +12,13 @@ const f32 = (...xs) => {
   return v.toPrecision(9);
 };
 const only = (m, ...names) => !!m.uniforms && Object.keys(m.uniforms).length === names.length && names.every(n => n in m.uniforms);
+
+const impactPatch = simple({
+  name: 'hull-impact-patch', match: m => m.isShaderMaterial && m.vertexShader === impactVertex,
+  params: [['damageStage','v2']], vertex: () => [['position',3,0],['uv',2,1]],
+  code: () => `struct In { @location(0) p:vec3f,@location(1) uv:vec2f } struct Out { @builtin(position) pos:vec4f,@location(0) uv:vec2f }
+  @vertex fn vs(v:In)->Out { var o:Out; o.pos=glDepth(P.proj*D.modelView*vec4f(v.p,1.0)); o.uv=v.uv; return o; }` + impactFragment(true)
+});
 
 const sprites = simple({
   name: 'sprites',
@@ -138,7 +150,6 @@ struct VOut { @builtin(position) pos: vec4f, @location(0) vUv: vec2f }
 }`
 });
 
-const POST_VERT = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 const screenVS = `
 struct VIn { @location(0) position: vec3f, @location(1) uv: vec2f }
 struct VOut { @builtin(position) pos: vec4f, @location(0) vUv: vec2f }
@@ -150,20 +161,27 @@ const screen = (name, test, spec) =>
       ['position', 3, 0],
       ['uv', 2, 1]
     ],
-    match: m => m.isShaderMaterial && m.vertexShader === POST_VERT && test(m.fragmentShader),
+    match: m => m.isShaderMaterial && m.vertexShader === POST_VERT && test(m.fragmentShader, m),
     ...spec
   });
 
+import { displayEnergy, energyBloom } from '../sceneenergy.js';
+
 const bright = screen('bright', f => f.includes('uniform float cutoff;'), {
   textures: ['map'],
-  params: [['cutoff', 'f']],
+  params: [['cutoff', 'f'], ['deepGlow','f']],
   code: () =>
     screenVS +
     `
 @fragment fn fs(v: VOut) -> @location(0) vec4f {
-  let c = clamp(textureSample(mapT, mapS, v.vUv).rgb, vec3f(0.0), vec3f(1.0)); let c2 = c * c;
-  return vec4f(select(c * c2 * c2, c, dot(c, vec3f(0.299, 0.587, 0.114)) > D.cutoff), 1.0);
-}`
+  let signal = textureSample(mapT, mapS, v.vUv).rgb;
+  if (D.deepGlow>1.5) {return vec4f(energyBright(signal),1.0);}
+  let c = clamp(signal, vec3f(0.0), vec3f(1.0)); let c2 = c * c;
+  var emission = select(c * c2 * c2, c, dot(c, vec3f(0.299, 0.587, 0.114)) > D.cutoff);
+  if (D.deepGlow > 0.5) { emission = c*smoothstep(0.68,0.99,max(c.r,max(c.g,c.b))); }
+  return vec4f(emission + max(signal - 1.0, vec3f(0.0)), 1.0);
+}
+fn energyBright(signal:vec3f)->vec3f{${energyBloom(true)}}`
 });
 
 const blur = screen('blur', f => f.includes('uniform vec2 offset;'), {
@@ -178,15 +196,57 @@ const blur = screen('blur', f => f.includes('uniform vec2 offset;'), {
 }`
 });
 
-const combine = screen('combine', f => f.includes('vec3 smoothEdges(vec2 uv)'), {
-  textures: ['scene', 'glow', 'heat'],
+const streak = screen('streak', f => f.includes('vec3 hot(vec2 uv)'), {
+  textures: ['map'],
+  code: () => screenVS + `
+fn hot(uv:vec2f) -> vec3f {
+  let c = textureSampleLevel(mapT,mapS,uv,0.0).rgb;
+  return c * smoothstep(0.50,0.92,max(max(c.r,c.g),c.b));
+}
+@fragment fn fs(v:VOut) -> @location(0) vec4f {
+  var sum = 0.16*hot(v.vUv);
+  for (var i=1; i<=6; i++) {
+    let k=f32(i)/6.0; let d=vec2f(k*k*0.018,0.0);
+    sum += (hot(v.vUv-d)+hot(v.vUv+d))*(0.13-0.085*k);
+  }
+  return vec4f(sum,1.0);
+}`
+});
+
+const closeResolve = screen('close-area-resolve', f=>f===CLOSE_RESOLVE, {
+  textures:['map'], params:[['sourceSpan','v2']],
+  code:()=>screenVS+closeAreaShader(true)+'\n@fragment fn fs(v:VOut)->@location(0) vec4f { return vec4f(areaResolve(v.vUv),1.0); }'
+});
+
+const spatial = ['easu','rcas','lanczos'].map(pass => screen('spatial-'+pass, f => f.startsWith('// spatial-pass:'+pass+'\n'), {
+  textures: ['map'], params: [['amount','f'],['extended','f'],['paired','f']],
+  code: () => screenVS + spatialShader('wgsl',pass) + '\n@fragment fn fs(v:VOut)->@location(0) vec4f { return vec4f(filterPixel(v.vUv),1.0); }'
+}));
+
+const upscale = screen('upscale', f => f.includes('uniform float upscaleBlend;'), {
+  textures: ['map'], params: [['upscaleBlend','f']],
+  code: () => screenVS + cubicShader('wgsl') + `
+@fragment fn fs(v:VOut)->@location(0) vec4f {
+  var rgb=textureSampleLevel(mapT,mapS,v.vUv,0.0).rgb;
+  if (D.upscaleBlend>0.0) { rgb=mix(rgb,cubicRGB(v.vUv,vec2f(textureDimensions(mapT,0))),D.upscaleBlend); }
+  return vec4f(rgb,1.0);
+}`
+});
+
+const combine = depth => screen(depth ? 'combineAO-' + depth : 'combine', (f,m) => f.includes('vec3 smoothEdges(vec2 uv)') &&
+  depth === (m.defines?.CONTACT_SHADE ? (m.defines.CONTACT_MS ? 'multi' : 'single') : null), {
+  contactDepth: depth,
+  textures: ['scene', 'glow', 'heat', 'streak', ...(depth ? ['contactSurface'] : [])],
   params: [
     ['texel', 'v2'],
     ['bloom', 'f'],
-    ['haze', 'f']
+    ['haze', 'f'],
+    ['glare', 'f'],
+    ['edges', 'f'], ['displayLight','f'],
+    ...(depth ? [['contactParams','v4'],['waterPlane','v4'],['terrainContactMask','f'],['contactMaxSpan','f']] : [])
   ],
   code: () =>
-    screenVS +
+    screenVS + displayEnergy(true) + (depth ? contactWGSL : '') +
     `
 const L = vec3f(0.299, 0.587, 0.114);
 fn smoothEdges(uv: vec2f) -> vec3f {
@@ -208,9 +268,18 @@ fn smoothEdges(uv: vec2f) -> vec3f {
   var uv = v.vUv;
   let hz = textureSample(heatT, heatS, v.vUv).rg - 0.5;
   if (D.haze > 0.0) { uv += hz * step(0.006, max(abs(hz.x), abs(hz.y))) * D.haze; }
-  var c = smoothEdges(uv);
+  var c:vec3f;
+  if (D.edges>0.5) { c=smoothEdges(uv); } else { c=textureSampleLevel(sceneT,sceneS,uv,0.0).rgb; }
+  ${depth ? 'c *= mix(contactVisibility(uv),1.0,smoothstep(0.65,1.0,max(max(c.r,c.g),c.b)));' : ''}
   let gl = textureSample(glowT, glowS, v.vUv).rgb;
-  if (D.bloom > 0.0) { let g = clamp(gl * D.bloom, vec3f(0.0), vec3f(1.0)); c = clamp(c, vec3f(0.0), vec3f(1.0)); c += g * (1.0 - c); }
+  if(D.displayLight>0.0) {c+=gl*D.bloom*0.15;}
+  else if (D.bloom > 0.0) {
+    let g = clamp(gl * D.bloom, vec3f(0.0), vec3f(1.0));
+    let base = clamp(c, vec3f(0.0), vec3f(1.0));
+    c = base + g * (1.0 - base) + max(c - 1.0, vec3f(0.0)) + max(gl - 1.0, vec3f(0.0)) * D.bloom;
+  }
+  if (D.glare > 0.0) { c += textureSampleLevel(streakT,streakS,v.vUv,0.0).rgb * D.glare * vec3f(0.72,0.87,1.0); }
+  if(D.displayLight>0.0){c=orbitEncode(select(orbitShoulder(c),c,D.displayLight>1.5));}
   return vec4f(c, 1.0);
 }`
 });
@@ -239,4 +308,4 @@ struct VOut { @builtin(position) pos: vec4f, @location(0) vUv: vec2f }
 }`
 });
 
-families.push(sprites, beams, ringCut, spaceFog, bright, blur, combine, flare);
+families.push(impactPatch, sprites, beams, ringCut, spaceFog, bright, blur, streak, upscale, closeResolve, ...spatial, combine(null), combine('single'), combine('multi'), flare);

@@ -230,7 +230,7 @@ export class Plans {
         host.fetch(key, file);
         if (other.test(file)) this.otherMode.add(key);
       }
-    while (host.fetching) await new Promise(r => setTimeout(r, 50));
+    await host.sourcesReady();
     const g = host.game || {},
       sides = host.land
         ? (g.factions || []).map((f, side) => [f, g.players?.[side]?.difficulty])

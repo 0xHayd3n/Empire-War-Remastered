@@ -6,6 +6,7 @@ import { loadTextureCanvas } from '../dds.js';
 import { uiBoneTransforms } from './hud.js';
 import { dialogFontPixels, uiTextHeight } from './dialogtext.js';
 import { encyclopediaAbilityIcons } from './nativeabilityicons.js';
+import { reading } from './readingpreferences.js';
 import { Pointers } from './pointers.js';
 
 const yes = s => /^(yes|true|1)$/i.test(s || '');
@@ -530,7 +531,7 @@ export class GalacticEncyclopedia {
         this.linkedTimer = null;
         this.paintLinked(this.linkedGeneration);
       },
-      db.constants.num('Tooltip_Delay', 330)
+      reading.tooltip * db.constants.num('Tooltip_Delay', 330)
     );
   }
   async paintLinked(generation) {

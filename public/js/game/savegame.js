@@ -43,7 +43,9 @@ export function withMultiplayer(game, s) {
   const setup = game.setup,
     net = setup.net;
   if (s.summary) s.summary.family = game.galactic ? setup.menuFamily : setup.campaign?.menuFamily || (setup.instant ? 'instant' : setup.campaign ? undefined : 'skirmish');
-  if (setup.instant && s.setup) s.setup.instant = setup.instant;
+  if (setup.instant && s.setup) { s.setup.instant = setup.instant; s.setup.type = 'instant'; }
+  if (setup.skirmishRosters && s.setup) s.setup.skirmishRosters=setup.skirmishRosters;
+  if (setup.planetBattle && s.setup) s.setup.planetBattle = setup.planetBattle;
   if (s.setup) delete s.setup.net;
   if (!net || (setup.campaign && !game.galactic)) return s;
   const players = setup.players || [];
@@ -312,7 +314,7 @@ function spaceSnapshot(game, name) {
       fog: setup.fog,
       ...(setup.spectate ? { spectate: true } : {}),
       teamFactions: setup.teamFactions.slice(),
-      players: setup.players.map(p => ({ human: !!p.human, team: p.team, color: p.color, difficulty: p.difficulty }))
+      players: setup.players.map(p => ({ human: !!p.human, team: p.team, ...(p.skirmishFaction ? {skirmishFaction:p.skirmishFaction} : {}), color: p.color, difficulty: p.difficulty, ...(p.human && p.livery ? { livery: p.livery } : {}) }))
     },
     mode: 'space',
     summary: {
@@ -324,6 +326,7 @@ function spaceSnapshot(game, name) {
     },
     battle: {
       kind: 'space',
+      physicsRule: w.battlePhysicsRule || game.setup.battlePhysicsRule || 0,
       time: r1(w.time),
       environment: game.map.activeEnvironment,
       speed: game.speed,
@@ -336,6 +339,7 @@ function spaceSnapshot(game, name) {
         ...(p.manualSpan ? { manual: [p.manualStart, p.manualSpan] } : {})
       })),
       entities: ents.map(e => (e.isSquad ? squad(e) : unit(e))),
+      ...(w.ramImpacts?.held.size ? {ramContacts:w.ramImpacts.snapshot(thingRef)} : {}),
       ...(w.carried && w.carried.length
         ? { carried: w.carried.map(c => ({ p: c.owner.id, type: c.type.name, company: c.company.name })) }
         : {}),
@@ -764,6 +768,10 @@ export function restore(game, save) {
       if (sw.left > 0 && (!sw.proj || !sw.target)) sw.left = 0;
       return [sw];
     });
+  w.ramImpacts?.restore(snap.ramContacts,r=>{
+    const [id,slot]=String(r).split('.'), e=refs.get(id);
+    return slot===undefined ? e : e?.fighters?.[+slot];
+  });
   w.time = snap.time || 0;
   w.recountPop();
   w.updateVisibility();

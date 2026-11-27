@@ -1,0 +1,457 @@
+/* The Command deck's orbit plate stays still while the settings list scrolls. */
+.universal-settings {
+  --us-inset: clamp(12px, 1.6vw, 30px);
+  color-scheme: dark;
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  color: var(--brief-copy);
+  background:
+    linear-gradient(100deg, #070e19fa 8%, #0b131ee8 46%, #0b131e85),
+    url('art/briefings.svg#orbit') center / cover,
+    var(--brief-night);
+  font: 400 clamp(16px, 1.16vw, 19px) / 1.45 var(--ui-font);
+  text-transform: none;
+}
+.universal-settings [hidden] {
+  display: none !important;
+}
+.universal-settings[open],
+.universal-settings .us-browser {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.universal-settings legend {
+  font: 500 12px/1.4 var(--ui-font);
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+}
+.universal-settings button,
+.universal-settings select,
+.universal-settings input[type='search'] {
+  box-sizing: border-box;
+  border: 1px solid var(--brief-rule);
+  border-radius: 0;
+  padding: 0.42rem 0.9rem;
+  background: var(--brief-surface);
+  color: var(--brief-copy);
+  font: inherit;
+  text-transform: none;
+}
+.universal-settings button,
+.universal-settings select {
+  cursor: pointer;
+}
+.universal-settings button:hover:not(:disabled),
+.universal-settings select:hover:not(:disabled) {
+  border-color: var(--brief-title);
+  color: var(--brief-title);
+}
+.universal-settings :is(button, input, select):focus-visible {
+  outline: 2px solid #e0edf6;
+  outline-offset: 3px;
+}
+.universal-settings button:disabled,
+.universal-settings select:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.universal-settings .us-footer {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  padding: 0.35rem var(--us-inset) max(0.4rem, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--brief-rule);
+}
+.universal-settings .us-back {
+  min-width: 6rem;
+}
+.universal-settings .us-browser {
+  flex: 1;
+}
+.universal-settings .us-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  flex: none;
+  padding-inline: var(--us-inset);
+  gap: 0 clamp(0.8rem, 2vw, 2rem);
+  border-bottom: 1px solid var(--brief-rule);
+}
+.universal-settings .us-tabs button {
+  background: none;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  color: var(--brief-copy);
+  padding: 0.55rem 0.2rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.universal-settings .us-tabs button[aria-selected='true'] {
+  border-bottom-color: var(--brief-amber);
+  color: var(--brief-title);
+}
+.universal-settings .us-panel {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  flex: 1;
+  box-sizing: border-box;
+  padding: 1rem var(--us-inset);
+  scrollbar-gutter: stable;
+}
+.universal-settings .us-group {
+  box-sizing: border-box;
+  min-width: 0;
+  margin: 0 0 1.15rem;
+  padding: 0;
+  border: 0;
+}
+.universal-settings legend {
+  padding: 0 0 0.55rem;
+  color: var(--brief-title);
+}
+.universal-settings .us-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 45%);
+  align-items: center;
+  gap: 0.8rem;
+  min-height: 40px;
+  padding: 0.25rem 0;
+  box-sizing: border-box;
+  border-top: 1px solid var(--brief-rule);
+}
+.universal-settings .us-label {
+  overflow-wrap: anywhere;
+}
+/* Mounted-frame counterparts of the game's reduced-motion media rules. */
+.reduce-menu-motion :is(.op-ring-layer, .op-ring-photo, .bf-meter > i, .title-drawer[open]),
+.reduce-menu-motion .title-drawer::backdrop {
+  transition: none;
+}
+.reduce-menu-motion :is(#instantBattle.op-setup, #briefMeter:indeterminate, .loading-caption i),
+.reduce-menu-motion #splash span::after {
+  animation: none;
+}
+.reduce-menu-motion :is(.mm-left, .mm-wing) {
+  transform: none;
+}
+
+.universal-settings .us-caption-preview {
+  display: flex; justify-content: center; min-height: 5rem; align-items: flex-end;
+  margin: 0.75rem 0; padding: 0.5rem; background: var(--brief-surface); border: 1px solid var(--brief-rule);
+}
+.universal-settings .us-row input[type='number'] {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  color: var(--brief-copy);
+  background: var(--brief-surface);
+  border: 1px solid var(--brief-rule);
+  padding: 0.36rem 0.65rem;
+}
+.universal-settings .us-row select {
+  width: 100%;
+  min-width: 0;
+}
+.universal-settings .us-row > :last-child {
+  justify-self: end;
+  max-width: 100%;
+}
+.universal-settings input[type='checkbox'] {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0 0.2rem;
+  cursor: pointer;
+  accent-color: var(--brief-amber);
+}
+.universal-settings .us-hdr { max-width: 48rem; }
+.universal-settings .us-hdr-pattern { display: block; width: 100%; height: 42px; margin: 1rem 0 0.4rem; }
+.universal-settings .us-hdr fieldset:disabled .us-slider { opacity: 0.55; }
+.universal-settings .us-slider {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+}
+.universal-settings .us-value {
+  min-width: 4.2em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.universal-settings input[type='range'] {
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+  height: 1.6rem;
+  cursor: pointer;
+  accent-color: var(--brief-amber);
+}
+.universal-settings .us-group p {
+  margin: 0.3rem 0 0.8rem;
+  overflow-wrap: anywhere;
+}
+.universal-settings .us-group li {
+  overflow-wrap: anywhere;
+}
+.universal-settings .us-search {
+  width: min(100%, 30rem);
+  margin: 0 0 1.4rem;
+}
+.universal-settings .us-secondary {
+  margin: 0 0 2rem;
+}
+.universal-settings .us-group > .us-secondary {
+  margin: 0.45rem 0 0;
+}
+.universal-settings .us-editor {
+  color: var(--brief-copy);
+  background: var(--brief-surface);
+  border: 1px solid var(--brief-rule);
+  width: min(25rem, 82vw);
+  padding: 1.5rem;
+  font: inherit;
+}
+.universal-settings .us-editor::backdrop {
+  background: #050a11bc;
+}
+.universal-settings .us-editor h2 {
+  margin: 0;
+  color: var(--brief-title);
+  font: 500 1.8rem/1.2 var(--ui-font);
+}
+.universal-settings .us-editor .us-record {
+  min-height: 2.5em;
+}
+.universal-settings .us-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.universal-settings .us-split {
+  display: grid;
+  grid-template-columns: clamp(8rem, 11vw, 12rem) minmax(0, 1fr);
+  gap: clamp(0.75rem, 1.5vw, 1.75rem);
+  align-items: start;
+}
+.universal-settings .us-rail {
+  position: sticky;
+  top: 0;
+}
+.universal-settings .us-rail [role='tablist'] {
+  display: grid;
+}
+.universal-settings .us-rail button {
+  text-align: left;
+  padding: 0.65rem 0.85rem;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: none;
+}
+.universal-settings .us-rail button[aria-selected='true'] {
+  border-left-color: var(--brief-amber);
+  background: #17232e;
+  color: var(--brief-title);
+}
+.universal-settings .us-subnav [role='tablist'] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.6rem;
+  margin-bottom: 0.85rem;
+}
+.universal-settings .us-subnav button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+}
+.universal-settings .us-subnav [aria-selected='true'] {
+  border-bottom-color: var(--brief-amber);
+  color: var(--brief-title);
+  background: #17232e;
+}
+.universal-settings .us-config {
+  min-width: 0;
+}
+.universal-settings .us-subpanel {
+  min-width: 0;
+}
+.universal-settings .us-keymap,
+.universal-settings .us-bindings {
+  width: 100%;
+}
+.universal-settings .us-keybar {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.7rem;
+}
+.universal-settings .us-keybar h3 {
+  color: var(--brief-title);
+  font: 500 1.4rem/1 var(--ui-font);
+  margin: 0 auto 0 0;
+}
+.universal-settings .us-keybar button,
+.universal-settings .us-inspection button {
+  padding: 0.25rem 0.7rem;
+  font-size: 14px;
+}
+.universal-settings .us-keybar button[aria-pressed='true'] {
+  border-color: var(--brief-amber);
+}
+.universal-settings .us-board {
+  user-select: none;
+  overflow-x: auto;
+  padding: 4px;
+  margin: -4px;
+}
+.universal-settings .us-keybed {
+  display: grid;
+  grid-template-columns: minmax(0, 15fr) minmax(0, 3fr) minmax(0, 4fr);
+  column-gap: 0.8rem;
+  min-width: 650px;
+}
+.universal-settings .us-keyblock {
+  display: grid;
+  grid-template-rows: 2.5rem 0.35rem repeat(5, 2.5rem);
+}
+.universal-settings .us-keyblock button {
+  margin: 1.5px;
+  min-width: 0;
+  font: 500 clamp(11px, 1.1vw, 15px) / 1 var(--ui-font);
+  padding: 0;
+  min-height: 2.25rem;
+  color: #b9c6cf;
+  background: #101922;
+}
+.universal-settings .us-keyblock button[data-mapped] {
+  border-bottom: 2px solid #a7bac9;
+  color: white;
+  background: #25323d;
+}
+.universal-settings .us-keyblock button[aria-pressed='true'] {
+  border-color: var(--brief-amber);
+}
+.universal-settings .us-keyblock button[data-held] {
+  color: var(--brief-night);
+  background: var(--brief-amber);
+}
+.universal-settings .us-inspection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.7rem;
+  min-height: 3.3rem;
+  font-size: 14px;
+  padding: 0.55rem 0;
+  margin-bottom: 0.85rem;
+  color: var(--brief-copy);
+}
+.universal-settings .us-inspection .us-actions {
+  max-width: 100%;
+}
+.universal-settings .us-inspection select {
+  min-width: 0;
+  max-width: 100%;
+}
+.universal-settings .us-inspection strong {
+  color: var(--brief-title);
+}
+.universal-settings .us-bindings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 1.5rem;
+}
+.universal-settings .us-disclosure {
+  margin-bottom: 1rem;
+}
+.universal-settings .us-disclosure summary {
+  cursor: pointer;
+  color: var(--brief-title);
+  padding: 0.4rem 0;
+}
+/* Use the reclaimed width for independent setting groups, not just longer sliders. */
+@media (min-width: 1000px) {
+  .universal-settings .us-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem 2rem;
+    align-content: start;
+    align-items: start;
+  }
+  .universal-settings .us-columns > button {
+    justify-self: start;
+  }
+  .universal-settings .us-columns > .us-disclosure {
+    grid-column: 1 / -1;
+  }
+}
+.universal-settings .us-bindings .us-row {
+  min-height: 2.35rem;
+  font-size: 15px;
+}
+.universal-settings .us-bindings button {
+  padding: 0.15rem 0.55rem;
+  font: inherit;
+  overflow-wrap: anywhere;
+}
+.universal-settings .social-console {
+  max-width: 42rem;
+}
+@media (max-width: 800px) {
+  .universal-settings .us-split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+  }
+  .universal-settings .us-rail {
+    position: static;
+  }
+  .universal-settings .us-rail [role='tablist'] {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .universal-settings .us-rail button {
+    font-size: 14px;
+    padding: 0.4rem 0.5rem;
+  }
+  .universal-settings .us-bindings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  .universal-settings .us-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 0 0.45rem;
+    scrollbar-width: thin;
+  }
+  .universal-settings .us-tabs button {
+    flex: none;
+    padding: 0.6rem 0;
+    font-size: 14px;
+    min-height: 44px;
+  }
+  .universal-settings .us-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 47%);
+    gap: 0.45rem;
+  }
+  .universal-settings .us-row select {
+    padding-inline: 0.25rem;
+  }
+  .universal-settings .us-value {
+    min-width: 3em;
+  }
+  .universal-settings .us-panel {
+    padding-top: 1rem;
+  }
+}

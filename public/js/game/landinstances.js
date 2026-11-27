@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { skinBatchable, instanceable, alphaInstanceable } from '../model.js';
+import { detailPoolKey, splitDetailBatch, releaseDetailColor } from './model-detail.js';
 import { placeCached } from './posecache.js';
 
 const HIDDEN = 1;
@@ -71,7 +72,8 @@ export class LandInstances {
   poolFor(mesh, skinned) {
     let byGeo = this.pools.get(mesh.material);
     if (!byGeo) this.pools.set(mesh.material, (byGeo = new Map()));
-    let p = byGeo.get(mesh.geometry);
+    const key = detailPoolKey(mesh.geometry,mesh.detailHigh);
+    let p = byGeo.get(key);
     if (!p) {
       let mat = mesh.material;
       if (skinned) {
@@ -81,6 +83,7 @@ export class LandInstances {
       }
       p = {
         src: mesh.geometry,
+        high: mesh.detailHigh,
         mat,
         skinned,
         renderOrder: mesh.renderOrder,
@@ -96,7 +99,7 @@ export class LandInstances {
         scratch: null
       };
       this.size(p, 32);
-      byGeo.set(mesh.geometry, p);
+      byGeo.set(key, p);
       this.list.push(p);
       if (!p.ready) this.queue.push(p);
     }
@@ -134,9 +137,11 @@ export class LandInstances {
     im.count = 0;
     im.visible = false;
     im.userData.casts = true;
+    if (p.high) splitDetailBatch(im,p.high);
     if (old) {
       im.instanceMatrix.array.set(old.instanceMatrix.array);
       old.parent = null;
+      releaseDetailColor(old);
       for (const k in old.geometry.attributes) if (k !== 'instanceTint') old.geometry.deleteAttribute(k);
       old.geometry.setIndex(null);
       old.geometry.dispose();
@@ -201,12 +206,18 @@ export class LandInstances {
   }
 
   put(m, h, skinned, mats) {
+    if (m.geometry.userData.battleCut) {
+      if (m._taken) { m.layers.set(0); m._taken = false; }
+      return true; // Unique, short-lived geometry must not enter the shared batch cache.
+    }
+    const src = m.geometry, geo = this.detail?.pick(m,this.camera,this.displayHeight) || src;
     let b = m._batch;
-    if (!b || b.mat !== m.material || b.geo !== m.geometry || b.skinned !== skinned) {
+    if (!b || b.mat !== m.material || b.geo !== geo || b.skinned !== skinned) {
       const ok = skinned
         ? skinBatchable.has(m.material)
         : instanceable.has(m.material) || alphaInstanceable.has(m.material);
-      m._batch = b = { mat: m.material, geo: m.geometry, skinned, ok, pool: ok ? this.poolFor(m, skinned) : null };
+      const chosen = geo === src ? m : {material:m.material,geometry:geo,detailHigh:src,renderOrder:m.renderOrder};
+      m._batch = b = { mat: m.material, geo, skinned, ok, pool: ok ? this.poolFor(chosen, skinned) : null };
     }
     const p = b.pool;
     let o = m;
@@ -338,7 +349,7 @@ export class LandInstances {
             o &&
             o.visible &&
             o.parent === scene &&
-            ((e.x - look.x) ** 2 + (e.y - look.y) ** 2 > look.r * look.r ||
+            ((!(e.modelFile && look.see) && !this.scenery?.rows.has(o) && (e.x - look.x) ** 2 + (e.y - look.y) ** 2 > look.r * look.r) ||
               (look.see && !look.see.ball(o.position.x, o.position.y, o.position.z, this.reachOf(o) * 1.5 + DRAW_MARGIN)))
           ) {
             o.visible = false;
@@ -384,6 +395,7 @@ export class LandInstances {
         continue;
       }
       let rest = false;
+      this.scenery?.select(h,this.camera,this.displayHeight);
       for (const m of this.meshesOf(h)) if (this.put(m, h, false, null)) rest = true;
       if (!rest) {
         h.visible = false;

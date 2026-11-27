@@ -1,0 +1,219 @@
+{
+  "job": "fdc163a7603ac69e3ca7e160b5e7207ff7a89d903e9b393512e9eb3ee9f43a1e",
+  "pack": "hoth-ground",
+  "policy": "polyhaven-2k",
+  "families": [
+    {
+      "id": "wind-snow",
+      "asset": "snow_02",
+      "role": "soil",
+      "slots": [
+        0,
+        5,
+        6,
+        7,
+        32,
+        58
+      ],
+      "tileMeters": 2.0,
+      "regular": false,
+      "use": "natural",
+      "why": "Soft drift and rounded shallow depressions continue across the open basin. The smooth donor was chosen by its diffuse rather than a white point or a sphere.",
+      "levelTangent": true,
+      "evidence": "197832ae07433b2a50a722ac5b7a69cacbec509743036bab8d21ecb67480ab51"
+    },
+    {
+      "id": "tracked-firn",
+      "asset": "snow_01",
+      "role": "sand",
+      "slots": [
+        1,
+        8,
+        9,
+        10,
+        17,
+        19,
+        20,
+        21,
+        22,
+        23,
+        27,
+        29,
+        30,
+        59
+      ],
+      "tileMeters": 2.0,
+      "regular": false,
+      "use": "natural",
+      "why": "Rougher compressed granular snow at the service approach and sheltered hollows; do not stamp wheel tracks across a pristine valley.",
+      "levelTangent": true,
+      "evidence": "5536ed1f1e594c1dd11044379354c9d40f3efece1a39f41fcda13156ab874f08"
+    },
+    {
+      "id": "frost-rubble",
+      "asset": "rocks_ground_05",
+      "role": "rock",
+      "slots": [
+        4,
+        13,
+        18,
+        25,
+        28
+      ],
+      "tileMeters": 3.0,
+      "regular": false,
+      "use": "natural",
+      "why": "Small broken stones and pale interstices restricted to rocky shoulders and debris; keep a continuous snow mantle on shallow ground.",
+      "levelTangent": true,
+      "evidence": "2297f8f508901faf6edb4aa7537366d6a89754ea33e04d24305f6a18bce2e96f"
+    },
+    {
+      "id": "glacial-bedrock",
+      "asset": "dark_rock_02",
+      "role": "rock",
+      "slots": [
+        2,
+        3
+      ],
+      "tileMeters": 2.0,
+      "regular": false,
+      "use": "natural",
+      "why": "Fractured, dark, low-chroma bedrock shows at the steepest wind-scoured faces only. Keep mounted outcrop geometry and its hard silhouette.",
+      "evidence": "9fb87681ec5a28e31564ba861a6e9382f0745b1188a0d4a22849bbbe7ab7094a"
+    },
+    {
+      "id": "concrete",
+      "asset": "concrete_floor_02",
+      "role": "concrete",
+      "slots": [
+        62
+      ],
+      "tileMeters": 2,
+      "regular": true,
+      "use": "built",
+      "why": "A manufactured surface is only authorized by construction on this map; packed snow and equipment are not a paved road.",
+      "reuse": "endor-terrain",
+      "evidence": "a71612c4093c8f0e6993d56fd3063b9b5e178dd63fcf4e6ed613d19c004f4c1d"
+    }
+  ],
+  "zones": [
+    {
+      "slot": 62,
+      "natural": 8,
+      "construction": true,
+      "aprons": [],
+      "evidence": "a71612c4093c8f0e6993d56fd3063b9b5e178dd63fcf4e6ed613d19c004f4c1d"
+    }
+  ],
+  "composition": {
+    "kind": "glacial-basin",
+    "deposition": { "seed": 811, "heading": -0.38, "length": 235, "width": 83 },
+    "variation": { "pair": [0,1], "minSpan": 0.19, "process": "Long, interrupted patches of scoured firn and softer wind-loaded snow cross the open mantle. Hollows and service approaches hold more compact snow.", "preserve": "A flat expanse stays snow, never rubble or a patch of blue paint." },
+    "design": "One continuous snow mantle collects in hollows, with packed firn in existing working areas and clearer rock only on high-gradient, wind-exposed shoulders.",
+    "channels": [
+      0,
+      1,
+      4,
+      2,
+      5,
+      8,
+      28
+    ],
+    "rockHints": [
+      2,
+      3,
+      4,
+      13,
+      18,
+      25,
+      28
+    ],
+    "packedHints": [
+      17,
+      19,
+      22,
+      23,
+      27,
+      29,
+      59
+    ],
+    "yards": [
+      [
+        854,
+        491,
+        145,
+        105
+      ],
+      [
+        960,
+        3900,
+        100,
+        78
+      ]
+    ],
+    "regions": [
+      {
+        "name": "Eastern deployment",
+        "view": "command",
+        "grid": [
+          123,
+          95,
+          34,
+          31
+        ],
+        "maxBoundary": 0.19,
+        "maxSmallShare": 0.055,
+        "maxJump": 0.045
+      },
+      {
+        "name": "Rib basin",
+        "view": "rib-basin",
+        "grid": [
+          68,
+          121,
+          33,
+          31
+        ],
+        "maxBoundary": 0.19,
+        "maxSmallShare": 0.055,
+        "maxJump": 0.045
+      }
+    ],
+    "evidence": [
+      "a71612c4093c8f0e6993d56fd3063b9b5e178dd63fcf4e6ed613d19c004f4c1d",
+      "197832ae07433b2a50a722ac5b7a69cacbec509743036bab8d21ecb67480ab51",
+      "5d53ec1503b26497c05ed426b76f4d0f85a97f6ce6f81861127b24999cf1617b",
+      "2297f8f508901faf6edb4aa7537366d6a89754ea33e04d24305f6a18bce2e96f",
+      "9fb87681ec5a28e31564ba861a6e9382f0745b1188a0d4a22849bbbe7ab7094a",
+      "5536ed1f1e594c1dd11044379354c9d40f3efece1a39f41fcda13156ab874f08",
+      "9b821e851d8ffdf68641a58f3569bfcd90008cc540718e5f8817d09d946675bf"
+    ]
+  },
+  "binding": {
+    "key": "hoth",
+    "seed": 811,
+    "retainedPlants": {},
+    "nonLivingProps": [
+      "NV_SANDSPEEDER.ALO",
+      "RB_IONCANNON.ALO",
+      "W_CRATES06.ALO",
+      "W_CRATES19.ALO",
+      "W_CRATES20.ALO",
+      "W_CRATES21.ALO",
+      "W_CRATES22.ALO",
+      "W_CRATES24.ALO",
+      "W_CRATES27.ALO",
+      "W_CRATES29.ALO",
+      "W_FUEL_CELL_1.ALO",
+      "W_FUEL_CELL_3.ALO",
+      "W_KRAYTDRAGONRIBS.ALO",
+      "W_KRAYTDRAGONTAIL.ALO",
+      "W_PROP_ELECBOX.ALO",
+      "W_TEMPROCKCLSTR00.ALO",
+      "W_TEMPROCKCLSTR01.ALO",
+      "W_TEMPROCKCLSTR02.ALO",
+      "W_URBANPIPES.ALO",
+      "W_URBANSTREETLITE.ALO"
+    ]
+  }
+}

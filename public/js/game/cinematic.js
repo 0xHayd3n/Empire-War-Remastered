@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { viewOptions as prefs } from './viewpreferences.js';
 import { db } from '../gamedata.js';
 import { pickCinematicSubject, cinematicShot } from './spacecinematic.js';
 
@@ -19,16 +20,18 @@ export class Cinematic {
 
   toggle() {
     if (this.on) this.stop();
-    else this.start();
+    else this.start({ playerCamera: true });
   }
 
-  start({ letterbox = true } = {}) {
+  start({ letterbox = true, playerCamera = false } = {}) {
     if (this.on) return;
     this.on = true;
     const g = this.game,
       R = g.renderer;
+    this.playerCamera = playerCamera;
+    this.entry = playerCamera ? { x: R.rig.x, y: R.rig.y } : null;
     document.body.classList.add('cinematic');
-    document.documentElement.style.setProperty('--letterbox', (letterbox ? this.bars * 100 : 0) + 'vh');
+    document.documentElement.style.setProperty('--letterbox', (letterbox ? this.bars * 100 * (playerCamera ? prefs.cineBars : 1) : 0) + 'vh');
     this.savedFov = R.camera.fov;
     this.savedNear = R.camera.near;
     this.savedFar = R.camera.far;
@@ -50,9 +53,10 @@ export class Cinematic {
     R.camera.near = this.savedNear;
     R.camera.far = this.savedFar;
     R.camera.updateProjectionMatrix();
-    if (this.subject && !this.subject.dead) {
-      R.rig.x = this.subject.x;
-      R.rig.y = this.subject.y;
+    const end = this.entry && prefs.cineReturn ? this.entry : this.subject;
+    if (end && !end.dead) {
+      R.rig.x = end.x;
+      R.rig.y = end.y;
       R.rig.clamp();
     }
     this.subject = null;
@@ -81,7 +85,7 @@ export class Cinematic {
     }
     const cam = this.game.renderer.camera;
     let shot = this.shot;
-    if (shot) shot.t += dt;
+    if (shot) shot.t += this.playerCamera ? dt / prefs.cineTime : dt;
     if (!shot || shot.t > shot.duration || shot.unit.dead || !this.visible(shot.unit)) shot = this.shot = this.nextShot();
     if (!shot) {
       const station = this.game.human.station,

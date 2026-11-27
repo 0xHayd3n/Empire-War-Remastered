@@ -28,4 +28,9 @@ jobs:
           npm run test:submods
           npm run test:deploy
           npm run test:battlefront
+          npm run test:painter
+          npm run test:immersive-weather
+          npm run test:remaster-maps
+          node tools/test-player-prefs.mjs
+          node --test tools/test-tactical-movement.mjs tools/test-ram-impacts.mjs tools/test-mod-death-coverage.mjs tools/test-detailed-breakup.mjs tools/articulated-ragdoll/articulated.test.mjs
       - run: npm run build:prod

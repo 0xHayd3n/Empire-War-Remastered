@@ -1,0 +1,11 @@
+/* The transition and tactical cards are the visual reference. See docs/ui-art-direction.md. */
+:root {
+  --brief-night: #070e19;
+  --brief-surface: #101821;
+  --brief-title: #fff5df;
+  --brief-copy: #d6e0e4;
+  --brief-rule: rgb(214 224 228 / 28%);
+  --brief-amber: #efbd87;
+  --brief-chart-art: url('art/briefings.svg#chart');
+  --brief-fleet-art: url('art/briefings.svg#fleet');
+}

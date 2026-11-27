@@ -19,7 +19,7 @@ const mod = arg('--mod'),
   noScripts = flag('--noscripts'),
   verbose = flag('--verbose');
 
-const archive = openGame(fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)), mod ? [mod] : []);
+const archive = openGame(process.env.SWR_GAME || fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)), mod ? [mod] : []);
 globalThis.fetch = async input => {
   const path = String(input);
   if (path.startsWith('file:')) {

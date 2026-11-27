@@ -1,0 +1,293 @@
+{
+  "job": "28f3d8fdabd3d79348fa1d91eee7026358f333da7c8f7e21e1d19750377af881",
+  "planet": "Utapau",
+  "views": [
+    {
+      "page": "https://www.starwars.com/databank/utapau",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/utapau-1-retina_43dae4af.jpeg",
+      "sha256": "9f2e9c3191e6dd70c988bddc8bcc3ecb4e8dfe2bd9f7ac68d877e3661c30a68c",
+      "visible": "High aerial over a dry, rolling plain pitted with many round collapse sinkholes. Pale buff and olive ground, grey-green scrub gathered in the hollows and along the rims, thin haze to the horizon; a banded gas giant and two moons fill the sky.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Open dry plain with repeated sinkholes, not a canyon: broad low relief, scrub in swales and on rims, no built edge visible at this range."
+    },
+    {
+      "page": "https://www.starwars.com/databank/utapau",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/databank_utapau_01_169_14a54eb1.jpeg",
+      "sha256": "9c6cda37f76c945199577f00a179cf2ef7331976794518df22f919db41427480",
+      "visible": "Downward view into a huge brown sinkhole. Ring after ring of pale built ledges, causeways and small structures follow the wall; the floor is dark and hazy, the rock face rough and vertically furrowed.",
+      "subject": "settlement-edge",
+      "people": "none",
+      "settingCue": "Built settlement wrapping a sinkhole wall in stacked rings; dark rock face, pale platform edges, no flat ground visible."
+    },
+    {
+      "page": "https://starwars.fandom.com/wiki/File:TenthLevel.png",
+      "image": "https://static.wikia.nocookie.net/starwars/images/5/58/TenthLevel.png/revision/latest",
+      "sha256": "836478a406e78e83513d758ee2e6b810d8472455489533b592048c4e292fbf07",
+      "visible": "A sinkhole wall seen side-on: horizontal rock benches stacked in tiers, carrying round and ribbed pale city structures, a continuous walkway and a few smoking vents. One large ribbed sphere sits right of the walkway. No ground plane and no figures visible.",
+      "subject": "settlement-edge",
+      "people": "none",
+      "settingCue": "Tiered rock benches used as building shelves inside a sinkhole; architecture sits on the strata, it does not cover the natural wall."
+    },
+    {
+      "page": "https://commons.wikimedia.org/wiki/File:Xiaozhaitiankeng.jpg",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/0/0e/Xiaozhaitiankeng.jpg",
+      "sha256": "140c0c945803358ef603792eaa42e579e359df1f5b2415b5c626d2928b8b429c",
+      "visible": "Earth analogue (Xiaozhai Tiankeng, Chongqing, China, not Utapau): Near-vertical pale limestone cliff rims a very large collapse sinkhole. Dense green forest covers the floor far below; scrub and small trees hold ledges and cracks on the rim. Grey sky above.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Collapse sinkhole with sheer carbonate walls and a vegetated floor, used to read cliff shelves and the rim-to-floor transition."
+    },
+    {
+      "page": "https://commons.wikimedia.org/wiki/File:Xiaozhaidifeng.jpg",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/a/aa/Xiaozhaidifeng.jpg",
+      "sha256": "d96a397dd830b0f7924fd5b4f67adc58fea77915a825dc5b9835cb560159d64b",
+      "visible": "Earth analogue (Xiaozhai Difeng, Chongqing, China, not Utapau): A deep narrow gorge between grey limestone walls. Horizontal strata form continuous benches and undercuts; the floor is dark continuous forest. No water sheet visible.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Stratified limestone gorge with bench-like shelves and a forested floor, for wall layering rather than settlement."
+    },
+    {
+      "page": "https://commons.wikimedia.org/wiki/File:Tsingy_de_Bemaraha_Strict_Nature_Reserve.jpg",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/28/Tsingy_de_Bemaraha_Strict_Nature_Reserve.jpg/1920px-Tsingy_de_Bemaraha_Strict_Nature_Reserve.jpg",
+      "sha256": "2e8d7f3d81f7baf9d0a282053fa07902be86849049d5fe652bb4e8dc83a118dc",
+      "visible": "Earth analogue (Tsingy de Bemaraha, Madagascar, not Utapau): A dense field of sharp grey limestone blades and pinnacles separated by deep narrow fissures. Almost no soil; a little scrub in the shaded cracks, green plain beyond.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Eroded karst stone forest: bare, broken, near-vertical stone with almost no ground cover."
+    },
+    {
+      "page": "https://commons.wikimedia.org/wiki/File:Limestone_pavement_in_the_East_Burren_complex_01.jpg",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/28/Limestone_pavement_in_the_East_Burren_complex_01.jpg/1920px-Limestone_pavement_in_the_East_Burren_complex_01.jpg",
+      "sha256": "44ea511f9770957440d9414a4995ff192bf8b2d582f11825af88363d3d485b0f",
+      "visible": "Earth analogue (The Burren, Co. Clare, Ireland, not Utapau): Grey limestone slabs split into irregular blocks by deep grikes. Grass, moss and low herbs grow only in the cracks; scattered small stones on the bare rock. Flat horizon under a clear sky.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Bare flat pavement with fractured slabs and growth confined to joints, for stony ground at squad height."
+    },
+    {
+      "page": "https://commons.wikimedia.org/wiki/File:Bisti-De-Na-Zin_Wilderness_(9440609781).jpg",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/85/Bisti-De-Na-Zin_Wilderness_%289440609781%29.jpg/1920px-Bisti-De-Na-Zin_Wilderness_%289440609781%29.jpg",
+      "sha256": "e0e52a6783d828d5f4683fc88abd8e9b28ebed868005ff693717ffdcd66374c8",
+      "visible": "Earth analogue (Bisti/De-Na-Zin Wilderness, New Mexico, USA, not Utapau): Eroded pale and charcoal soft-rock hoodoos, capped spires and fins rise from a cracked, dark badland floor; sparse dry grass and a flat plain at the horizon.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Soft-rock spires and fins with undercut bases and a dry cracked floor, for the tall eroded forms seen on the mounted map."
+    },
+    {
+      "page": "https://commons.wikimedia.org/wiki/File:Kasha-Katuwe_-_Tent_Rocks_(3290010800).jpg",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/6/61/Kasha-Katuwe_-_Tent_Rocks_%283290010800%29.jpg",
+      "sha256": "bacc0f4f7222c35ee70dddea0425c347a68d75907bbc3735a705541959145501",
+      "visible": "Earth analogue (Kasha-Katuwe Tent Rocks, New Mexico, USA, not Utapau): A cream and grey banded tuff shelf cut by a deep smooth gully. Two isolated trees stand on the pale floor; the exposed wall shows clear horizontal bedding and soft rounded erosion.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Banded soft-rock shelf and gully with isolated trees, for pale layered strata and a natural open pocket."
+    },
+    {
+      "page": "https://commons.wikimedia.org/wiki/File:Matera_maisons_sassi.jpg",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/87/Matera_maisons_sassi.jpg/1920px-Matera_maisons_sassi.jpg",
+      "sha256": "b32f5ab4fc2efc1d3102456c818d7f67ad9544a28f959e199ebad868a449cc25",
+      "visible": "Earth analogue (Matera, Basilicata, Italy, not Utapau): Cave dwellings cut directly into a pale rock slope, with masonry fronts, doors, small windows, steps and carved terraces stacked up the hillside. Weeds and small shrubs grow from ledges; a cobbled lane in front; modern pipework and two small signs.",
+      "subject": "building",
+      "people": "none",
+      "settingCue": "Dwellings recessed into a rock face with built fronts on natural ledges, for architecture that follows the strata."
+    },
+    {
+      "page": "https://commons.wikimedia.org/wiki/File:Garrigue_2007-09-20.JPG",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c8/Garrigue_2007-09-20.JPG/1920px-Garrigue_2007-09-20.JPG",
+      "sha256": "3f5e36c4515f7e218c1a1aa84c836fe7188210ed89d75014959f94f6a24e9c5b",
+      "visible": "Earth analogue (Garrigue, southern France, not Utapau): Low, dense woody scrub with small leathery leaves, dry grass and yellow flowers on a pale rocky limestone slope; taller dark shrubs behind.",
+      "subject": "landscape",
+      "people": "none",
+      "settingCue": "Low woody scrub on stony ground with open gaps, for dry-land growth form and its scale."
+    }
+  ],
+  "ground": {
+    "decision": "Connect dry ochre grit around the rim. Local fines gather on lee ground; coarse lag sits in runnels, and inclined rock descends into the existing hole.",
+    "reject": "Reject lava, shiny wet beds, tiled red mud and an artificial floor across the dark sink.",
+    "evidence": [
+      "9f2e9c3191e6dd70c988bddc8bcc3ecb4e8dfe2bd9f7ac68d877e3661c30a68c",
+      "140c0c945803358ef603792eaa42e579e359df1f5b2415b5c626d2928b8b429c",
+      "d96a397dd830b0f7924fd5b4f67adc58fea77915a825dc5b9835cb560159d64b",
+      "44ea511f9770957440d9414a4995ff192bf8b2d582f11825af88363d3d485b0f",
+      "e0e52a6783d828d5f4683fc88abd8e9b28ebed868005ff693717ffdcd66374c8",
+      "bacc0f4f7222c35ee70dddea0425c347a68d75907bbc3735a705541959145501"
+    ]
+  },
+  "foliage": {
+    "decision": "Retain the low bushes and isolated grass clumps where they already grow on the warm outer shelf. The silhouette of the sink stays open.",
+    "reject": "No imported forest or uniform green pasture, even where wet terrestrial sinkholes support trees.",
+    "evidence": [
+      "9f2e9c3191e6dd70c988bddc8bcc3ecb4e8dfe2bd9f7ac68d877e3661c30a68c",
+      "140c0c945803358ef603792eaa42e579e359df1f5b2415b5c626d2928b8b429c",
+      "44ea511f9770957440d9414a4995ff192bf8b2d582f11825af88363d3d485b0f",
+      "3f5e36c4515f7e218c1a1aa84c836fe7188210ed89d75014959f94f6a24e9c5b"
+    ],
+    "review": {
+      "disposition": "retain",
+      "basis": "The stock battle submits broad low leaf bushes and several arid shrub models plus one separate grass form. These are local pockets of vegetation, not a continuous planted landscape.",
+      "forms": [
+        {
+          "id": "scrub",
+          "form": "Irregular, low woody clumps scattered across the open rim.",
+          "silhouette": "Small rounded tufts and spreading shrubs break the stone below the skyline.",
+          "variation": "Keep the differing leaf-bush and twiggy desert shapes at the real roots and scales.",
+          "disposition": "retain",
+          "reason": "The mounted shrubs already frame the clear approaches without hiding the lips.",
+          "evidence": [
+            "9f2e9c3191e6dd70c988bddc8bcc3ecb4e8dfe2bd9f7ac68d877e3661c30a68c",
+            "3f5e36c4515f7e218c1a1aa84c836fe7188210ed89d75014959f94f6a24e9c5b"
+          ]
+        },
+        {
+          "id": "tufts",
+          "form": "Low thin blades in discrete patches between stone and soil.",
+          "silhouette": "Short tufts stand below the spreading shrubs and buildings.",
+          "variation": "Retain the actual sparse grass placements; bare stone and deck surfaces interrupt them.",
+          "disposition": "retain",
+          "reason": "The grass prop is present on the dry map, not evidence of a swamp or water sheet.",
+          "evidence": [
+            "44ea511f9770957440d9414a4995ff192bf8b2d582f11825af88363d3d485b0f",
+            "3f5e36c4515f7e218c1a1aa84c836fe7188210ed89d75014959f94f6a24e9c5b"
+          ]
+        }
+      ],
+      "zones": {
+        "place": [
+          {
+            "where": "Within the authored shrub and herb roots on the outside shelf, away from the large drop.",
+            "forms": [
+              "scrub",
+              "tufts"
+            ],
+            "evidence": [
+              "9f2e9c3191e6dd70c988bddc8bcc3ecb4e8dfe2bd9f7ac68d877e3661c30a68c",
+              "44ea511f9770957440d9414a4995ff192bf8b2d582f11825af88363d3d485b0f",
+              "3f5e36c4515f7e218c1a1aa84c836fe7188210ed89d75014959f94f6a24e9c5b"
+            ]
+          }
+        ],
+        "exclude": [
+          {
+            "where": "Over the central void, service deck and exposed inward wall.",
+            "reason": "The decks and deep rock face are distinct from the growing substrate.",
+            "evidence": [
+              "9c6cda37f76c945199577f00a179cf2ef7331976794518df22f919db41427480",
+              "836478a406e78e83513d758ee2e6b810d8472455489533b592048c4e292fbf07",
+              "d96a397dd830b0f7924fd5b4f67adc58fea77915a825dc5b9835cb560159d64b"
+            ]
+          }
+        ]
+      },
+      "variation": {
+        "decision": "Preserve distinct small groups, scale changes and unplanted intervals rather than adding plants at grid spacing.",
+        "limits": [
+          "Keep the sky and the platform edges open; no decorative crowns beyond the map."
+        ],
+        "evidence": [
+          "9f2e9c3191e6dd70c988bddc8bcc3ecb4e8dfe2bd9f7ac68d877e3661c30a68c",
+          "140c0c945803358ef603792eaa42e579e359df1f5b2415b5c626d2928b8b429c",
+          "3f5e36c4515f7e218c1a1aa84c836fe7188210ed89d75014959f94f6a24e9c5b"
+        ]
+      }
+    }
+  },
+  "landmark": {
+    "decision": "Preserve the open sink, its ribbed interior model and six walled platform tongues. Match worn concrete only to their painted extent.",
+    "reject": "Do not reconstruct all of Pau City or add new inhabited decks around the circumference.",
+    "evidence": [
+      "9c6cda37f76c945199577f00a179cf2ef7331976794518df22f919db41427480",
+      "836478a406e78e83513d758ee2e6b810d8472455489533b592048c4e292fbf07",
+      "b32f5ab4fc2efc1d3102456c818d7f67ad9544a28f959e199ebad868a449cc25"
+    ]
+  },
+  "landUse": {
+    "natural": {
+      "decision": "Loose dry mineral cover around both deployment areas; separate gravel and inclined fractured rock from open ground.",
+      "evidence": [
+        "9f2e9c3191e6dd70c988bddc8bcc3ecb4e8dfe2bd9f7ac68d877e3661c30a68c",
+        "140c0c945803358ef603792eaa42e579e359df1f5b2415b5c626d2928b8b429c",
+        "d96a397dd830b0f7924fd5b4f67adc58fea77915a825dc5b9835cb560159d64b",
+        "44ea511f9770957440d9414a4995ff192bf8b2d582f11825af88363d3d485b0f",
+        "e0e52a6783d828d5f4683fc88abd8e9b28ebed868005ff693717ffdcd66374c8",
+        "bacc0f4f7222c35ee70dddea0425c347a68d75907bbc3735a705541959145501"
+      ]
+    },
+    "built": {
+      "decision": "Six contiguous concrete-painted footprints carry parapets or the fuel installation. Keep the two stock projections within those footprints; slot 62 also accepts real construction events.",
+      "evidence": [
+        "9c6cda37f76c945199577f00a179cf2ef7331976794518df22f919db41427480",
+        "836478a406e78e83513d758ee2e6b810d8472455489533b592048c4e292fbf07",
+        "b32f5ab4fc2efc1d3102456c818d7f67ad9544a28f959e199ebad868a449cc25"
+      ]
+    },
+    "transition": {
+      "decision": "An abrupt engineered lip at the projecting decks contrasts with the loose, unbuilt perimeter and the exposed internal cliff.",
+      "evidence": [
+        "9f2e9c3191e6dd70c988bddc8bcc3ecb4e8dfe2bd9f7ac68d877e3661c30a68c",
+        "9c6cda37f76c945199577f00a179cf2ef7331976794518df22f919db41427480",
+        "836478a406e78e83513d758ee2e6b810d8472455489533b592048c4e292fbf07",
+        "d96a397dd830b0f7924fd5b4f67adc58fea77915a825dc5b9835cb560159d64b",
+        "b32f5ab4fc2efc1d3102456c818d7f67ad9544a28f959e199ebad868a449cc25"
+      ]
+    }
+  },
+  "outskirts": {
+    "treatment": "foothills",
+    "foliage": [],
+    "skyline": "Low rolling and sparsely broken ground beyond the real outer rim; the sink remains the only large opening on the battlefield.",
+    "join": "Meet all 1240 authored rim vertices with the shelf surface. No interior filler, new settlement or exported shrubs.",
+    "reject": "No second decorative sinkhole or wall of pinnacles; do not turn the map inside out.",
+    "evidence": [
+      "9f2e9c3191e6dd70c988bddc8bcc3ecb4e8dfe2bd9f7ac68d877e3661c30a68c",
+      "140c0c945803358ef603792eaa42e579e359df1f5b2415b5c626d2928b8b429c",
+      "e0e52a6783d828d5f4683fc88abd8e9b28ebed868005ff693717ffdcd66374c8"
+    ]
+  },
+  "climate": {
+    "substrate": "Ochre mineral sand and worn grit on the open ground of opposing launch shelves.",
+    "lighting": "Sunrise_Clear uses UTAPAU_SKYDOME and has no weather scenario. Keep the warm original daylight and its shadows.",
+    "exceptions": "The covered deck, local coarse runnels, shaded sidewalls and authored interior are different surfaces, not discolored bare ground.",
+    "skies": [
+      "Sunrise_Clear"
+    ],
+    "pairs": [
+      {
+        "view": "command",
+        "points": [
+          [
+            821,
+            237
+          ],
+          [
+            925,
+            285
+          ]
+        ],
+        "basis": "Clear shelf behind the southeast formation, between the parapet and rock clusters.",
+        "limit": 0.11
+      },
+      {
+        "view": "north-rim",
+        "points": [
+          [
+            745,
+            236
+          ],
+          [
+            897,
+            277
+          ]
+        ],
+        "basis": "Two open sandy patches above the opposite muster, inset from the dark shrubs and deck edge.",
+        "limit": 0.11
+      }
+    ],
+    "evidence": [
+      "9f2e9c3191e6dd70c988bddc8bcc3ecb4e8dfe2bd9f7ac68d877e3661c30a68c",
+      "44ea511f9770957440d9414a4995ff192bf8b2d582f11825af88363d3d485b0f",
+      "e0e52a6783d828d5f4683fc88abd8e9b28ebed868005ff693717ffdcd66374c8"
+    ]
+  },
+  "uncertain": "The photographs constrain shape and placement, not an exact mineral species or an engineering plan for the fictional city. The stock map models only a small set of platforms."
+}

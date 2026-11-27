@@ -1,4 +1,5 @@
 // Navigation inside the live game. Only the host may resolve a known era ID to its local content origin.
+import { operationProfiles } from './universaloperationprofiles.js';
 import { openChoiceSheet } from './universaldialog.js';
 import { isLoadMode } from './modesaves.js';
 const names = {
@@ -28,6 +29,7 @@ const briefing = {
   1125571106: 'In the aftermath of Endor, the New Republic and Imperial successor states struggle for control.'
 };
 const modeName = mode => names[mode] || (mode === 'continue' ? 'Continue Campaign' : 'Load ' + (names[mode.slice(5)] || 'Tutorial'));
+const operation = mode => ['story', 'skirmish', 'instant'].includes(mode);
 export const eraMode = mode => Object.hasOwn(names, mode) || isLoadMode(mode) || mode === 'continue';
 export function universalModeNavigation({ setup, current, host }) {
   let panel = null;
@@ -84,7 +86,7 @@ export function universalModeNavigation({ setup, current, host }) {
   };
   const pick = async (mode, back = localModes) => {
     if (!eraMode(mode)) return;
-    if (mode === 'conquest') return run(mode, back);
+    if (mode === 'conquest' || operation(mode)) return run(mode, back);
     close();
     let selected,
       closed = false,
@@ -160,16 +162,20 @@ export function universalModeNavigation({ setup, current, host }) {
       if (!closed) sheet.info(e.message);
     }
   };
-  const run = async (mode, back = () => home(mode === 'continue' ? 'title' : 'modes')) => {
+  const run = async (mode, back = () => home(mode === 'continue' ? 'title' : 'modes'), selection = null) => {
     close();
     const again = () => pick(mode, back);
+    const returnTo = mode === 'conquest' || operation(mode) ? back : again;
+    // Game data belongs to a profile origin. A switch re-enters this same board
+    // inside the host's newly mounted frame, never a native staging redirect.
+    const profiles = operation(mode) ? ui => operationProfiles(ui, { current, mode, host, selection }) : undefined;
     try {
-      const ok = await setup(mode, mode === 'conquest' ? back : again);
+      const ok = await setup(mode, returnTo, profiles);
       if (ok !== false) return true;
     } catch (e) {
       console.warn('Universal mode setup', e);
     }
-    const d = open('UNIVERSAL · ' + modeName(mode).toUpperCase(), 'Setup unavailable', mode === 'conquest' || mode === 'continue' ? back : again);
+    const d = open('UNIVERSAL · ' + modeName(mode).toUpperCase(), 'Setup unavailable', mode === 'continue' ? back : returnTo);
     d.querySelector('[role=status]').textContent =
       mode === 'continue' ? 'No readable Galactic Conquest checkpoint remains in this era.' : `This era could not open ${modeName(mode)}.`;
   };
@@ -191,5 +197,5 @@ export function universalModeNavigation({ setup, current, host }) {
     addEventListener('message',failed);d.addEventListener('close',()=>removeEventListener('message',failed),{once:true});
     parent.postMessage({kind:'universal-select',id:profile,mode:'continue'},host);
   }
-  return { pick, run, resume, localModes, home, saves, supports: eraMode };
+  return { current, pick, run, resume, localModes, home, saves, supports: eraMode };
 }

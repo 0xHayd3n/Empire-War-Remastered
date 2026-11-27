@@ -1,0 +1,39 @@
+# Battlefield light and materials
+
+Try a stock **Endor land instant battle** in [mounted Universal](http://127.0.0.1:8590/). Keep the ordinary command camera on a walker or building by a wooded bank. In **Settings → Graphics Quality → World environments**, toggle the six controls individually. **Battle realism → On** enables them together; **Custom** restores the individual choices (initially off). For ships, try **Material reflections** with the camera turning past a fleet in Abregado Rae. These are renderer changes, not replacement art, simulation rules or save fields.
+
+| Control | What changes | What stays as authored |
+|---|---|---|
+| Cloud shadows on units | Units, props and buildings sample the same scrolling world-space cloud tile as the terrain. Its luminance dims direct sunlight, including sun highlights. | Fill, local flash, emissive and interface colors aren't globally multiplied. No second cloud map or invented cloud field. |
+| Sunlit smoke and dust | Eligible world-space alpha puffs acquire a sun-facing side; up to four visible nearby blast lights tint them while the flash lasts. | Instance classification survives atlas batching. RGB only: emitter alpha, heat displacement, additive cores, attached exhaust, weather and the existing soft-depth policy are untouched. Enabling puffs alone doesn't opt hulls into blast lighting. |
+| Material reflections | Recognized opaque materials with authored specular information use three sharp-to-broad bands from the battlefield sky. On land, downward reflections pick up the lit, painted terrain in the reflected direction; sky access from the canopy field attenuates the reflection where available. The transition at the horizon is broader on rough paint. Ships keep the sky-only treatment. | Replaces the earlier environment approximation, not the direct sun. Alpha, team masks, emissive-only effects, unrecognized shaders and explicit fitting/hull finishes aren't reinterpreted as metal. This is a local color reflection, not a mirror image of trees or passing vehicles. It works independently of Local ground bounce and needs no second capture. A failed sky readback keeps the old treatment and retries at most twice per environment/renderer. |
+| Canopy light and shade | Recognized leaf cards brighten when backlit. With Shadows enabled the shadow pass uses their alpha cutout and the same wind displacement as the visible leaves. | One caster per leafy mesh, not a second pass over each tree. Cards that don't normally write depth still don't write depth into the color scene. Shadows off removes the cast shade, not the transmission. |
+| Water depth and reflection | On ordinary water a shallow bed transmits more light, depth absorbs light according to the map tint, and a shallow viewing angle reflects more of the existing planar mirror. | Existing shore coverage, ripple distortion, fog of war and artist reflection strength remain. No second mirror, lava/ice change or land HDR conversion. |
+| Local ground bounce | A small bilinear map of the painted ground colors tints side- and downward-facing surfaces. With battlefield daylight it replaces the map-average soil contribution, rather than adding both. | Uses authored diffuse mips, not camera pixels. Upward-facing surfaces get zero local contribution. Construction paving refreshes affected bins; missing layer colors fall back to the map estimate. |
+
+## What was checked
+
+`npm run test:field-receivers` checks master/individual choices, a two-color diffuse grid, a targeted paving change with untouched neighbors, and the depth-material guards. [`tools/check-field-receivers.cjs`](../tools/check-field-receivers.cjs) uses the mounted launcher, checks keyboard operation at narrow width and persistence on reload, then samples actual 1920×1080 battle frames. It holds the camera, clock and effect instances for an off/on comparison, measures a pan, and separately resumes the running simulation. Private captures and JSON are in the OS temp directory under `universal-field-receivers`; no mounted art is included in source.
+
+- **Stock Endor, WebGPU and WebGL:** Each switch changed the rendered battle independently. With terrain hidden, advancing the cloud phase moved shade across visible objects. A nearby controlled blast brightened about 1,700 pixels in the smoke comparison; a distant or expired one changed at most one pixel by more than two luminance levels. With leaf transmission left on, withholding just the cutout casters lifted visible shade on both backends. This check caught a WebGL deferred-compile bug: the caster now compiles while its material is still attached.
+- **Land armor:** `node tools/check-land-unit-reflections.cjs` isolates a mounted AT-ST and its material batch in Endor Ultra. With diffuse ground bounce off, changing only a nearby patch from warm to cool changes the armor reflection; a distant patch or reflections switched off does not. Use `LOOK_UNIT=infantry` for deployed stormtroopers and `LOOK_BACKEND=webgl` for the fallback. `node tools/test-land-reflection-readback.mjs` checks transient and persistent capture failures without installed assets.
+- **Endor water and ground:** The same bank responded at two command-camera pitches. Holding shore coverage constant and removing the additive mirror sheet for a diagnostic, increasing the bed depth from 1 to 80 darkened about 203,000 pixels on both backends. Changing only the local grid from a warm to a cool patch, with terrain hidden, made 13,500–20,800 object pixels both less red and more blue. Full-frame reset differences were below 0.02% at a two-level luminance threshold, not necessarily bit-exact (the scene has asynchronous assets and FX).
+- **Installed Kuat station mod:** No cloud movement on units and no leaf casters. Water/leaf toggle differences were at the level of repeat-frame noise. Recognized station materials, local bounce and the deliberately spawned smoke fixture responded. This is not a claim about every Workshop shader.
+- **Abregado Rae fleet, 100 roster entries per side:** With only material reflections enabled, two distinct command-camera bearings showed a masked change on both backends (roughly 2,300–3,500 pixels); switching off returned the original samples exactly. At fleet distance this is a moving surface detail, not a global grade.
+
+### Short desktop frame intervals (milliseconds, median / p95)
+
+Each row compares the six individual choices off and on with the rest of the preset held fixed. Land pans use the normal view and frozen battle poses; live intervals use the advancing simulation. Launcher/asset startup is not included. These runs are short and refresh-quantized; a smaller number in the on column is **not** evidence of a speedup.
+
+| Scene / backend | Pan off | Pan on | Live off | Live on |
+|---|---:|---:|---:|---:|
+| Endor / WebGPU | 5.6 / 5.6 | 5.6 / 5.7 | 5.6 / 5.6 | 5.6 / 5.7 |
+| Endor / WebGL | 5.6 / 11.0 | 5.6 / 11.1 | 5.6 / 10.9 | 5.6 / 11.1 |
+| Kuat / WebGPU | 11.2 / 16.7 | 16.6 / 22.3 | 5.6 / 11.3 | 5.6 / 11.1 |
+| Kuat / WebGL | 16.7 / 27.7 | 16.6 / 22.0 | 11.1 / 11.3 | 11.1 / 16.7 |
+| Fleet / WebGPU | 5.6 / 5.6 | 5.6 / 5.6 | 5.6 / 16.7 | 5.6 / 11.2 |
+| Fleet / WebGL | 27.9 / 33.4 | 27.7 / 33.3 | 33.3 / 44.5 | 27.8 / 44.4 |
+
+Kuat's WebGPU pan p95 rose by about 5.6 ms. The WebGL fleet had noticeably slower frames even with the settings off. These aren't sustained-combat, mobile-device, physical-HDR or OffscreenCanvas-worker benchmarks. The worker shares pass uniform/texture IDs; a backend without a readable warmed sky does not get a fabricated reflection atlas.
+
+Reproduce from the Universal checkout with the stock data/mod mounted and Playwright Core available. `node tools/check-field-receivers.cjs` runs Endor; set `LOOK_BACKEND=webgl` for the fallback, `LOOK_DOMAIN=space` for the fleet, or `LOOK_WORLD=Kuat LOOK_PROFILE=1125571106` for the installed mod.

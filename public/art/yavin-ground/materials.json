@@ -1,0 +1,47 @@
+[
+  {
+    "pack": "yavin-ground",
+    "id": "open-cover",
+    "asset": "forrest_ground_01",
+    "role": "grass",
+    "tileMeters": 2,
+    "colorHash": "5c067deb8867147cc12d01ab8b17dc3d48be9b795df6ae466dc5f0e85c923d4f",
+    "surfaceHash": "4c618e42583a9385328a4af99ff86a352d9f8efda18f8ffe3ffa789bd67c8153"
+  },
+  {
+    "pack": "yavin-ground",
+    "id": "root-mat",
+    "asset": "brown_mud_leaves_01",
+    "role": "moss",
+    "tileMeters": 1.3,
+    "colorHash": "f5ea772ce76205d44e193fdbe2c224ff713495576c57bc33913a431deea9bb5a",
+    "surfaceHash": "6d614c1f9aac1f0f2ed217b38a3ba5bdf5a9209f22b442108b8545c8bed7f693"
+  },
+  {
+    "pack": "yavin-ground",
+    "id": "track-earth",
+    "asset": "forest_ground_05",
+    "role": "soil",
+    "tileMeters": 2,
+    "colorHash": "f251407529b22b76f6fd5f869b523c4564623e0da6cbb9f6e4a9f7df20cff0a7",
+    "surfaceHash": "d8da409e2b48a5aa0c28a7421af9a85434f13ab3f7c0cd2c1b18c825ac99b2c2"
+  },
+  {
+    "pack": "yavin-ground",
+    "id": "temple-slab",
+    "asset": "large_grey_tiles",
+    "role": "concrete",
+    "tileMeters": 3,
+    "colorHash": "8ee332e6f1616337ba467cbabcb8cb04d0858a31f86a36be5d78420db4344e65",
+    "surfaceHash": "493b0b76a3975b1dae958bd555f3bdf6327bb22db15c316a52ef0550f78ae433"
+  },
+  {
+    "pack": "yavin-ground",
+    "id": "apron-grit",
+    "asset": "dense_sand",
+    "role": "sand",
+    "tileMeters": 1.8,
+    "colorHash": "d637685e2fa6969b54e0af75a09fbc62c6e25a59c410128a92a42ae9010ead98",
+    "surfaceHash": "99d61e3ffda32dfbef55b54a67f14119c018f597f9ab06bdb07127d621294194"
+  }
+]

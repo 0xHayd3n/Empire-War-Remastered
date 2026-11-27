@@ -70,7 +70,8 @@ export class SpaceRecorder {
         u.maxShield || 0,
         order(u.order),
         (u.queue || []).map(order).filter(Boolean),
-        hs && th.alive ? [th.unit.id, hs.indexOf(th)] : null
+        hs && th.alive ? [th.unit.id, hs.indexOf(th)] : null,
+        !!u.startingPlaced
       ]);
     }
     for (const q of w.squads) {

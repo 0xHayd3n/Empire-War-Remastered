@@ -1,6 +1,6 @@
 import { db } from '../gamedata.js';
 import { ScriptHost } from './scripts.js';
-import { costOf, timeOf, isUpgrade, buildsFor } from './land.js';
+import { costOf, timeOf } from './land.js';
 import { Mind, target } from './landbrain.js';
 import { FLAG } from './landgoals.js';
 import { bombingRun, orbitalBombard, garrison, ungarrison, canGarrison } from './landbase.js';
@@ -354,14 +354,12 @@ class LandView {
   }
   buildersOf(p) {
     return this.units.filter(
-      q => q.structure && this.w.ally(q.side, p.id) && buildsFor(q.members[0].type, this.game.factions[p.id]).length
+      q => q.structure && this.w.productionFor(q.members[0], p.id).length
     );
   }
   buildOptions(b, p) {
     if (b.isSite) return this.w.siteOptions(b.site, p.id);
-    return b.structure && b.members[0]
-      ? buildsFor(b.members[0].type, this.game.factions[p.id]).filter(t => t.has('Company_Units') || isUpgrade(t))
-      : [];
+    return b.structure ? this.w.productionFor(b.members[0], p.id) : [];
   }
   cantBuild(b, t, p) {
     if (b.isSite)
@@ -474,7 +472,7 @@ class Commander {
 }
 
 export class LandScripts {
-  static async create(game) {
+  static async create(game, prepared) {
     const s = new LandScripts(game);
     s.host = await ScriptHost.create({
       land: true,
@@ -497,7 +495,7 @@ export class LandScripts {
       spawnNow: (t, p, at) => s.spawnNow(t, p, at),
       grantUpgrade: (t, p) => game.world.grant(p.id, t),
       targetThing: t => (t.unit && t.unit.squad ? t.unit.squad : t.site ? s.view.site(t.site) : t.point ? s.view.point(t.point) : null)
-    }).catch(e => {
+    }, prepared).catch(e => {
       console.warn('land scripts', e);
       return null;
     });
@@ -506,8 +504,8 @@ export class LandScripts {
     game.world.scriptHost = s.host;
     const w = game.world,
       before = w.onDeath;
-    w.onDeath = u => {
-      if (before) before(u);
+    w.onDeath = (u,how,crusher) => {
+      if (before) before(u,how,crusher);
       const q = u.squad;
       if (q && q.side >= 0 && w.companyLost(u))
         s.view.onEvent('killed', { unit: q, killer: u.hitBy !== undefined ? w.sidePlayers[u.hitBy] : null });

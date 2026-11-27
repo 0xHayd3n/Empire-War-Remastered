@@ -36,32 +36,13 @@ const assert = require('node:assert/strict'),
     await f.locator('[data-id="TITLE_PLAY"]').click();
     await f.locator('[data-id="IDC_MAIN_MENU_SINGLE_PLAYER_GAMES"]').click();
     await gc.click();
-    await map.waitFor();
-    const { decodePNG } = await import('../public/js/png.js');
-    const box = await map.boundingBox(),
-      png = await decodePNG(
-        Uint8Array.from(
-          await page.screenshot({
-            clip: {
-              x: box.x + box.width * 0.2,
-              y: box.y + box.height * 0.2,
-              width: Math.floor(box.width * 0.6),
-              height: Math.floor(box.height * 0.6)
-            }
-          })
-        ).buffer
-      );
-    let lit = 0,
-      total = 0;
-    for (let i = 0; i < png.data.length; i += 4 * 83) {
-      total++;
-      if (png.data[i] + png.data[i + 1] + png.data[i + 2] > 35) lit++;
-    }
-    assert(lit / total > 0.65, `Pending atlas opens to black (${lit}/${total} lit samples)`);
-    assert.equal(await board.locator('[data-planet]').count(), 0);
-    assert(await board.getByRole('button', { name: 'Start campaign' }).isDisabled());
+    // A cold click joins the title's in-flight work. Leave Play visible rather
+    // than opening an empty board or a loading starfield.
+    assert(await gc.isVisible());
+    assert.equal(await board.count(), 0);
     release();
     await native.waitFor();
+    const box = await map.boundingBox();
     const full = await native.locator('.uc-context').getAttribute('data-sheet-count');
     await native.locator(`.uc-context[data-loaded-sheets="${full}"]`).waitFor();
     const fades = await require('./check-universal-name-fades.cjs')(map);
@@ -257,7 +238,7 @@ const assert = require('node:assert/strict'),
     assert.equal(await board.locator('[data-planet]').count(), 0);
     await page.keyboard.press('Escape');
     await board.waitFor({ state: 'detached' });
-    console.log(JSON.stringify({ pendingLit: lit / total, zoomIn, zoomOut, closeSizes, dissolve, detailSize, edges, errors }));
+    console.log(JSON.stringify({ pendingKeptPlay: true, zoomIn, zoomOut, closeSizes, dissolve, detailSize, edges, errors }));
     assert.deepEqual(errors, []);
   } finally {
     release?.();

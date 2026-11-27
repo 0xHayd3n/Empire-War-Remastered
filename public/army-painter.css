@@ -1,0 +1,356 @@
+/* One live subject against the dark field of the command-deck loading card. */
+#armyPainter {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  pointer-events: auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  color-scheme: dark;
+  color: var(--brief-copy);
+  font: 400 16px/1.35 var(--ui-font);
+  text-align: left;
+  background: radial-gradient(ellipse at 76% 42%, #34424d 0, #1a2732 27%, transparent 57%), var(--brief-night);
+}
+#armyPainter::backdrop {
+  background: var(--brief-night);
+}
+#armyPainter .ap-confirm {
+  background: var(--brief-surface);
+  color: var(--brief-title);
+  border: 1px solid var(--brief-rule);
+  padding: 22px;
+  max-width: min(90vw, 420px);
+}
+.ap-confirm::backdrop {
+  background: rgb(4 10 16 / 76%);
+}
+#armyPainter .ap-confirm button {
+  margin-right: 8px;
+  padding: 6px 16px;
+}
+#armyPainter *,
+#armyPainter *::before {
+  box-sizing: border-box;
+}
+#armyPainter [hidden] {
+  display: none;
+}
+.ap-layout {
+  display: grid;
+  grid-template-columns: minmax(252px, 350px) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'heading stage' 'controls stage' 'footer footer';
+  width: min(100%, 1740px);
+  height: 100%;
+  margin: auto;
+  padding: clamp(24px, 5vh, 54px) clamp(25px, 5vw, 94px) 0;
+  column-gap: clamp(30px, 6vw, 104px);
+}
+.ap-heading {
+  grid-area: heading;
+  padding-bottom: clamp(12px, 2.5vh, 28px);
+}
+#armyPainter small {
+  color: var(--brief-copy);
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+}
+#armyPainter h1,
+#armyPainter h2 {
+  color: var(--brief-title);
+  margin: 0;
+  font-weight: 500;
+  line-height: 1.08;
+  text-transform: none;
+  letter-spacing: -0.018em;
+}
+#armyPainter h1 {
+  font-size: clamp(44px, 4.2vw, 70px);
+}
+.ap-controls {
+  grid-area: controls;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding: 3px 7px 16px 3px;
+  margin-left: -3px;
+}
+#armyPainter .ap-field,
+.ap-name,
+#armyPainter legend {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--brief-copy);
+}
+.ap-field:not(:first-child),
+.ap-name {
+  margin-top: clamp(10px, 1.55vh, 18px);
+}
+#armyPainter .ap-row {
+  display: flex;
+  gap: 6px;
+}
+#armyPainter button,
+#armyPainter input:not([type='color']),
+#armyPainter select,
+.painter-entry {
+  font: inherit;
+  border-radius: 0;
+  border: 1px solid var(--brief-rule);
+  color: var(--brief-title);
+  background: var(--brief-surface);
+  box-shadow: none;
+}
+#armyPainter select,
+#armyPainter input[type='text'] {
+  display: block;
+  margin-top: 4px;
+  padding: 6px 10px;
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+#armyPainter button,
+.painter-entry {
+  cursor: pointer;
+}
+#armyPainter .ap-row button {
+  margin-top: 4px;
+  flex: none;
+  width: 38px;
+  font-size: 24px;
+  line-height: 1;
+}
+#armyPainter svg {
+  width: 18px;
+  height: 18px;
+  vertical-align: middle;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  fill: none;
+}
+#armyPainter :disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+#armyPainter :focus-visible,
+.painter-entry:focus-visible,
+#armyPainter .ap-material:focus-within {
+  outline: 2px solid var(--brief-title);
+  outline-offset: 2px;
+}
+#armyPainter button:not(:disabled):hover,
+.painter-entry:hover {
+  border-color: var(--brief-title);
+}
+#armyPainter fieldset {
+  border: none;
+  border-top: 1px solid var(--brief-rule);
+  padding: 8px 0 0;
+  margin: clamp(13px, 2.4vh, 23px) 0 0;
+  min-width: 0;
+}
+#armyPainter legend {
+  padding: 0 10px 0 0;
+}
+.ap-materials,
+.ap-patterns {
+  display: grid;
+  gap: 6px;
+}
+.ap-materials {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.ap-material {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  padding: 5px;
+  background: var(--brief-surface);
+  border: 1px solid var(--brief-rule);
+}
+.ap-chip {
+  width: 36%;
+  height: 22px;
+  background: var(--chip);
+  border: 1px solid rgb(255 255 255 / 24%);
+}
+.ap-material input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.ap-patterns {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+#armyPainter .ap-patterns button {
+  padding: 6px;
+  position: relative;
+  font-size: 13px;
+}
+#armyPainter .ap-patterns button::before {
+  content: '';
+  display: block;
+  height: 17px;
+  margin: 0 0 5px;
+}
+#armyPainter [data-pattern='standard']::before {
+  background: linear-gradient(0deg, var(--ap-p1) 25%, var(--ap-p0) 25%);
+}
+#armyPainter [data-pattern='banded']::before {
+  background: repeating-linear-gradient(110deg, var(--ap-p0) 0 12px, var(--ap-p1) 12px 17px);
+}
+#armyPainter [data-pattern='split']::before {
+  background: linear-gradient(90deg, var(--ap-p0) 50%, var(--ap-p1) 50%);
+}
+#armyPainter [data-pattern='chevron']::before {
+  background:
+    linear-gradient(34deg, transparent 42%, var(--ap-p1) 43% 60%, transparent 61%) left / 50% 100% no-repeat,
+    linear-gradient(-34deg, transparent 42%, var(--ap-p1) 43% 60%, transparent 61%) right / 50% 100% no-repeat,
+    var(--ap-p0);
+}
+#armyPainter [aria-pressed='true'] {
+  border-bottom: 3px solid var(--brief-amber);
+  padding-bottom: 4px;
+  font-weight: 600;
+}
+.ap-stage {
+  grid-area: stage;
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.ap-model {
+  min-height: 0;
+  width: 100%;
+  background: var(--unit-icon, none) center / auto min(34%, 160px) no-repeat;
+}
+.ap-model:not(.rendered) canvas {
+  visibility: hidden;
+}
+#armyPainter .ap-turn {
+  float: right;
+  padding: 6px 12px;
+  margin-left: 8px;
+}
+.ap-model.rendered {
+  background: none;
+}
+.ap-model canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.ap-stage figcaption {
+  padding: 15px 0 clamp(18px, 4vh, 46px);
+  border-top: 1px solid var(--brief-rule);
+}
+#armyPainter h2 {
+  margin-top: 4px;
+  font-size: clamp(24px, 2.8vw, 44px);
+  overflow-wrap: anywhere;
+}
+.ap-art-state {
+  font-size: 14px;
+}
+#armyPainter footer {
+  grid-area: footer;
+  min-height: 70px;
+  padding: 12px 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-top: 1px solid var(--brief-rule);
+}
+#armyPainter footer button {
+  padding: 8px 24px;
+  white-space: nowrap;
+}
+#armyPainter #ap-save {
+  border-color: var(--brief-amber);
+  color: var(--brief-amber);
+  font-weight: 500;
+}
+.ap-status {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+}
+.painter-entry {
+  pointer-events: auto;
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  padding: 7px 15px;
+  font: 500 15px var(--ui-font);
+}
+@media (max-width: 700px) {
+  .ap-layout {
+    height: auto;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 20px 18px 0;
+  }
+  .ap-heading {
+    padding-bottom: 5px;
+  }
+  .ap-stage {
+    order: 1;
+  }
+  .ap-model {
+    height: clamp(180px, 28dvh, 300px);
+  }
+  .ap-stage figcaption {
+    padding: 8px 0;
+  }
+  .ap-controls {
+    order: 2;
+    overflow: visible;
+  }
+  #armyPainter footer {
+    order: 3;
+    position: sticky;
+    bottom: 0;
+    gap: 6px;
+    flex-wrap: wrap;
+    background: var(--brief-night);
+  }
+  .ap-status {
+    flex: 1 0 100%;
+    order: -1;
+    font-size: 13px;
+  }
+  #ap-save {
+    margin-left: auto;
+  }
+}
+@media (max-height: 540px) and (min-width: 701px) {
+  .ap-layout {
+    padding-top: 10px;
+  }
+  .ap-heading {
+    padding-bottom: 4px;
+  }
+  #armyPainter h1 {
+    font-size: 36px;
+  }
+}

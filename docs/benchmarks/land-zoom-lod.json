@@ -1,0 +1,1948 @@
+{
+  "gpu": "RTX 3070",
+  "backend": "WebGPU",
+  "viewport": [
+    1280,
+    720
+  ],
+  "stats": [
+    {
+      "map": "endor",
+      "view": "near",
+      "before": {
+        "fps": 133.3381483220227,
+        "tris": 506760
+      },
+      "after": {
+        "fps": 143.04872597228427,
+        "tris": 528739
+      },
+      "pairs": [
+        12.028835253974668,
+        2.0752995293779275
+      ]
+    },
+    {
+      "map": "endor",
+      "view": "overhead",
+      "before": {
+        "fps": 114.89025587017402,
+        "tris": 917165.5
+      },
+      "after": {
+        "fps": 137.14089798717163,
+        "tris": 585816
+      },
+      "pairs": [
+        34.87320074131537,
+        4.907352194173842
+      ]
+    },
+    {
+      "map": "endor",
+      "view": "horizon",
+      "before": {
+        "fps": 125.58031842459499,
+        "tris": 957483
+      },
+      "after": {
+        "fps": 129.1466500569725,
+        "tris": 643496.5
+      },
+      "pairs": [
+        8.426851250262235,
+        -3.5145377590689364
+      ]
+    },
+    {
+      "map": "yavin",
+      "view": "near",
+      "before": {
+        "fps": 179.24861222363504,
+        "tris": 244700
+      },
+      "after": {
+        "fps": 177.77119365949406,
+        "tris": 244700
+      },
+      "pairs": [
+        -0.0029875159178627264,
+        -1.6320218631423078
+      ]
+    },
+    {
+      "map": "yavin",
+      "view": "overhead",
+      "before": {
+        "fps": 179.6165187325062,
+        "tris": 646447
+      },
+      "after": {
+        "fps": 178.1433014407339,
+        "tris": 516514.5
+      },
+      "pairs": [
+        -2.0306955352617395,
+        0.41549480631484226
+      ]
+    },
+    {
+      "map": "yavin",
+      "view": "horizon",
+      "before": {
+        "fps": 170.0758609204648,
+        "tris": 653076.5
+      },
+      "after": {
+        "fps": 175.2537985348052,
+        "tris": 562440.5
+      },
+      "pairs": [
+        7.260956030716015,
+        -1.223638146946826
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "map": "endor",
+      "build": "reference",
+      "pair": 0,
+      "views": [
+        {
+          "name": "near",
+          "elapsed": 1966.6550000000007,
+          "frames": 240,
+          "fps": 122.03462223928443,
+          "p95": 16.670000000000073,
+          "tris": 506760,
+          "calls": 42,
+          "levels": [
+            {
+              "name": "",
+              "n": 10,
+              "tris": 264,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 54,
+              "tris": 84,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 10,
+              "tris": 352,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 54,
+              "tris": 140,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 15,
+              "tris": 126,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 43,
+              "tris": 54,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 68,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 121,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 131,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 259,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 2,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 6,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 4,
+              "tris": 240,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 15,
+              "tris": 144,
+              "blend": false
+            }
+          ]
+        },
+        {
+          "name": "overhead",
+          "elapsed": 2277.8600000000006,
+          "frames": 240,
+          "fps": 105.3620503454997,
+          "p95": 16.674999999999272,
+          "tris": 917351,
+          "calls": 44,
+          "levels": [
+            {
+              "name": "",
+              "n": 49,
+              "tris": 264,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1679,
+              "tris": 84,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 49,
+              "tris": 352,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1679,
+              "tris": 140,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 57,
+              "tris": 126,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1180,
+              "tris": 54,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 250,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1900,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 491,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1700,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 6,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 100,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 26,
+              "tris": 240,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 320,
+              "tris": 144,
+              "blend": false
+            }
+          ]
+        },
+        {
+          "name": "horizon",
+          "elapsed": 2144.449999999999,
+          "frames": 240,
+          "fps": 111.91680850567751,
+          "p95": 16.659999999999854,
+          "tris": 957885,
+          "calls": 44,
+          "levels": [
+            {
+              "name": "",
+              "n": 41,
+              "tris": 264,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1823,
+              "tris": 84,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 41,
+              "tris": 352,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1823,
+              "tris": 140,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 53,
+              "tris": 126,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1180,
+              "tris": 54,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 243,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1900,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 487,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1700,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 6,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 100,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 26,
+              "tris": 240,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 320,
+              "tris": 144,
+              "blend": false
+            }
+          ]
+        }
+      ],
+      "gpu": true,
+      "canvas": [
+        2560,
+        1440
+      ],
+      "pivot": [
+        1460,
+        3120
+      ],
+      "units": 90
+    },
+    {
+      "map": "endor",
+      "build": "current",
+      "pair": 0,
+      "views": [
+        {
+          "name": "near",
+          "elapsed": 1755.4900000000007,
+          "frames": 240,
+          "fps": 136.7139659012583,
+          "p95": 11.180000000000291,
+          "tris": 528739,
+          "calls": 40,
+          "levels": [
+            {
+              "name": "trunk · near",
+              "n": 63,
+              "tris": 264,
+              "blend": false
+            },
+            {
+              "name": "trunk · medium",
+              "n": 1,
+              "tris": 84,
+              "blend": false
+            },
+            {
+              "name": "trunk · distant",
+              "n": 0,
+              "tris": 20,
+              "blend": false
+            },
+            {
+              "name": "crown · near",
+              "n": 63,
+              "tris": 352,
+              "blend": false
+            },
+            {
+              "name": "crown · medium",
+              "n": 1,
+              "tris": 140,
+              "blend": false
+            },
+            {
+              "name": "crown · distant",
+              "n": 0,
+              "tris": 48,
+              "blend": false
+            },
+            {
+              "name": "hemlock · near",
+              "n": 26,
+              "tris": 126,
+              "blend": false
+            },
+            {
+              "name": "hemlock · medium",
+              "n": 32,
+              "tris": 54,
+              "blend": false
+            },
+            {
+              "name": "hemlock · distant",
+              "n": 0,
+              "tris": 18,
+              "blend": false
+            },
+            {
+              "name": "brush · near",
+              "n": 65,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "brush · medium",
+              "n": 124,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "brush · distant",
+              "n": 0,
+              "tris": 12,
+              "blend": false
+            },
+            {
+              "name": "bracken · near",
+              "n": 130,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "bracken · medium",
+              "n": 260,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "bracken · distant",
+              "n": 0,
+              "tris": 12,
+              "blend": false
+            },
+            {
+              "name": "log · near",
+              "n": 8,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "log · medium",
+              "n": 0,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "log · distant",
+              "n": 0,
+              "tris": 24,
+              "blend": false
+            },
+            {
+              "name": "stone · near",
+              "n": 5,
+              "tris": 240,
+              "blend": false
+            },
+            {
+              "name": "stone · medium",
+              "n": 14,
+              "tris": 144,
+              "blend": false
+            },
+            {
+              "name": "stone · distant",
+              "n": 0,
+              "tris": 48,
+              "blend": false
+            }
+          ]
+        },
+        {
+          "name": "overhead",
+          "elapsed": 1688.8899999999994,
+          "frames": 240,
+          "fps": 142.10516966765158,
+          "p95": 11.135000000000218,
+          "tris": 585917,
+          "calls": 37,
+          "levels": [
+            {
+              "name": "trunk · near",
+              "n": 0,
+              "tris": 264,
+              "blend": false
+            },
+            {
+              "name": "trunk · medium",
+              "n": 0,
+              "tris": 84,
+              "blend": false
+            },
+            {
+              "name": "trunk · distant",
+              "n": 1728,
+              "tris": 20,
+              "blend": false
+            },
+            {
+              "name": "crown · near",
+              "n": 0,
+              "tris": 352,
+              "blend": false
+            },
+            {
+              "name": "crown · medium",
+              "n": 0,
+              "tris": 140,
+              "blend": false
+            },
+            {
+              "name": "crown · distant",
+              "n": 1728,
+              "tris": 48,
+              "blend": false
+            },
+            {
+              "name": "hemlock · near",
+              "n": 0,
+              "tris": 126,
+              "blend": false
+            },
+            {
+              "name": "hemlock · medium",
+              "n": 0,
+              "tris": 54,
+              "blend": false
+            },
+            {
+              "name": "hemlock · distant",
+              "n": 2457,
+              "tris": 18,
+              "blend": false
+            },
+            {
+              "name": "brush · near",
+              "n": 0,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "brush · medium",
+              "n": 0,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "brush · distant",
+              "n": 2539,
+              "tris": 12,
+              "blend": false
+            },
+            {
+              "name": "bracken · near",
+              "n": 0,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "bracken · medium",
+              "n": 0,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "bracken · distant",
+              "n": 4744,
+              "tris": 12,
+              "blend": false
+            },
+            {
+              "name": "log · near",
+              "n": 0,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "log · medium",
+              "n": 0,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "log · distant",
+              "n": 106,
+              "tris": 24,
+              "blend": false
+            },
+            {
+              "name": "stone · near",
+              "n": 0,
+              "tris": 240,
+              "blend": false
+            },
+            {
+              "name": "stone · medium",
+              "n": 0,
+              "tris": 144,
+              "blend": false
+            },
+            {
+              "name": "stone · distant",
+              "n": 727,
+              "tris": 48,
+              "blend": false
+            }
+          ]
+        },
+        {
+          "name": "horizon",
+          "elapsed": 1977.7849999999999,
+          "frames": 240,
+          "fps": 121.34787148249178,
+          "p95": 11.159999999999854,
+          "tris": 643632,
+          "calls": 44,
+          "levels": [
+            {
+              "name": "trunk · near",
+              "n": 3,
+              "tris": 264,
+              "blend": false
+            },
+            {
+              "name": "trunk · medium",
+              "n": 184,
+              "tris": 84,
+              "blend": false
+            },
+            {
+              "name": "trunk · distant",
+              "n": 1677,
+              "tris": 20,
+              "blend": false
+            },
+            {
+              "name": "crown · near",
+              "n": 3,
+              "tris": 352,
+              "blend": false
+            },
+            {
+              "name": "crown · medium",
+              "n": 184,
+              "tris": 140,
+              "blend": false
+            },
+            {
+              "name": "crown · distant",
+              "n": 1677,
+              "tris": 48,
+              "blend": false
+            },
+            {
+              "name": "hemlock · near",
+              "n": 0,
+              "tris": 126,
+              "blend": false
+            },
+            {
+              "name": "hemlock · medium",
+              "n": 26,
+              "tris": 54,
+              "blend": false
+            },
+            {
+              "name": "hemlock · distant",
+              "n": 2682,
+              "tris": 18,
+              "blend": false
+            },
+            {
+              "name": "brush · near",
+              "n": 0,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "brush · medium",
+              "n": 0,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "brush · distant",
+              "n": 2532,
+              "tris": 12,
+              "blend": false
+            },
+            {
+              "name": "bracken · near",
+              "n": 0,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "bracken · medium",
+              "n": 0,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "bracken · distant",
+              "n": 4740,
+              "tris": 12,
+              "blend": false
+            },
+            {
+              "name": "log · near",
+              "n": 0,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "log · medium",
+              "n": 7,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "log · distant",
+              "n": 110,
+              "tris": 24,
+              "blend": false
+            },
+            {
+              "name": "stone · near",
+              "n": 0,
+              "tris": 240,
+              "blend": false
+            },
+            {
+              "name": "stone · medium",
+              "n": 2,
+              "tris": 144,
+              "blend": false
+            },
+            {
+              "name": "stone · distant",
+              "n": 807,
+              "tris": 48,
+              "blend": false
+            }
+          ]
+        }
+      ],
+      "gpu": true,
+      "canvas": [
+        2560,
+        1440
+      ],
+      "pivot": [
+        1460,
+        3120
+      ],
+      "units": 90
+    },
+    {
+      "map": "yavin",
+      "build": "reference",
+      "pair": 0,
+      "views": [
+        {
+          "name": "near",
+          "elapsed": 1338.8649999999998,
+          "frames": 240,
+          "fps": 179.25631038230145,
+          "p95": 5.599999999998545,
+          "tris": 244700,
+          "calls": 17,
+          "levels": [
+            {
+              "name": "canopy · proxy",
+              "n": 160,
+              "tris": 270,
+              "blend": false
+            },
+            {
+              "name": "canopy · detail",
+              "n": 3,
+              "tris": 742,
+              "blend": false
+            }
+          ]
+        },
+        {
+          "name": "overhead",
+          "elapsed": 1333.4699999999993,
+          "frames": 240,
+          "fps": 179.98155189093126,
+          "p95": 5.600000000000364,
+          "tris": 646464,
+          "calls": 52,
+          "levels": [
+            {
+              "name": "canopy · proxy",
+              "n": 770,
+              "tris": 270,
+              "blend": false
+            },
+            {
+              "name": "canopy · detail",
+              "n": 0,
+              "tris": 742,
+              "blend": false
+            }
+          ]
+        },
+        {
+          "name": "horizon",
+          "elapsed": 1477.8199999999997,
+          "frames": 240,
+          "fps": 162.40137499830834,
+          "p95": 11.104999999999563,
+          "tris": 653086,
+          "calls": 119,
+          "levels": [
+            {
+              "name": "canopy · proxy",
+              "n": 823,
+              "tris": 270,
+              "blend": false
+            },
+            {
+              "name": "canopy · detail",
+              "n": 0,
+              "tris": 742,
+              "blend": false
+            }
+          ]
+        }
+      ],
+      "gpu": true,
+      "canvas": [
+        1280,
+        720
+      ],
+      "pivot": [
+        1233,
+        3406
+      ],
+      "units": 66
+    },
+    {
+      "map": "yavin",
+      "build": "current",
+      "pair": 0,
+      "views": [
+        {
+          "name": "near",
+          "elapsed": 1338.9049999999997,
+          "frames": 240,
+          "fps": 179.250955071495,
+          "p95": 5.600000000000364,
+          "tris": 244700,
+          "calls": 17,
+          "levels": [
+            {
+              "name": "canopy · distant",
+              "n": 0,
+              "tris": 107,
+              "blend": false
+            },
+            {
+              "name": "canopy · detail",
+              "n": 3,
+              "tris": 742,
+              "blend": false
+            },
+            {
+              "name": "canopy · proxy",
+              "n": 160,
+              "tris": 270,
+              "blend": false
+            }
+          ]
+        },
+        {
+          "name": "overhead",
+          "elapsed": 1361.1100000000006,
+          "frames": 240,
+          "fps": 176.32667455238732,
+          "p95": 5.614999999999782,
+          "tris": 516530,
+          "calls": 52,
+          "levels": [
+            {
+              "name": "canopy · distant",
+              "n": 770,
+              "tris": 107,
+              "blend": false
+            },
+            {
+              "name": "canopy · detail",
+              "n": 0,
+              "tris": 742,
+              "blend": false
+            },
+            {
+              "name": "canopy · proxy",
+              "n": 0,
+              "tris": 270,
+              "blend": false
+            }
+          ]
+        },
+        {
+          "name": "horizon",
+          "elapsed": 1377.7800000000007,
+          "frames": 240,
+          "fps": 174.19326743021375,
+          "p95": 5.625,
+          "tris": 562450,
+          "calls": 120,
+          "levels": [
+            {
+              "name": "canopy · distant",
+              "n": 533,
+              "tris": 107,
+              "blend": false
+            },
+            {
+              "name": "canopy · detail",
+              "n": 0,
+              "tris": 742,
+              "blend": false
+            },
+            {
+              "name": "canopy · proxy",
+              "n": 290,
+              "tris": 270,
+              "blend": false
+            }
+          ]
+        }
+      ],
+      "gpu": true,
+      "canvas": [
+        1280,
+        720
+      ],
+      "pivot": [
+        1233,
+        3406
+      ],
+      "units": 66
+    },
+    {
+      "map": "endor",
+      "build": "current",
+      "pair": 1,
+      "views": [
+        {
+          "name": "near",
+          "elapsed": 1600.0100000000002,
+          "frames": 240,
+          "fps": 149.9990625058593,
+          "p95": 11.105000000000473,
+          "tris": 528739,
+          "calls": 40,
+          "levels": [
+            {
+              "name": "trunk · near",
+              "n": 63,
+              "tris": 264,
+              "blend": false
+            },
+            {
+              "name": "trunk · medium",
+              "n": 1,
+              "tris": 84,
+              "blend": false
+            },
+            {
+              "name": "trunk · distant",
+              "n": 0,
+              "tris": 20,
+              "blend": false
+            },
+            {
+              "name": "crown · near",
+              "n": 63,
+              "tris": 352,
+              "blend": false
+            },
+            {
+              "name": "crown · medium",
+              "n": 1,
+              "tris": 140,
+              "blend": false
+            },
+            {
+              "name": "crown · distant",
+              "n": 0,
+              "tris": 48,
+              "blend": false
+            },
+            {
+              "name": "hemlock · near",
+              "n": 26,
+              "tris": 126,
+              "blend": false
+            },
+            {
+              "name": "hemlock · medium",
+              "n": 32,
+              "tris": 54,
+              "blend": false
+            },
+            {
+              "name": "hemlock · distant",
+              "n": 0,
+              "tris": 18,
+              "blend": false
+            },
+            {
+              "name": "brush · near",
+              "n": 65,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "brush · medium",
+              "n": 124,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "brush · distant",
+              "n": 0,
+              "tris": 12,
+              "blend": false
+            },
+            {
+              "name": "bracken · near",
+              "n": 130,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "bracken · medium",
+              "n": 260,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "bracken · distant",
+              "n": 0,
+              "tris": 12,
+              "blend": false
+            },
+            {
+              "name": "log · near",
+              "n": 8,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "log · medium",
+              "n": 0,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "log · distant",
+              "n": 0,
+              "tris": 24,
+              "blend": false
+            },
+            {
+              "name": "stone · near",
+              "n": 5,
+              "tris": 240,
+              "blend": false
+            },
+            {
+              "name": "stone · medium",
+              "n": 14,
+              "tris": 144,
+              "blend": false
+            },
+            {
+              "name": "stone · distant",
+              "n": 0,
+              "tris": 48,
+              "blend": false
+            }
+          ]
+        },
+        {
+          "name": "overhead",
+          "elapsed": 1811.1599999999999,
+          "frames": 240,
+          "fps": 132.51176041873717,
+          "p95": 11.154999999998836,
+          "tris": 585715,
+          "calls": 37,
+          "levels": [
+            {
+              "name": "trunk · near",
+              "n": 0,
+              "tris": 264,
+              "blend": false
+            },
+            {
+              "name": "trunk · medium",
+              "n": 0,
+              "tris": 84,
+              "blend": false
+            },
+            {
+              "name": "trunk · distant",
+              "n": 1728,
+              "tris": 20,
+              "blend": false
+            },
+            {
+              "name": "crown · near",
+              "n": 0,
+              "tris": 352,
+              "blend": false
+            },
+            {
+              "name": "crown · medium",
+              "n": 0,
+              "tris": 140,
+              "blend": false
+            },
+            {
+              "name": "crown · distant",
+              "n": 1728,
+              "tris": 48,
+              "blend": false
+            },
+            {
+              "name": "hemlock · near",
+              "n": 0,
+              "tris": 126,
+              "blend": false
+            },
+            {
+              "name": "hemlock · medium",
+              "n": 0,
+              "tris": 54,
+              "blend": false
+            },
+            {
+              "name": "hemlock · distant",
+              "n": 2457,
+              "tris": 18,
+              "blend": false
+            },
+            {
+              "name": "brush · near",
+              "n": 0,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "brush · medium",
+              "n": 0,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "brush · distant",
+              "n": 2539,
+              "tris": 12,
+              "blend": false
+            },
+            {
+              "name": "bracken · near",
+              "n": 0,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "bracken · medium",
+              "n": 0,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "bracken · distant",
+              "n": 4744,
+              "tris": 12,
+              "blend": false
+            },
+            {
+              "name": "log · near",
+              "n": 0,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "log · medium",
+              "n": 0,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "log · distant",
+              "n": 106,
+              "tris": 24,
+              "blend": false
+            },
+            {
+              "name": "stone · near",
+              "n": 0,
+              "tris": 240,
+              "blend": false
+            },
+            {
+              "name": "stone · medium",
+              "n": 0,
+              "tris": 144,
+              "blend": false
+            },
+            {
+              "name": "stone · distant",
+              "n": 727,
+              "tris": 48,
+              "blend": false
+            }
+          ]
+        },
+        {
+          "name": "horizon",
+          "elapsed": 1738.92,
+          "frames": 240,
+          "fps": 138.0167000207025,
+          "p95": 11.149999999999636,
+          "tris": 643361,
+          "calls": 44,
+          "levels": [
+            {
+              "name": "trunk · near",
+              "n": 3,
+              "tris": 264,
+              "blend": false
+            },
+            {
+              "name": "trunk · medium",
+              "n": 184,
+              "tris": 84,
+              "blend": false
+            },
+            {
+              "name": "trunk · distant",
+              "n": 1677,
+              "tris": 20,
+              "blend": false
+            },
+            {
+              "name": "crown · near",
+              "n": 3,
+              "tris": 352,
+              "blend": false
+            },
+            {
+              "name": "crown · medium",
+              "n": 184,
+              "tris": 140,
+              "blend": false
+            },
+            {
+              "name": "crown · distant",
+              "n": 1677,
+              "tris": 48,
+              "blend": false
+            },
+            {
+              "name": "hemlock · near",
+              "n": 0,
+              "tris": 126,
+              "blend": false
+            },
+            {
+              "name": "hemlock · medium",
+              "n": 26,
+              "tris": 54,
+              "blend": false
+            },
+            {
+              "name": "hemlock · distant",
+              "n": 2682,
+              "tris": 18,
+              "blend": false
+            },
+            {
+              "name": "brush · near",
+              "n": 0,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "brush · medium",
+              "n": 0,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "brush · distant",
+              "n": 2532,
+              "tris": 12,
+              "blend": false
+            },
+            {
+              "name": "bracken · near",
+              "n": 0,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "bracken · medium",
+              "n": 0,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "bracken · distant",
+              "n": 4740,
+              "tris": 12,
+              "blend": false
+            },
+            {
+              "name": "log · near",
+              "n": 0,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "log · medium",
+              "n": 7,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "log · distant",
+              "n": 110,
+              "tris": 24,
+              "blend": false
+            },
+            {
+              "name": "stone · near",
+              "n": 0,
+              "tris": 240,
+              "blend": false
+            },
+            {
+              "name": "stone · medium",
+              "n": 2,
+              "tris": 144,
+              "blend": false
+            },
+            {
+              "name": "stone · distant",
+              "n": 807,
+              "tris": 48,
+              "blend": false
+            }
+          ]
+        }
+      ],
+      "gpu": true,
+      "canvas": [
+        2560,
+        1440
+      ],
+      "pivot": [
+        1460,
+        3120
+      ],
+      "units": 90
+    },
+    {
+      "map": "endor",
+      "build": "reference",
+      "pair": 1,
+      "views": [
+        {
+          "name": "near",
+          "elapsed": 1633.2150000000001,
+          "frames": 240,
+          "fps": 146.94942184586841,
+          "p95": 11.125,
+          "tris": 506760,
+          "calls": 42,
+          "levels": [
+            {
+              "name": "",
+              "n": 10,
+              "tris": 264,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 54,
+              "tris": 84,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 10,
+              "tris": 352,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 54,
+              "tris": 140,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 15,
+              "tris": 126,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 43,
+              "tris": 54,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 68,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 121,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 131,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 259,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 2,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 6,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 4,
+              "tris": 240,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 15,
+              "tris": 144,
+              "blend": false
+            }
+          ]
+        },
+        {
+          "name": "overhead",
+          "elapsed": 1900.039999999999,
+          "frames": 240,
+          "fps": 126.31313024988954,
+          "p95": 11.155000000000655,
+          "tris": 916980,
+          "calls": 44,
+          "levels": [
+            {
+              "name": "",
+              "n": 49,
+              "tris": 264,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1679,
+              "tris": 84,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 49,
+              "tris": 352,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1679,
+              "tris": 140,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 57,
+              "tris": 126,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1180,
+              "tris": 54,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 250,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1900,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 491,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1700,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 6,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 100,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 26,
+              "tris": 240,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 320,
+              "tris": 144,
+              "blend": false
+            }
+          ]
+        },
+        {
+          "name": "horizon",
+          "elapsed": 1677.8049999999985,
+          "frames": 240,
+          "fps": 143.04403670271589,
+          "p95": 11.164999999999054,
+          "tris": 957081,
+          "calls": 44,
+          "levels": [
+            {
+              "name": "",
+              "n": 41,
+              "tris": 264,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1823,
+              "tris": 84,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 41,
+              "tris": 352,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1823,
+              "tris": 140,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 53,
+              "tris": 126,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1180,
+              "tris": 54,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 243,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1900,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 487,
+              "tris": 32,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 1700,
+              "tris": 16,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 6,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 100,
+              "tris": 42,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 26,
+              "tris": 240,
+              "blend": false
+            },
+            {
+              "name": "",
+              "n": 320,
+              "tris": 144,
+              "blend": false
+            }
+          ]
+        }
+      ],
+      "gpu": true,
+      "canvas": [
+        2560,
+        1440
+      ],
+      "pivot": [
+        1460,
+        3120
+      ],
+      "units": 90
+    },
+    {
+      "map": "yavin",
+      "build": "current",
+      "pair": 1,
+      "views": [
+        {
+          "name": "near",
+          "elapsed": 1361.1950000000006,
+          "frames": 240,
+          "fps": 176.31566381010796,
+          "p95": 5.635000000000218,
+          "tris": 244700,
+          "calls": 17,
+          "levels": [
+            {
+              "name": "canopy · distant",
+              "n": 0,
+              "tris": 107,
+              "blend": false
+            },
+            {
+              "name": "canopy · detail",
+              "n": 3,
+              "tris": 742,
+              "blend": false
+            },
+            {
+              "name": "canopy · proxy",
+              "n": 160,
+              "tris": 270,
+              "blend": false
+            }
+          ]
+        },
+        {
+          "name": "overhead",
+          "elapsed": 1333.3500000000004,
+          "frames": 240,
+          "fps": 179.99775002812459,
+          "p95": 5.614999999999782,
+          "tris": 516499,
+          "calls": 52,
+          "levels": [
+            {
+              "name": "canopy · distant",
+              "n": 770,
+              "tris": 107,
+              "blend": false
+            },
+            {
+              "name": "canopy · detail",
+              "n": 0,
+              "tris": 742,
+              "blend": false
+            },
+            {
+              "name": "canopy · proxy",
+              "n": 0,
+              "tris": 270,
+              "blend": false
+            }
+          ]
+        },
+        {
+          "name": "horizon",
+          "elapsed": 1361.1049999999996,
+          "frames": 240,
+          "fps": 176.32732228593684,
+          "p95": 5.6599999999998545,
+          "tris": 562431,
+          "calls": 120,
+          "levels": [
+            {
+              "name": "canopy · distant",
+              "n": 533,
+              "tris": 107,
+              "blend": false
+            },
+            {
+              "name": "canopy · detail",
+              "n": 0,
+              "tris": 742,
+              "blend": false
+            },
+            {
+              "name": "canopy · proxy",
+              "n": 290,
+              "tris": 270,
+              "blend": false
+            }
+          ]
+        }
+      ],
+      "gpu": true,
+      "canvas": [
+        1280,
+        720
+      ],
+      "pivot": [
+        1233,
+        3406
+      ],
+      "units": 66
+    },
+    {
+      "map": "yavin",
+      "build": "reference",
+      "pair": 1,
+      "views": [
+        {
+          "name": "near",
+          "elapsed": 1338.9800000000005,
+          "frames": 240,
+          "fps": 179.24091472613475,
+          "p95": 5.640000000000327,
+          "tris": 244700,
+          "calls": 17,
+          "levels": [
+            {
+              "name": "canopy · proxy",
+              "n": 160,
+              "tris": 270,
+              "blend": false
+            },
+            {
+              "name": "canopy · detail",
+              "n": 3,
+              "tris": 742,
+              "blend": false
+            }
+          ]
+        },
+        {
+          "name": "overhead",
+          "elapsed": 1338.8899999999994,
+          "frames": 240,
+          "fps": 179.25296327554923,
+          "p95": 5.625,
+          "tris": 646430,
+          "calls": 52,
+          "levels": [
+            {
+              "name": "canopy · proxy",
+              "n": 770,
+              "tris": 270,
+              "blend": false
+            },
+            {
+              "name": "canopy · detail",
+              "n": 0,
+              "tris": 742,
+              "blend": false
+            }
+          ]
+        },
+        {
+          "name": "horizon",
+          "elapsed": 1344.449999999999,
+          "frames": 240,
+          "fps": 178.51165904273137,
+          "p95": 5.625,
+          "tris": 653067,
+          "calls": 119,
+          "levels": [
+            {
+              "name": "canopy · proxy",
+              "n": 823,
+              "tris": 270,
+              "blend": false
+            },
+            {
+              "name": "canopy · detail",
+              "n": 0,
+              "tris": 742,
+              "blend": false
+            }
+          ]
+        }
+      ],
+      "gpu": true,
+      "canvas": [
+        1280,
+        720
+      ],
+      "pivot": [
+        1233,
+        3406
+      ],
+      "units": 66
+    }
+  ]
+}

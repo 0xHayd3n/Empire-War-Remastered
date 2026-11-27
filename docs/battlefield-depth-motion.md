@@ -1,0 +1,25 @@
+# Battlefield depth and motion
+
+Open **Settings → Video → Graphics Quality → World environments**. The three checkboxes are independent and individually off by default. Battle realism On enables them; Off suppresses them without overwriting saved choices. Try Endor at strategy zoom: put the forest edge, the stream and a distant rise in the same view, then pan sideways. No asset rebuild, save data, visibility, orders or changes to native weather rules.
+
+- **Aerial perspective** adds a bounded amount of the map’s own fog color along the line from the camera to the surface. The lower quarter of sampled terrain heights provides a fixed reference elevation. The renderer estimates the air along a ray from its endpoints and midpoint; a longer path through low ground loses more contrast than an equally long path above the ridges. Terrain, water and lit objects participate. Close subjects, the backdrop and first-person kit aren’t covered by a screen filter. Authored fog still runs; a disabled fog or a long clear interval is respected. This is height haze, not volumetric shadows or a new fog-of-war pass.
+- **Shared battlefield wind** uses the direction in which the map’s cloud shadows **travel** (opposite their UV scroll). Known grass/tree materials and recognized leafy cutouts bend in world space, more at the tips than the root. The same world-space gust carries eligible world-space smoke and dust. Weather strength can increase the prevailing speed; stopped/untextured cloud layers add no breeze. Attached effects, laser bolts, splashes, weather pools and local vehicle wakes keep their own rules. Wetness still decides whether a movement puff is emitted. A gust transports an existing puff; turning the setting off does not rewind its position. There is no new vegetation, simulated wind obstruction or per-tree CPU update.
+- **Steady surface detail** widens the mip sampling footprint where texels are becoming smaller than a screen pixel, on painted terrain and opaque model materials in both land and space. UV coordinates stay attached to the asset. Cutout alpha, team masks, additive effects, text and HUD are not screen-space blurred. This trades a little distant texture contrast for less shimmer. It isn’t temporal AA or silhouette reconstruction; it cannot stabilize every thin edge. No history, extra color/depth target, camera jitter or ghost trail on newly visible pixels.
+
+## Mounted verification
+
+`npm run test:battlefield-look` checks the classification, map fallbacks and master settings. `node tools/check-battlefield.cjs` opens mounted Universal at `http://127.0.0.1:8590/`, tests keyboard/persistence at narrow width, then starts the battle. Set `LOOK_BACKEND=webgl` for the fallback; `LOOK_WORLD=Kuat LOOK_PROFILE=1125571106` selects the installed station mod. `LOOK_FILTER=detail node tools/check-fleet-coverage.cjs` isolates surface filtering in a 100-entry-per-side space battle. Both renderers were tested at 1920×1080. Captures/reports stay in OS TEMP under `universal-battlefield` and `universal-fleet-detail`.
+
+- On **Endor**, a black terrain test surface against white air read **0/255 nearby, 60/255 in the distant lowland and 15/255 on the raised ray** on both backends. The latter two had identical length and camera angle. The normal battle comparison held pose and clock fixed. On **Kuat**, no pixels changed above 3 luminance levels when switching on air in the foreground: that map calls for clear space out to 6,000 units before its black fog starts.
+- Endor grass/tree cards changed with the gust at a fixed camera. Replaying one actual mounted smoke and one walker dust particle at the same emitter position gave the same additional displacement (about −1.18 world units in X in a 0.1-second step, no Y displacement). Moving only the clock changed the wind-on canopy; the wind-off control was effectively static. No foliage cards were found or invented on the station.
+- With quarter-pixel camera shifts on Endor, average frame-to-frame second difference (a shimmer measure, lower is smoother) fell **1.83 → 1.40 WebGPU** and **1.32 → 1.04 WebGL**, retaining about 88% of the measured broader contrast. Station shimmer fell about 12–14%. Fleet hull improvement was smaller (~3–4%); fighter patch contrast stayed close to the unfiltered result. Removing visible fighters left **zero measured residual on the next frame** on both backends. These are matched-pose readbacks, not a claim about all camera motions.
+
+| Warm frame intervals (ms), median / p95 | Off | On |
+|---|---:|---:|
+| Endor, WebGPU and WebGL | 5.6 / 5.6 | 5.6 / 5.6 |
+| Kuat, WebGPU | 5.6 / 11.2 | 5.6 / 11.1 |
+| Kuat, WebGL | 11.1 / 16.7 | 11.1 / 11.2 |
+| Fleet, WebGPU (detail only) | 5.6 / 5.6 | 5.6 / 5.6 |
+| Fleet, WebGL (detail only) | 22.2 / 28.0 | 16.8 / 27.7 |
+
+Short desktop render pans; the land simulation was frozen for repeatability. The fleet timing used an advancing simulation. Differences of a display refresh interval are not evidence of a speedup. Mobile GPUs, sustained combat and the offscreen renderer worker weren’t independently benchmarked.

@@ -1,0 +1,100 @@
+{
+  "meta": {
+    "chrome": "158.0.8127.38",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700KF",
+    "cpuRate": 1
+  },
+  "result": {
+    "suite": "quality",
+    "units": {
+      "Stormtrooper": 3,
+      "Rebel_Trooper": 3
+    },
+    "host": 8,
+    "map": "_MP_LAND_TATOOINE.TED",
+    "gpu": "ampere",
+    "backend": "webgpu",
+    "maxStartError": 0,
+    "legs": [
+      {
+        "engine": "rapier",
+        "n": 6,
+        "start": {
+          "bodies": 60,
+          "colliders": 66,
+          "joints": 54
+        },
+        "spawnMs": {
+          "n": 6,
+          "median": 0.83,
+          "p95": 7.775
+        },
+        "afterBlastJoints": 50,
+        "detached": 4,
+        "peakSocketGap": 0.1253,
+        "peakNeckDeg": 15.0285,
+        "peakTorsoRise": 0.0028,
+        "maxTriangle": 4.932,
+        "lowestSampledSkin": -0.7818,
+        "minPostFallClearance": 0.07,
+        "maxPostFallClearance": 0.07,
+        "minStartingClearance": 0.07,
+        "parkedSkinRange": [
+          0.07,
+          0.07
+        ],
+        "parkedBelowTolerance": [],
+        "minFall": 5.1194,
+        "maxDetachedTravel": 6.0838,
+        "parked": 6,
+        "afterParking": {
+          "bodies": 0,
+          "colliders": 0,
+          "joints": 0
+        },
+        "timing": null,
+        "failures": []
+      },
+      {
+        "engine": "jolt",
+        "n": 6,
+        "start": {
+          "bodies": 66,
+          "colliders": 66,
+          "joints": 54
+        },
+        "spawnMs": {
+          "n": 6,
+          "median": 1.115,
+          "p95": 11.565
+        },
+        "afterBlastJoints": 50,
+        "detached": 4,
+        "peakSocketGap": 0.4287,
+        "peakNeckDeg": 19.5894,
+        "peakTorsoRise": 0,
+        "maxTriangle": 4.932,
+        "lowestSampledSkin": -0.3825,
+        "minPostFallClearance": 0.07,
+        "maxPostFallClearance": 0.07,
+        "minStartingClearance": 0.07,
+        "parkedSkinRange": [
+          0.07,
+          0.07
+        ],
+        "parkedBelowTolerance": [],
+        "minFall": 5.8577,
+        "maxDetachedTravel": 6.1247,
+        "parked": 6,
+        "afterParking": {
+          "bodies": 0,
+          "colliders": 0,
+          "joints": 0
+        },
+        "timing": null,
+        "failures": []
+      }
+    ]
+  },
+  "errors": []
+}

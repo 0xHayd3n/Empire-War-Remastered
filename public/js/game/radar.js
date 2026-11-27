@@ -1,3 +1,5 @@
+import { viewOptions as prefs } from './viewpreferences.js';
+import { contactSymbol } from './radarcontacts.js';
 import { db } from '../gamedata.js';
 import { fetchText } from '../vfs.js';
 import { loadTextureCanvas } from '../dds.js';
@@ -465,7 +467,7 @@ export class Radar {
     const fog = r.fog;
     if (w.fog && fog && fog.mesh.visible) g.drawImage(this.fogCanvas(fog, S.fow), 0, 0, W, H);
     if (w.radarFields?.length) g.drawImage(this.fieldLayer(w, W, H, X, Y, sx, sy, S), 0, 0, W, H);
-    if (this.backdrop) g.drawImage(this.grid(W, H), 0, 0);
+    if (prefs.radarGrid && this.backdrop) g.drawImage(this.grid(W, H), 0, 0);
     const bit = player.bit,
       radar = this.seeAll || this.radarOn(w, player),
       sel = this.selColor && this.tone(this.selColor);
@@ -489,8 +491,12 @@ export class Radar {
         g.globalAlpha = hit ? 0.5 : 1;
         const x = X(u.x),
           y = Y(u.y);
+        if (prefs.radarShapes) {
+          contactSymbol(g, x, y, 3 * dpr * prefs.radarScale, owner?.team === player.team, !owner, c.rgb);
+          continue;
+        }
         if (!t.icon) {
-          const b = t.blip * dpr;
+          const b = t.blip * dpr * prefs.radarScale;
           if (fill !== c.rgb) g.fillStyle = fill = c.rgb;
           g.fillRect(Math.round(x - b / 2), Math.round(y - b / 2), b, b);
           continue;
@@ -498,8 +504,8 @@ export class Radar {
         let img = c.icons.get(t.icon);
         if (!img && (img = this.icon(t.icon, c.c))) c.icons.set(t.icon, img);
         if (!img) continue;
-        const hw = (t.sx * W) / 2,
-          hh = (t.sy * H) / 2;
+        const hw = (t.sx * W * prefs.radarScale) / 2,
+          hh = (t.sy * H * prefs.radarScale) / 2;
         const a = (t.facing ? -(u.heading - Math.PI / 2) : 0) + (t.turn ? Math.PI / 2 : 0);
         if (a) {
           g.setTransform(Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a), x, y);
@@ -538,8 +544,12 @@ export class Radar {
         g.globalAlpha = 1;
         const x = X(cx / n),
           y = Y(cy / n);
+        if (prefs.radarShapes) {
+          contactSymbol(g, x, y, 3 * dpr * prefs.radarScale, own, q.player.id < 0, c.rgb);
+          continue;
+        }
         if (!t.icon) {
-          const b = t.blip * dpr;
+          const b = t.blip * dpr * prefs.radarScale;
           g.fillStyle = c.rgb;
           g.fillRect(Math.round(x - b / 2), Math.round(y - b / 2), b, b);
           continue;
@@ -547,8 +557,8 @@ export class Radar {
         let img = c.icons.get(t.icon);
         if (!img && (img = this.icon(t.icon, c.c))) c.icons.set(t.icon, img);
         if (!img) continue;
-        const hw = (t.sx * W) / 2,
-          hh = (t.sy * H) / 2,
+        const hw = (t.sx * W * prefs.radarScale) / 2,
+          hh = (t.sy * H * prefs.radarScale) / 2,
           a = (t.facing ? -(lead.heading - Math.PI / 2) : 0) + (t.turn ? Math.PI / 2 : 0);
         if (a) {
           g.setTransform(Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a), x, y);
@@ -569,6 +579,7 @@ export class Radar {
       );
     this.drawEvents(g, X, Y, W, H, w.time);
     this.drawStoryBlips(g, X, Y, w.storyBlips, w.time);
+    if (!prefs.radarView) return;
     const corners = [
       [0, 0],
       [r.width, 0],
@@ -576,7 +587,7 @@ export class Radar {
       [0, r.height]
     ].map(([px, py]) => r.pickGround(px, py, {}));
     g.strokeStyle = 'rgba(255,255,255,0.8)';
-    g.lineWidth = Math.max(1, dpr);
+    g.lineWidth = Math.max(1, dpr) * prefs.radarLine;
     if (corners.every(Boolean)) {
       g.beginPath();
       corners.forEach((p, i) => (i ? g.lineTo(X(p.x), Y(p.y)) : g.moveTo(X(p.x), Y(p.y))));

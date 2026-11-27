@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { viewOptions as prefs } from './viewpreferences.js';
 import { db } from '../gamedata.js';
 import { heightAt } from './terrain.js';
 
@@ -17,15 +18,17 @@ export class LandCinematic {
 
   toggle() {
     if (this.on) this.stop();
-    else this.start();
+    else this.start({ playerCamera: true });
   }
 
-  start() {
+  start({ playerCamera = false } = {}) {
     if (this.on) return;
     const g = this.game;
     this.on = true;
+    this.playerCamera = playerCamera;
+    this.entry = playerCamera ? { x: g.view.x, y: g.view.y } : null;
     document.body.classList.add('cinematic');
-    document.documentElement.style.setProperty('--letterbox', this.bars * 100 + 'vh');
+    document.documentElement.style.setProperty('--letterbox', this.bars * 100 * (playerCamera ? prefs.cineBars : 1) + 'vh');
     this.fov = g.camera.fov;
     this.shot = null;
     if (g.ui) {
@@ -37,7 +40,10 @@ export class LandCinematic {
     if (!this.on) return;
     const g = this.game;
     this.on = false;
+    this.sequence?.stop();
+    this.sequence = null;
     document.body.classList.remove('cinematic');
+    if (this.entry && prefs.cineReturn) Object.assign(g.view, this.entry);
     g.camera.fov = this.fov;
     g.camera.up.set(0, 0, 1);
     g.camera.updateProjectionMatrix();
@@ -92,11 +98,15 @@ export class LandCinematic {
   }
 
   frame(dt) {
+    if (this.sequence) {
+      if (!this.sequence.frame(dt)) this.stop();
+      return;
+    }
     const g = this.game,
       cam = g.camera,
       T = g.terrain;
     let sh = this.shot;
-    if (sh) sh.t += dt;
+    if (sh) sh.t += this.playerCamera ? dt / prefs.cineTime : dt;
     if (!sh || sh.t > sh.len || !this.seen(sh.u)) sh = this.shot = this.newShot();
     if (!sh) {
       const v = g.view,

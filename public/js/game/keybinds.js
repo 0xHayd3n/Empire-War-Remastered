@@ -3,7 +3,13 @@ import { db } from '../gamedata.js';
 const STORE = 'swr-keys';
 export const MAX_KEYS = 3;
 
+export const bindingContext = id => id.startsWith('WATCH_') ? 'Spectate' : id.startsWith('SHOOTER_') ? 'Battlefront' : 'Strategy';
 export const ACTIONS = [
+  ...[
+    ['WATCH_PREVIOUS', 'Previous team', 'Shift+Tab'], ['WATCH_NEXT', 'Next team', 'Tab'],
+    ['WATCH_FOG', 'Toggle spectator fog of war', 'KeyF'], ['WATCH_FOLLOW', 'Follow selected unit', 'KeyC'],
+    ...Array.from({length: 10}, (_, i) => [`WATCH_TEAM_${i + 1}`, `Watch team ${i + 1}`, `Digit${(i + 1) % 10}`])
+  ].map(([id, label, key]) => ({ id, label, keys: [key] })),
   ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map(n => ({
     id: 'GROUP_' + n,
     page: 0,
@@ -149,7 +155,11 @@ export function pressed(e, id) {
   for (const k of keysOf(id)) {
     const [mods, codes] = split(k);
     if (!codes.includes(e.code) || !codes.every(c => c === e.code || down.has(c))) continue;
-    if (mods.length ? MODS.every(([m, prop]) => !!e[prop] === mods.includes(m)) : !e.ctrlKey && !e.altKey) return true;
+    // Spectator shortcuts distinguish plain Tab from Shift+Tab. A standalone physical
+    // modifier (e.g. ShiftLeft) also sets the corresponding event flag itself.
+    if (mods.length || id.startsWith('WATCH_') || modifierOf(e.code)) {
+      if (MODS.every(([m, prop, physical]) => !!e[prop] === (mods.includes(m) || codes.some(code => physical.test(code))))) return true;
+    } else if (!e.ctrlKey && !e.altKey) return true;
   }
   return false;
 }
@@ -158,7 +168,9 @@ export function held(keys, id) {
   const ctrl = keys.has('ControlLeft') || keys.has('ControlRight');
   for (const k of keysOf(id)) {
     const [mods, codes] = split(k);
-    if (codes.length && codes.every(c => keys.has(c)) && (!ctrl || mods.includes('Ctrl'))) return true;
+    if (!codes.length || !codes.every(c => keys.has(c))) continue;
+    if (mods.some(m => !keys.has((m === 'Ctrl' ? 'Control' : m) + 'Left') && !keys.has((m === 'Ctrl' ? 'Control' : m) + 'Right'))) continue;
+    if (!ctrl || mods.includes('Ctrl') || codes.includes('ControlLeft') || codes.includes('ControlRight')) return true;
   }
   return false;
 }
@@ -184,7 +196,6 @@ const NAMES = {
   PageUp: 'TEXT_KEY_PAGE_UP',
   PageDown: 'TEXT_KEY_PAGE_DOWN',
   Enter: 'TEXT_KEY_ENTER',
-  NumpadEnter: 'TEXT_KEY_ENTER',
   Space: 'TEXT_KEY_SPACE',
   NumpadMultiply: 'TEXT_KEY_MULTIPLY',
   NumpadAdd: 'TEXT_KEY_ADD',
@@ -205,7 +216,7 @@ const FALLBACK = {
   ArrowDown: 'Down Arrow',
   PageUp: 'Page Up',
   PageDown: 'Page Down',
-  NumpadEnter: 'Enter',
+  NumpadEnter: 'Numpad Enter',
   NumpadMultiply: 'Num *',
   NumpadAdd: 'Num +',
   NumpadSubtract: 'Num -',

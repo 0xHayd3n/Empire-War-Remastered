@@ -52,6 +52,8 @@ export class SkirmishAI {
       .sort((a, b) => Math.hypot(a.x - own.x, a.y - own.y) - Math.hypot(b.x - own.x, b.y - own.y))[0];
     this.enemyStart = foe ? { x: foe.station.x, y: foe.station.y } : entry ? { x: entry.x, y: entry.y } : { x: 0, y: 0 };
     this.brain = null;
+    // A donor's script names and goal tables do not describe the projected roster.
+    if(player.faction.detachment) brain=null;
     this.brainReady =
       brain !== undefined
         ? Promise.resolve((this.brain = brain))
@@ -93,7 +95,7 @@ export class SkirmishAI {
   update(dt) {
     const p = this.player;
     if (p.defeated) return;
-    const goals = this.world.goals,
+    const goals = !p.faction.detachment && this.world.goals,
       h = this.world.scripts,
       leads = !!goals && !(h && h.plansOff);
     if (!goals) {
@@ -133,6 +135,7 @@ export class SkirmishAI {
   }
 
   scripted() {
+    if(this.player.faction.detachment)return null;
     const h = this.world.scripts;
     return h && !h.plansOff && h.plans && h.plans.ready ? h.plans : null;
   }

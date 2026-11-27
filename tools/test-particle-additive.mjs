@@ -35,7 +35,8 @@ for (const [m, kind] of [
 }
 const wgsl = fam.code(additive);
 const fs = wgsl.slice(wgsl.indexOf('@fragment'));
-assert.match(fs, /textureSample\(mapT, mapS, v\.vUv\)\.rgb \* v\.vTint\.rgb, 1\.0\)/, 'WebGPU additive colour is the texture colour times the vertex colour');
+assert.match(fs, /let t = textureSample\(mapT, mapS, v\.vUv\)/, 'WebGPU samples the sprite');
+assert.match(fs, /vec4f\(t\.rgb \* v\.vTint\.rgb \* softFade\(v\.pos, v\.vView\), 1\.0\)/, 'WebGPU additive RGB retains its soft-depth fade and does not multiply by alpha');
 assert.doesNotMatch(fs, /\.a\b/, 'WebGPU additive colour ignores both alphas');
 
 console.log('particle additive: ok');

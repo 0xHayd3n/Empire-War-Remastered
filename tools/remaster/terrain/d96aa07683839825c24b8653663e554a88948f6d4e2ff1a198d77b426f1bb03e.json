@@ -1,0 +1,189 @@
+{
+  "job": "d96aa07683839825c24b8653663e554a88948f6d4e2ff1a198d77b426f1bb03e",
+  "pack": "yavin-ground",
+  "policy": "polyhaven-2k",
+  "composition": {
+    "design": "Continuous forest substrate across the clearing, compact earth with a pale sandy core along travel lanes, leaf/root cover following the shelter of adjoining crowns, fractured rock around outcrops and on escarpments; temple thresholds and construction are separate hard boundaries.",
+    "evidence": ["37dac8a7b14350314914a9730f469a1dbd344b5f3759387040e268f6c27b2595","321c91da869ade1eb422fed7a04778e0ae9801b9a23b7e381c279a71db379d57","224cd5aef80d8ac1764bcc65a512dd1182bf88a86ae5540d972056c0195d88df"],
+    "channels": [3,9,37,22,2,31,12], "laneHints":[37,5,9], "rockHints":[12,14,35,36], "dampHints":[23,31],
+    "outcrops":["W_TEMPROCKCLSTR00.ALO","W_TEMPROCKCLSTR01.ALO","W_TEMPROCKCLSTR02.ALO","W_TEMPROCKCLSTR03.ALO"],"rockRadius":94,
+    "clearings":[[1230,3400,410,315],[3400,930,355,295]],
+    "tracks":[[[875,3240],[1030,3360],[1220,3435],[1400,3370],[1580,3295],[1710,3230]],[[3055,1100],[3205,1010],[3350,962],[3520,970],[3690,870]]],
+    "regions":[{"name":"army clearing","view":"command","grid":[46,158,33,27],"maxBoundary":0.16,"maxSmallShare":0.05,"maxJump":0.08},{"name":"southern approaches","view":"south-field","grid":[151,33,35,28],"maxBoundary":0.19,"maxSmallShare":0.05,"maxJump":0.08}]
+  },
+  "families": [
+    {
+      "id": "open-cover",
+      "asset": "forrest_ground_01",
+      "role": "grass",
+      "slots": [
+        0,
+        3,
+        10,
+        58
+      ],
+      "tileMeters": 2,
+      "regular": false,
+      "evidence": "37dac8a7b14350314914a9730f469a1dbd344b5f3759387040e268f6c27b2595",
+      "why": "Green low growth, a little bare soil and occasional twigs between leafy pockets. Rejected grass_ground: the exposed floor turned brown in the mounted jungle.",
+      "use": "natural"
+    },
+    {
+      "id": "root-mat",
+      "asset": "brown_mud_leaves_01",
+      "role": "moss",
+      "slots": [
+        2
+      ],
+      "tileMeters": 1.3,
+      "regular": false,
+      "evidence": "37dac8a7b14350314914a9730f469a1dbd344b5f3759387040e268f6c27b2595",
+      "why": "Small green leaves against dark, root-threaded earth distinguish the shaded margin from open ground; an analogue, not a moss species identification.",
+      "use": "natural"
+    },
+    {
+      "id": "track-earth",
+      "asset": "forest_ground_05",
+      "role": "soil",
+      "slots": [
+        5,
+        9
+      ],
+      "tileMeters": 2,
+      "regular": false,
+      "evidence": "321c91da869ade1eb422fed7a04778e0ae9801b9a23b7e381c279a71db379d57",
+      "why": "Fine, compact forest earth on the traffic lane; avoid coarse sticks or an uninterrupted carpet of plants under the squad.",
+      "use": "natural"
+    },
+    {
+      "id": "rock",
+      "asset": "mossy_rock",
+      "role": "rock",
+      "slots": [
+        12,
+        14,
+        35,
+        63
+      ],
+      "tileMeters": 3,
+      "reuse": "endor-terrain",
+      "regular": false,
+      "evidence": "224cd5aef80d8ac1764bcc65a512dd1182bf88a86ae5540d972056c0195d88df",
+      "why": "Fractured gray stone with patches of green on the forest outcrops. Retain the mapped rock bands, rather than paving them with man-made joints. Also serves the isolated pale good-ground marker and exposed natural rock wherever the tile-rock paint occurs outside an approved apron.",
+      "use": "natural"
+    },
+    {
+      "id": "fallen-leaves",
+      "asset": "leaves_forest_ground",
+      "role": "litter",
+      "slots": [
+        22,
+        59
+      ],
+      "tileMeters": 2.1,
+      "reuse": "yavin-jungle",
+      "regular": false,
+      "evidence": "37dac8a7b14350314914a9730f469a1dbd344b5f3759387040e268f6c27b2595",
+      "why": "Overlapping fallen leaves break up the floor under the crowns; confined to litter pockets rather than covering apron or lanes.",
+      "use": "natural"
+    },
+    {
+      "id": "forest-earth",
+      "asset": "mud_forest",
+      "role": "mud",
+      "slots": [
+        23,
+        31
+      ],
+      "tileMeters": 2.5,
+      "reuse": "yavin-jungle",
+      "regular": false,
+      "evidence": "37dac8a7b14350314914a9730f469a1dbd344b5f3759387040e268f6c27b2595",
+      "why": "Dark soil and organic flecks in the sheltered damp pockets, without adding standing water to the dry TED.",
+      "use": "natural"
+    },
+    {
+      "id": "temple-slab",
+      "asset": "large_grey_tiles",
+      "role": "concrete",
+      "slots": [
+        36
+      ],
+      "tileMeters": 3,
+      "regular": true,
+      "evidence": "224cd5aef80d8ac1764bcc65a512dd1182bf88a86ae5540d972056c0195d88df",
+      "why": "Broad weathered slabs at the temple threshold, with continuous joints and small growth in the cracks. Reject the small units of pavement_01 and never infer paving in open woodland from the tile-rock paint alone.",
+      "use": "built"
+    },
+    {
+      "id": "apron-grit",
+      "asset": "dense_sand",
+      "role": "sand",
+      "slots": [
+        37
+      ],
+      "tileMeters": 1.8,
+      "regular": false,
+      "evidence": "0c432ae2d1389decf79d3bdb72249f5cad87c63aa90b6e3cabd2c31457c0d255",
+      "why": "Light, compact sand with worn surface marks runs up to the hard apron. Rejected sandy_gravel: it read as a featureless gray sheet at squad height. Use the whole scan, not stock albedo.",
+      "use": "natural"
+    },
+    {
+      "id": "concrete",
+      "asset": "concrete_floor_02",
+      "role": "concrete",
+      "slots": [
+        62
+      ],
+      "tileMeters": 2,
+      "reuse": "endor-terrain",
+      "regular": true,
+      "evidence": "224cd5aef80d8ac1764bcc65a512dd1182bf88a86ae5540d972056c0195d88df",
+      "why": "Only cells actually paved by building construction receive concrete; unused ground and tactical markers do not.",
+      "use": "built"
+    }
+  ],
+  "zones": [
+    {
+      "slot": 36,
+      "natural": 12,
+      "construction": false,
+      "evidence": "224cd5aef80d8ac1764bcc65a512dd1182bf88a86ae5540d972056c0195d88df",
+      "aprons": [
+        {
+          "model": "W_MASSASSI_TEMPLE.ALO",
+          "anchor": [
+            3684.21,
+            2409.1
+          ],
+          "rect": [
+            3820,
+            2310,
+            4020,
+            2460
+          ]
+        },
+        {
+          "model": "W_MASSASSI_TEMPLE.ALO",
+          "anchor": [
+            2577.86,
+            3503.28
+          ],
+          "rect": [
+            2440,
+            3360,
+            2580,
+            3490
+          ]
+        }
+      ]
+    },
+    {
+      "slot": 62,
+      "natural": 9,
+      "construction": true,
+      "evidence": "0c432ae2d1389decf79d3bdb72249f5cad87c63aa90b6e3cabd2c31457c0d255",
+      "aprons": []
+    }
+  ]
+}

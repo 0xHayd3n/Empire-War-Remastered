@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {filterFinishAtlas} from '../public/js/finishatlas.js';
+const s=16,bytes=new Uint8Array(s*s*6*4),at=(face,x,y)=>(6*s*y+face*s+x)*4;
+for(let i=0;i<bytes.length;i+=4)bytes.set([30,80,185,255],i);
+const uniform=filterFinishAtlas(bytes,s);
+for(let band=0;band<3;band++)assert.deepEqual(uniform.subarray(bytes.length*band,bytes.length*(band+1)),bytes,'uniform sky must preserve brightness and hue');
+bytes.fill(0);for(let y=0;y<s;y++)for(let x=0;x<s;x++)bytes.set([255,0,0,255],at(0,x,y));
+const atlas=filterFinishAtlas(bytes,s),page=bytes.length;
+assert.deepEqual(atlas.subarray(0,page),bytes,'smoothest finish preserves the source shape');
+const adjacent=at(2,s-1,s/2),opposite=at(1,s/2,s/2),center=at(0,s/2,s/2);
+assert(atlas[2*page+adjacent]>90,'rough kernel crosses the +X/+Y seam in linear light');
+assert.equal(atlas[2*page+opposite],0,'a bright face cannot leak through the back of the ship');
+assert(atlas[page+center]>=atlas[2*page+center],'rough finish broadens, not sharpens, a bright source');
+console.log('Finish atlas: uniform sky, sharp source, linear seam, bounded rough lobe passed.');

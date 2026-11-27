@@ -65,18 +65,23 @@ function transfer(app) {
   return null;
 }
 // Commit records are per Steam library. Don't attribute another drive's row to this drive's partial folder.
-export function steamCommits(roots) {
+function receiptRows(roots) {
   const seen = new Map();
   for (const root of roots) {
     const w = manifest(root, 'steamapps/workshop/appworkshop_32470.acf', 'AppWorkshop');
     if (w && w.WorkshopItemsInstalled && typeof w.WorkshopItemsInstalled === 'object')
       seen.set(path.resolve(root, 'steamapps/workshop/content/32470'), w.WorkshopItemsInstalled);
   }
-  return m => {
-    if (!m) return null;
-    const items = seen.get(path.resolve(path.dirname(m.folder)));
-    return items ? /^[1-9]\d{0,19}$/.test(items[m.id]?.manifest) : null;
-  };
+  return m => m && seen.get(path.resolve(path.dirname(m.folder)));
+}
+export function steamCommits(roots) {
+  const rows = receiptRows(roots);
+  return m => { const items = rows(m); return items ? /^[1-9]\d{0,19}$/.test(items[m.id]?.manifest) : null; };
+}
+// Test evidence only: record the installed Steam publication without exposing the ACF or local paths.
+export function steamRevision(roots) {
+  const rows = receiptRows(roots);
+  return m => { const value = rows(m)?.[m?.id]?.manifest; return /^[1-9]\d{0,19}$/.test(value) ? value : null; };
 }
 export function workshopSnapshot(roots, id) {
   if (typeof id !== 'string' || !/^[1-9]\d{0,19}$/.test(id) || BigInt(id) > 18446744073709551615n) throw Error('Invalid Workshop item.');

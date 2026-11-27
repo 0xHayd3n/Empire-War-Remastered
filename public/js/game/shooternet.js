@@ -114,8 +114,8 @@ export class ShooterNet {
       return p;
     };
     const died = w.onDeath;
-    w.onDeath = u => {
-      if (died) died(u);
+    w.onDeath = (u,how,crusher) => {
+      if (died) died(u,how,crusher);
       if (this.peers.size && this.ids.has(u)) this.events.push(['die', this.ids.get(u), u.lastDamage || '', Math.round(u.x * Q), Math.round(u.y * Q), Math.round(u.heading * 100)]);
     };
     const sh = this.game.shooter;
@@ -605,6 +605,9 @@ export class ShooterNet {
           u.holder.rotation.z = u.heading + Math.PI / 2;
         }
       }
+      // A host-confirmed death is the only trigger here. Do not run the host's onDeath
+      // (losses, invasion bookkeeping, audio or victory logic) again on a replica.
+      this.game.presentLandDeath?.(u);
       u.health = 0;
       u.dead = true;
       u.path = [];

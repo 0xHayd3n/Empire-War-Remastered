@@ -2,7 +2,7 @@ import { el, action, link, loadList, universalHost, switchProfile, option, askDe
 import { categoryDesk } from './workshopcategories.js';
 import { sourceDesk } from './workshopsources.js';
 import { archiveRows, importDesk, archiveActions } from './workshopimports.js';
-import { loadContent } from '../content.js';
+import { describeContent, loadContent } from '../content.js';
 
 const api = '/api/title-workshop/',
   store = 'swr-workshop-playset-v1',
@@ -48,6 +48,12 @@ export async function workshopDesk(root) {
     detail = $('.wx-dossier'),
     dock = $('.wx-dock'),
     note = $('[role=status]');
+  if (universal) {
+    const mounted = el('details', 'wx-mounted');
+    mounted.append(el('summary', '', 'Mounted content'));
+    tools.after(mounted);
+    void loadContent().then(content => mounted.append(el('p', '', describeContent(content))));
+  }
   let rows = [],
     byId = new Map(),
     collections = [],

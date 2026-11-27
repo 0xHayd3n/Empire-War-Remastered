@@ -198,14 +198,16 @@ export function windPush(D, near, p, dt) {
   }
 }
 
+import { airborne, gust } from './battlefield.js';
 class System {
-  constructor(sim, def, f, opts) {
+  constructor(sim, def, f, opts, key) {
     this.sim = sim;
     this.def = def;
     this.points = opts.points || null;
     this.basis = opts.basis || null;
     this.scale = opts.scale || 1;
     this.slot = opts.slot ?? -1;
+    this.forecastDust = opts.forecastDust === true;
     this.density = 1;
     this.near = true;
     this.emitting = true;
@@ -219,6 +221,8 @@ class System {
       .map(e => ({
         e,
         time: 0,
+        breeze: airborne(e,key),
+        puff: airborne(e,key) && /smoke|dust|foot[_-]?puff/i.test([key,e.name,e.texture].join(' ')),
         next: e.delay,
         bursts: 0,
         parts: [],
@@ -483,6 +487,7 @@ class System {
       iy = k * f.vy,
       iz = k * (f.vz || 0);
     const cap = energyCap(e, f.energy ?? 1);
+    const breeze = s.breeze && this.sim.breeze, drift = breeze?.[3] ? gust(f.x,f.y,breeze)*dt : 0;
     const W = e.wind && e.windDisturb && dt > 0 ? windNear(this.sim.wind, parts, f) : null;
     for (let i = 0; i < parts.length; i++) {
       const p = parts[i];
@@ -512,6 +517,7 @@ class System {
         }
       }
       if (p.world) {
+        if(drift){p.x+=breeze[0]*drift;p.y+=breeze[1]*drift;}
         p.x += (p.vx + p.rx + ix) * dt;
         p.y += (p.vy + p.ry + iy) * dt;
         p.z += (p.vz + p.rz + iz) * dt;
@@ -572,7 +578,9 @@ class System {
       if (!s.parts.length) continue;
       const batch = this.sim.batch(e);
       const T = e.tracks,
-        cell = 1 / e.grid;
+        // The sign labels forecast dust without separating it from the original alpha draw order.
+        // UV size is the magnitude. Ordinary smoke can use exactly the same atlas cell.
+        cell = (this.forecastDust && e.blend === 2 && !e.heat ? -1 : 1) / e.grid;
       const cap = energyCap(e, this.f.energy ?? 1);
       const wx = e.weather,
         h = e.pos.cube,
@@ -623,7 +631,8 @@ class System {
           ((idx / e.grid) | 0) % e.grid,
           cell,
           p.flip ? -p.angle : p.angle,
-          at
+          // -2 is still world space; retain the emitter class even when smoke and sparks share an atlas/batch.
+          p.world && s.puff && !fadeRGB && !e.heat && !e.noDepth ? -2 : at
         );
         if (stretch && added) {
           let vx = p.vx + p.rx,
@@ -680,7 +689,7 @@ export class ParticleSim {
   create(id, key, f, opts) {
     const def = this.defs.get(key);
     if (!def) return;
-    this.systems.set(id, new System(this, def, f, opts));
+    this.systems.set(id, new System(this, def, f, opts, key));
   }
 
   step(dt, frames) {

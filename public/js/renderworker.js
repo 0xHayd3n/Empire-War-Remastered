@@ -1,5 +1,6 @@
 import * as THREE from '../vendor/three/build/three.module.js';
 import { env } from './gpu/env.js';
+import { postVertex } from './imagesampling.js';
 
 let R = null,
   doneAt = null,
@@ -47,6 +48,7 @@ function readyDrawsOnly(R) {
     direct = R.renderBufferDirect.bind(R),
     building = new WeakSet();
   R.renderBufferDirect = function (camera, scene, geometry, material, object, group) {
+    if (material.vertexShader === postVertex) return direct(camera, scene, geometry, material, object, group);
     const prog = props.get(material).currentProgram;
     if (prog) {
       if (prog.isReady()) return direct(camera, scene, geometry, material, object, group);
@@ -65,7 +67,8 @@ function readyDrawsOnly(R) {
 async function init({ canvas, params, done }) {
   doneAt = done;
   if (params.webgpu) {
-    const { GPURenderer } = await import('./gpu/renderer.js');
+    // MirrorRenderer sends the same tactical post materials; their WGSL families must exist in this realm too.
+    const [{ GPURenderer }] = await Promise.all([import('./gpu/renderer.js'), import('./gpu/programs-space.js'), import('./gpu/programs-lens.js')]);
     R = await GPURenderer.create(canvas).catch(e => {
       postMessage({ error: 'webgpu: ' + ((e && e.message) || e) });
       return null;
@@ -446,6 +449,7 @@ function step(op) {
       const L = {};
       for (const k in op[1]) L[k] = uniform(op[1][k]);
       env.lighting = L;
+      env.blasts = Object.fromEntries(Object.entries(op[3] || {}).map(([k,id]) => [k, uniform(id)]));
       env.programSources = op[2];
       if (gpu) R.lighting = L;
       break;

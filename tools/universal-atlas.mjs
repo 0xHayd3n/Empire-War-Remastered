@@ -4,6 +4,9 @@ import { Worker } from 'node:worker_threads';
 import { createHash, randomUUID } from 'node:crypto';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { openGame } from './megfs.mjs';
+import { rosterColor, rgbBytes } from '../public/js/game/commandgroups.js';
+import { linkCommandHeraldry } from './command-heraldry.mjs';
+import { linkCommandExhibits } from './command-exhibits.mjs';
 import { assertPrivateLibrary, loadPack } from './universal-library.mjs';
 import { languageId } from '../public/js/language.js';
 import { thrawnRevision } from './universal-loader-table.mjs';
@@ -12,13 +15,18 @@ import { appearances, appearanceEligible, validPaint } from '../public/js/game/a
 import { canonEligible, fractalEligible, envoyStart, equalFootingStart } from '../public/js/game/universaleligibility.js';
 import { validValue, validLoss, rescueCampaign } from '../public/js/game/universalrules.js';
 const digest = s => createHash('sha256').update(s).digest('hex');
-function stockStamp(game) {
+function stockStamp(game, fieldsOnly = false) {
   const v = openGame(game),
     stats = new Map(),
     h = createHash('sha256');
   try {
     for (const [k, e] of v.index) {
-      if (!/^DATA\\(?:XML\\|TEXT\\|RESOURCES\\GUIDIALOG\\|ART\\(?:MODELS|TEXTURES)\\)/.test(k)) continue;
+      if (
+        fieldsOnly
+          ? !/^DATA\\(?:ART\\MAPS|CUSTOMMAPS)\\.+\.TED$/i.test(k)
+          : !/^DATA\\(?:XML\\|TEXT\\|RESOURCES\\GUIDIALOG\\|ART\\(?:MODELS|TEXTURES)\\)/.test(k)
+      )
+        continue;
       const file = e.file || e.meg;
       if (!stats.has(file)) {
         const s = fs.statSync(file);
@@ -33,10 +41,16 @@ function stockStamp(game) {
 }
 function build(args) {
   return new Promise((ok, no) => {
-    const w = new Worker(new URL(args.upgrade ? './universal-atlas-upgrade.mjs' : './universal-atlas-worker.mjs', import.meta.url), {
-      workerData: args,
-      execArgv: []
-    });
+    const w = new Worker(
+      new URL(
+        args.solo ? './universal-solo-worker.mjs' : args.upgrade ? './universal-atlas-upgrade.mjs' : './universal-atlas-worker.mjs',
+        import.meta.url
+      ),
+      {
+        workerData: args,
+        execArgv: []
+      }
+    );
     w.once('message', ok);
     w.once('error', no);
     w.once('exit', code => {
@@ -218,12 +232,12 @@ export function atlasStore({ home, library, eras }) {
       const p = JSON.parse(gunzipSync(fs.readFileSync(filename)));
       if (p.sheets.every(s => /^[a-f0-9]{64}$/.test(s) && fs.existsSync(path.join(home, 'planet-portraits-v1', s + '.png')))) cached = p;
     } catch {}
-    if (cached && 'laneKit' in cached && 'payment' in cached && 'buildTime' in cached && 'combat' in cached) return cached;
+    if (cached && 'laneKit' in cached && 'payment' in cached && 'buildTime' in cached && 'combat' in cached && 'presence' in cached) return cached;
     const args = { game: library.game, home, folder: library.items.get(id)?.folder, id, language: lang };
     const p = cached
       ? {
           ...cached,
-          ...(await build({ ...args, upgrade: true, lanes: 'laneKit' in cached ? null : { looks: cached.looks, overlay: cached.overlay } }))
+          ...(await build({ ...args, upgrade: true, facts: Object.fromEntries(Object.keys(cached.facts).map(f=>[f,true])), targets:cached.rows.flatMap(r=>r.variants.map(v=>v.id)), lanes: 'laneKit' in cached ? null : { looks: cached.looks, overlay: cached.overlay } }))
         }
       : await build(args);
     fs.mkdirSync(directory, { recursive: true });
@@ -246,7 +260,14 @@ export function atlasStore({ home, library, eras }) {
         for (const e of eras()) {
           if (!e.ready) continue;
           try {
-            profiles.push({ ...(await one(e.id, lang)), name: e.name });
+            const p = await one(e.id, lang);
+            // Private indexes remain raw pack data. Colorize the served view,
+            // including warm indexes; no art re-bake or Workshop change.
+            for (const [id, fact] of Object.entries(p.facts)) {
+              const color = rosterColor(p.id, id);
+              if (color) Object.assign(fact, { color, ink: rgbBytes(color) });
+            }
+            profiles.push({ ...p, name: e.name });
           } catch (err) {
             console.warn('Campaign atlas:', e.name, err.message);
             unavailable.push(e.id);
@@ -263,33 +284,98 @@ export function atlasStore({ home, library, eras }) {
     }
     return sets.get(lang);
   }
-  // One read-only art VFS for the last preview. No gameplay server, DOM, saves or campaign scripts are mounted.
-  let art, artKey, idle;
-  function closeArt() {
-    art?.close();
-    art = null;
-    artKey = null;
-    clearTimeout(idle);
+  // The tactical index is lazy and independent of the GC art cache. Browse all
+  // ready packs without mounting a runtime or re-baking any portrait sheets.
+  const soloJobs = new Map(), emblemFiles = new Map();
+  let fieldStamp;
+  function operations(language) {
+    const lang = languageId(language);
+    if (lang === null) throw Error('Unsupported language.');
+    if (!soloJobs.has(lang)) {
+      const job = get(lang).then(async ({ atlas }) => {
+        fieldStamp ??= stockStamp(library.game, true);
+        const solo = {},
+          unavailable = [];
+        for (const p of atlas.profiles) {
+          const schema = p.id === '1976399102' ? 'solo-native-stature1' : 'solo-device-palette1';
+          const file = path.join(directory, `${schema}-combat3-maneuver1-landaim2-${p.id}-${lang}-${digest(stamp + fieldStamp + p.revision)}.gz`);
+          try {
+            solo[p.id] = JSON.parse(gunzipSync(fs.readFileSync(file)));
+            continue;
+          } catch {}
+          try {
+            const row = await build({
+              solo: true,
+              game: library.game,
+              home,
+              id: p.id,
+              folder: library.items.get(p.id)?.folder,
+              language: lang
+            });
+            const tmp = file + '.' + randomUUID() + '.tmp';
+            try {
+              fs.writeFileSync(tmp, gzipSync(JSON.stringify(row)));
+              fs.renameSync(tmp, file);
+            } finally {
+              fs.rmSync(tmp, { force: true });
+            }
+            solo[p.id] = row;
+          } catch (e) {
+            console.warn('Operation catalog:', p.name, e.message);
+            unavailable.push(p.id);
+          }
+        }
+        linkCommandExhibits(solo, atlas.profiles);
+        linkCommandHeraldry(solo,atlas.profiles);
+        const kits = new Map();
+        for (const [id,row] of Object.entries(solo)) {
+          kits.set(id,row.kits); delete row.kits;
+          // The private revision-pinned pack cache holds the vectors. Publish
+          // opaque content addresses, not full SVGs in battlefield discovery.
+          for(const mark of Object.values(row.emblems || {})) if(mark.svg){
+            const key=(mark.faceProfile || id)+'/'+digest(mark.svg); mark.hd='/api/universal/emblems/'+key+'.svg';
+            if(!emblemFiles.has(key))emblemFiles.set(key,gzipSync(mark.svg));
+            delete mark.svg;
+          }
+        }
+        return { solo, kits, bytes: gzipSync(JSON.stringify({ solo, unavailable })) };
+      });
+      soloJobs.set(lang, job);
+      job.catch(() => soloJobs.delete(lang));
+    }
+    return soloJobs.get(lang);
   }
+  // One read-only art VFS for the last preview. No gameplay server, DOM, saves or campaign scripts are mounted.
+  const arts = new Map();
+  function drop(key){const entry=arts.get(key);if(entry){clearTimeout(entry.idle);entry.art.close();arts.delete(key);}}
+  function closeArt(){for(const key of arts.keys())drop(key);}
   function picture(id, revision, name) {
-    if (!/^Data\/Art\/(?:Models\/.+\.alo|Textures\/.+\.(?:dds|tga)|Shaders\/.+\.fxo)$/i.test(name) || name.split(/[\\/]/).includes('..'))
+    if (!/^Data\/Art\/(?:Models\/.+\.(?:alo|ala)|Textures\/.+\.(?:dds|tga)|Shaders\/.+\.fxo)$/i.test(name) || name.split(/[\\/]/).includes('..'))
       return null;
-    if (artKey !== id + ':' + revision) {
+    const artKey=id+':'+revision;
+    if (!arts.has(artKey)) {
       if (!eras().some(e => e.ready && e.id === id)) return null;
       const pack = id === 'stock' ? null : loadPack(home, id, library.items.get(id)?.folder);
       if ((pack?.revision || 'stock') !== revision) return null;
-      closeArt();
-      art = openGame(library.game, [], { packedLayer: pack?.entries });
-      artKey = id + ':' + revision;
+      if(arts.size>=8)drop(arts.keys().next().value);
+      arts.set(artKey,{art:openGame(library.game, [], { packedLayer: pack?.entries })});
     }
-    clearTimeout(idle);
-    idle = setTimeout(closeArt, 60000);
-    idle.unref();
+    const entry=arts.get(artKey), art=entry.art;
+    clearTimeout(entry.idle); entry.idle=setTimeout(()=>drop(artKey),60000); entry.idle.unref();
     const key = art.resolve(name);
     return key ? art.read(key) : null;
   }
   return {
     get,
+    operations,
+    emblem:key=>emblemFiles.get(key),
+    async roster(id,revision,faction,domain,language){
+      const p=(await get(language)).atlas.profiles.find(p=>p.id===id && p.revision===revision);
+      if(!p || !['land','space'].includes(domain))return null;
+      const kits=(await operations(language)).kits.get(id), kit=kits && Object.hasOwn(kits,faction) && kits[faction];
+      const shade = rosterColor(id, faction);
+      return kit?.[domain] ? { id, revision, faction, domain, label: kit.label, color: shade ? rgbBytes(shade).join(',') : kit.color, ...kit[domain] } : null;
+    },
     picture,
     portrait(hash) {
       return /^[0-9a-f]{64}$/.test(hash) && allowedSheets.has(hash)
@@ -298,8 +384,40 @@ export function atlasStore({ home, library, eras }) {
     },
     closeArt,
     async issue(q) {
-      const a = (await get(q.language)).atlas,
-        plan = launchPlan(a, q);
+      const a = (await get(q.language)).atlas;
+      let plan;
+      if (q.mode === 'story') {
+        const { solo } = await operations(q.language),
+          p = a.profiles.find(p => p.id === q.profile);
+        const { soloStories } = await import('../public/js/game/solostories.js');
+        const choice =
+          p &&
+          soloStories(p, solo[p.id])
+            .flatMap(g => g.choices)
+            .find(c => c.id === q.target && c.faction === q.faction && c.row === q.row && c.tech === q.tech);
+        if (!choice || !['easy', 'medium', 'hard'].includes(q.difficulty)) throw Error('Story start unavailable.');
+        plan = choice.native
+          ? {
+              profile: p.id,
+              revision: p.revision,
+              setup: {
+                mode: 'galactic',
+                campaign: choice.id,
+                faction: choice.faction,
+                difficulty: q.difficulty,
+                players: [],
+                teamFactions: []
+              }
+            }
+          : launchPlan(a, {
+              profile: p.id,
+              row: choice.row,
+              target: choice.id,
+              difficulty: q.difficulty,
+              settings: choice.tech == null ? {} : { tech: choice.tech }
+            });
+        plan.setup.menuFamily = 'story';
+      } else plan = launchPlan(a, q);
       for (const [k, t] of ticket) if (Date.now() > t.expires) ticket.delete(k);
       if (ticket.size >= 64) throw Error('Too many pending starts.');
       const key = randomUUID();

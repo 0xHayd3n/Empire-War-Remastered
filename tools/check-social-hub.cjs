@@ -69,6 +69,17 @@ const { chromium } = require('playwright-core'),
     await b.ctl('bell').click();
     await b.f.getByText('Friend code · ' + b.id).waitFor();
     console.log('Mobile drawer fits; reload preserved the device and friend.');
+    // Settings manages this same opted-in commander, without exposing the roster/invite workflow in-game.
+    await b.page.keyboard.press('Escape');
+    await b.ctl('cog').click(); await b.btn('Settings').click();
+    const settings = b.f.getByRole('dialog', { name: 'Settings', exact: true });
+    await settings.getByRole('tab', { name: 'Social' }).click();
+    await settings.getByText('Friend code · ' + b.id).waitFor();
+    await b.btn('Hide online status').click(); await b.btn('Show online status').click();
+    await b.btn('Hide online status').waitFor();
+    assert.equal(await settings.getByRole('button', { name: 'Join lobby' }).count(), 0);
+    await b.btn('Back').click(); await b.ctl('bell').click();
+    console.log('Settings shares commander identity and changes online visibility through the real relay.');
     // Exercise the actual pointer target and native room, not just whether an invite button exists.
     await a.page.keyboard.press('Escape');
     const g = a.page.frames().find(f => f.parentFrame() === a.page.mainFrame());
@@ -95,6 +106,7 @@ const { chromium } = require('playwright-core'),
       // The Universal shell owns the device identity, while the invitation is gated on the mounted data.
       await b.page.keyboard.press('Escape');
       await b.ctl('TITLE_CUSTOMIZE').click();
+      await b.f.getByRole('button', { name: 'Fleet registry', exact: true }).click();
       const profile = b.f.getByLabel('Mod profile');
       async function switchTo(target) {
         const current = b.page.frames().find(f => f.parentFrame() === b.page.mainFrame());
@@ -104,7 +116,7 @@ const { chromium } = require('playwright-core'),
         });
         await profile.selectOption(target);
         await ready;
-        await b.f.locator('.title-menu[data-section="customize"] .mode-back').click();
+        await b.f.locator('#ap-back').click();
         await b.ctl('bell').click();
         await b.f.getByText('Friend code · ' + b.id).waitFor();
       }
@@ -113,6 +125,7 @@ const { chromium } = require('playwright-core'),
       await b.f.getByText(/Open the matching build.*invitation stays here/).waitFor();
       await b.page.keyboard.press('Escape');
       await b.ctl('TITLE_CUSTOMIZE').click();
+      await b.f.getByRole('button', { name: 'Fleet registry', exact: true }).click();
       await switchTo('stock');
       await b.btn('Join lobby').waitFor();
       console.log('One Universal friend code across two mounts; incompatible era retained the unconsumed invitation.');

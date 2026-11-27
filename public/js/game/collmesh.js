@@ -23,6 +23,17 @@ export function collisionOf(model) {
   return meshSet(model, cache, mesh => mesh.collision && !/shield/i.test(mesh.name));
 }
 
+const weaponCache = new WeakMap();
+// Some Workshop exporters flag the COLLISIONBOX helper itself as collision
+// triangles. Don't union that coarse box with the precise hull it encloses.
+export function projectileHullOf(model) {
+  if (!model) return null;
+  if (weaponCache.has(model)) return weaponCache.get(model);
+  if (model.meshes.some(m=>m.collision && /^COLLISIONBOX$/i.test(m.name)))
+    return meshSet(model,weaponCache,m=>m.collision && !/shield/i.test(m.name) && !/^COLLISIONBOX$/i.test(m.name));
+  const h=collisionOf(model);weaponCache.set(model,h);return h;
+}
+
 const shapeCache = new WeakMap();
 
 export function shapeOf(model) {

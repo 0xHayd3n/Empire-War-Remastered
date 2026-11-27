@@ -17,6 +17,7 @@ import { EXTRA_FX_NAME, EXTRA_FX_TIP, extraFxOn, setExtraFx } from './extrafx.js
 import { windowSizes, pickWindowSize } from '../windowsize.js';
 import {
   ACTIONS,
+  bindingContext,
   MAX_KEYS,
   bindings,
   defaultBindings,
@@ -82,6 +83,9 @@ const checkBox = (id, x, y, w, h) => ({ kind: 'CONTROL', text: '', id, cls: 'But
 const FULLSCREEN_MOUSE_TIP =
   'Keeps the mouse inside the game so it cannot slip onto another monitor: in fullscreen, and in the desktop app in a window too. Esc or Alt+Tab frees it.';
 const EDGE_PAN_TIP = 'Moving the mouse against the edge of the screen pans the camera, in land and space strategy views and on the galaxy map. Move back toward the center to stop.';
+
+// Both menu presentations drive the same live inputs and tweak definitions.
+export { setInput, TWEAKS, TWEAK_SLIDERS, BATTLEFRONT, BATTLEFRONT_CHECKS };
 
 export class Menus {
   constructor(game) {
@@ -451,8 +455,7 @@ export class Menus {
         }
         const k = r.combo;
         if (!r.add && work[a.id].length === 1 && sameCombo(work[a.id][0], k)) return;
-        const own = id => id.startsWith('SHOOTER_');
-        const from = ACTIONS.find(o => o !== a && own(o.id) === own(a.id) && work[o.id].some(x => sameCombo(x, k)));
+        const from = ACTIONS.find(o => o !== a && bindingContext(o.id) === bindingContext(a.id) && work[o.id].some(x => sameCombo(x, k)));
         if (!from) {
           set(a, k, null, r.add);
           return;
@@ -657,6 +660,15 @@ export class Menus {
   }
 
   async options() {
+    if (document.querySelector('meta[name="swr-universal"]')) {
+      const below = this.stack.at(-1);
+      const { settingsPage } = await import('./universalsettings.js');
+      if (!below?.veil.isConnected || this.stack.at(-1) !== below) return;
+      const page = settingsPage(this.game, () => this.pop());
+      below.veil.style.display = 'none';
+      this.stack.push(page);
+      return;
+    }
     const def = (await loadDialogs())?.dialogs.get('IDD_IN_GAME_OPTIONS_DIALOG');
     const okC = def && def.controls.find(c => c.id === 'IDC_OK_IN_GAME');
     const above = okC && def.controls.filter(c => /^IDC_IN_GAME_OPTIONS_/.test(c.id) && c.y < okC.y).sort((a, b) => b.y - a.y)[0];

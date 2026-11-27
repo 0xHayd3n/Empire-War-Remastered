@@ -52,7 +52,7 @@ function transition(m) {
     if (m.action === 'end') uncover();
   }
 }
-async function enter(id, mode, ticket) {
+async function enter(id, mode, ticket, field, endorLook) {
   if (busy) return;
   busy = true;
   try {
@@ -67,6 +67,28 @@ async function enter(id, mode, ticket) {
         working('Opening the selected mod');
       }
     } else if (mode !== 'title') u.searchParams.set('universal-mode', mode);
+    if (field) {
+      u.searchParams.set('world',field.world); u.searchParams.set('domain',field.domain);
+      if (typeof field.file === 'string') u.searchParams.set('field-map', field.file.slice(0, 260));
+      if(field.query) u.searchParams.set('field-search',String(field.query).slice(0,150));
+      if (['skirmish','instant'].includes(mode) && field.draft) {
+        const draft = JSON.stringify(field.draft);
+        if (draft.length > 4096) throw Error('This setup is too large to transfer. Reduce the number of fleets or unit types before switching mods.');
+        u.searchParams.set('field-draft', draft);
+      }
+    }
+    // Keep the existing battle-realism handoff for older profile frames.
+    try {
+      const realism = localStorage.getItem('universal-battle-realism');
+      if (['custom','on','off'].includes(realism)) u.searchParams.set('universal-realism', realism);
+    } catch {}
+    if(id==='stock' && ['ultra','showers','original'].includes(endorLook)){
+      u.searchParams.set('endor-presentation',endorLook==='showers'?'ultra':endorLook);
+      if(endorLook==='showers')u.searchParams.set('endor-forecast','showers');
+    }
+    if(id==='stock' && /^(yavin|tatooine|hoth|geonosis|naboo|utapau)-(remaster|original)$/.test(endorLook)){const [planet,mode]=endorLook.split('-');u.searchParams.set(planet+'-presentation',mode==='remaster'?'ultra':'original');}
+    if (id === 'stock' && ['vehicle-wrecks', 'infantry-ragdolls', 'combined-arms', 'ground-offensive'].includes(endorLook))
+      u.searchParams.set('wreck-battle', endorLook === 'vehicle-wrecks' ? 'armor' : endorLook === 'combined-arms' ? 'combined' : endorLook === 'ground-offensive' ? 'offensive' : 'infantry');
     current = u.origin;
     currentProfile = id;
     veil.hidden = true;
@@ -78,7 +100,7 @@ async function enter(id, mode, ticket) {
     else {
       status.textContent = e.message;
       retry.hidden = false;
-      retry.onclick = () => enter('stock', 'title');
+      retry.onclick = () => enter(id,mode,ticket,field,endorLook);
     }
   } finally {
     busy = false;
@@ -87,6 +109,27 @@ async function enter(id, mode, ticket) {
 addEventListener('message', e => {
   const m = e.data;
   if (!current || e.source !== frame.contentWindow || e.origin !== current) return;
+  if (m?.kind === 'read-player-preferences' || m?.kind === 'save-player-preferences') {
+    // A private launcher record, never a request to read or write an arbitrary storage key.
+    // Read the current record for each merge so another tab's unrelated edit survives.
+    const key = 'universal-player-preferences-v1';
+    let values = Object.create(null);
+    try { Object.assign(values, JSON.parse(localStorage.getItem(key) || '{}')); } catch {}
+    if (m.kind === 'read-player-preferences') {
+      frame.contentWindow.postMessage({kind:'player-preferences',request:m.request,values}, current);
+    } else if (m.patch && typeof m.patch === 'object') {
+      for (const [id,v] of Object.entries(m.patch)) {
+        if (/^swr[-.][\w-]{1,80}(\/[\w-]{1,80})?$/.test(id) && (v === null || typeof v === 'string' && v.length <= 2048)) values[id] = v;
+      }
+      const json = JSON.stringify(values);
+      if (json.length <= 65536) try { localStorage.setItem(key,json); } catch {}
+    }
+    return;
+  }
+  if (m?.kind === 'universal-battle-realism' && ['custom','on','off'].includes(m.mode)) {
+    try { localStorage.setItem('universal-battle-realism', m.mode); } catch {}
+    return;
+  }
   if (m?.kind === 'universal-social-device' && /^[a-f0-9-]{36}$/.test(m.request)) {
     try {
       const token=deviceKey(m.relay,m.create===true);
@@ -108,7 +151,9 @@ addEventListener('message', e => {
   }
   if (typeof m?.id !== 'string' || !/^(stock|\d+)$/.test(m.id)) return;
   if (m.kind === 'universal-start' && typeof m.ticket === 'string' && /^[a-f0-9-]{36}$/.test(m.ticket)) enter(m.id, 'conquest', m.ticket);
+  else if (m.kind === 'universal-field' && ['instant','skirmish'].includes(m.mode) && ['land','space'].includes(m.domain) && typeof m.world === 'string' && m.world.length<=256) enter(m.id,m.mode,null,m);
   else if (m.kind === 'universal-select' && ['title', 'modes', 'customize', 'campaigns', 'profile-play', 'conquest', 'story', 'skirmish', 'instant', 'continue', 'load', 'load-conquest', 'load-story', 'load-skirmish', 'load-instant', 'load-tutorial'].includes(m.mode))
     enter(m.id, m.mode);
 });
-enter('stock', 'title');
+const play=location.hash.slice(1);
+enter('stock','title',null,null,['vehicle-wrecks','infantry-ragdolls','combined-arms','ground-offensive'].includes(play) || /^(yavin|tatooine|hoth|geonosis|naboo|utapau)-(remaster|original)$/.test(play)?play:play==='endor-showers'?'showers':play==='endor-ultra'?'ultra':play==='endor-original'?'original':null);

@@ -825,10 +825,13 @@ export class GalacticAI {
       c.player.creditMultiplier = c.adjustment?.credit ?? 1;
     }
   }
-  static async create(game) {
+  static prepareBrain() {
+    return readBrain(['BasicGalacticEquations'], []);
+  }
+  static async create(game, brain) {
     const ai = new GalacticAI(game);
     game.ai = ai;
-    await ai.initialize();
+    await ai.initialize(brain);
     return ai;
   }
   constructor(game) {
@@ -857,8 +860,8 @@ export class GalacticAI {
     this.bonuses = [];
     this.freeStores = new Map();
   }
-  async initialize() {
-    this.shared = await readBrain(['BasicGalacticEquations'], []);
+  async initialize(brain) {
+    this.shared = brain || await GalacticAI.prepareBrain();
     this.neighbours = galacticNeighbours(this.game.galaxy);
     const types = await aiPlayerTypes();
     await Promise.all(types.map(type => this.profile(type.name)));

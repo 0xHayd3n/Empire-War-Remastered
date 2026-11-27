@@ -1,6 +1,6 @@
 // The grid is a lookup accelerator, not the collision boundary: a fraction-of-a-pixel
 // pan across a cell edge should not swap two labels that actually fit side by side.
-function nameGrid(w, h) {
+export function nameGrid(w, h) {
   const cols = Math.ceil(w / 32),
     rows = Math.ceil(h / 32),
     bins = [];

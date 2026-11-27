@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { instanceable, skinBatchable, fleetLodMeshes } from '../model.js';
-import { distantFleetHull } from './fleet-lod.js';
+import { instanceable, skinBatchable } from '../model.js';
+import { worldDiameter } from './land-detail.js';
+import { detailPoolKey, splitDetailBatch, releaseDetailColor } from './model-detail.js';
 const tryFleetLod = typeof location !== 'undefined' && new URLSearchParams(location.search).get('fleetlod') === '1';
 import { CollectJobs } from './collectjobs.js';
 
@@ -36,7 +37,7 @@ export class Instances {
 
   constructor(scene) {
     this.scene = scene;
-    this.fleetLod = tryFleetLod;
+    this.fleetLod = tryFleetLod || undefined; // Explicit benchmark overrides take precedence over the profile.
     this.pools = new Map();
     this.list = [];
     this.units = new Set();
@@ -53,7 +54,8 @@ export class Instances {
   poolFor(mesh, skinned = false) {
     let byGeo = this.pools.get(mesh.material);
     if (!byGeo) this.pools.set(mesh.material, (byGeo = new Map()));
-    let p = byGeo.get(mesh.geometry);
+    const key = detailPoolKey(mesh.geometry,mesh.detailHigh);
+    let p = byGeo.get(key);
     if (!p) {
       let mat = mesh.material;
       if (skinned) {
@@ -64,6 +66,7 @@ export class Instances {
       }
       p = {
         src: mesh.geometry,
+        high: mesh.detailHigh,
         mat,
         skinned,
         rows: skinned ? [] : null,
@@ -75,7 +78,7 @@ export class Instances {
         tint: null
       };
       this.size(p, 8);
-      byGeo.set(mesh.geometry, p);
+      byGeo.set(key, p);
       this.list.push(p);
       if (skinned) {
         const im = p.im;
@@ -149,10 +152,12 @@ export class Instances {
     im.renderOrder = p.order;
     im.count = 0;
     im.visible = false;
+    if (p.high) splitDetailBatch(im,p.high);
     if (old) {
       im.instanceMatrix.array.set(old.instanceMatrix.array);
       tint.array.set(oldTint.array);
       this.scene.remove(old);
+      releaseDetailColor(old);
       for (const k in old.geometry.attributes) if (k !== 'instanceTint') old.geometry.deleteAttribute(k);
       old.geometry.setIndex(null);
       old.geometry.dispose();
@@ -181,7 +186,7 @@ export class Instances {
       this.known.add(o);
       const e = { mesh: o, mat: o.material, pool: null, skin: null, local: new THREE.Matrix4().multiplyMatrices(_inv, o.matrixWorld) };
       if (instanceable.has(o.material)) {
-        e.pool = this.poolFor(o);
+        e.pool = this.poolFor(o.geometry.battleSource ? {material:o.material,geometry:o.geometry.battleSource,renderOrder:o.renderOrder} : o);
         this.taken.add(o);
         o.layers.set(HIDDEN);
       } else if (this.gpu && skinBatchable.has(o.material)) {
@@ -220,7 +225,7 @@ export class Instances {
     u.obj.userData.ship = false;
   }
 
-  collect(units, cam) {
+  collect(units, cam, surfaces) {
     const stamp = ++this.stamp,
       scene = this.scene,
       put = this.put;
@@ -228,7 +233,7 @@ export class Instances {
     for (const p of this.list) p.n = 0;
     if (this.jobs?.broken) this.jobs = null;
     const J = this.jobs;
-    const focalHeight = this.fleetLod && !this.gpu && cam.isPerspectiveCamera && this.renderer?.domElement?.height * cam.projectionMatrix.elements[5];
+    const detail = this.fleetLod !== false && this.detail;
     if (J) J.begin();
     let drawn = 0;
     for (const u of units) {
@@ -264,14 +269,10 @@ export class Instances {
       if (whole) obj.updateWorldMatrix(obj.parent !== scene, true);
       else obj.matrixWorld.copy(obj.matrix);
       if (!inView) continue;
-      let alternate = null;
-      if (focalHeight && u.isFighter && u.model && !u.hyper && !u.construction) {
-        const view = cam.matrixWorldInverse.elements;
-        const depth = -(view[2]*u.x + view[6]*u.y + view[10]*(u.z || 0) + view[14]);
-        const radius = Math.max(u.visualRadius, (u.model.drawRadius || 0) * Math.abs(u.obj.scale.x));
-        u.instFar = distantFleetHull(u.instFar, radius, depth, focalHeight);
-        if (u.instFar) alternate = fleetLodMeshes(u.model);
-      }
+      // Deferred collection may not update every child matrix. Use the whole
+      // ship's conservative footprint: all hull panels and turrets agree.
+      const pixels = detail && worldDiameter(cam,this.displayHeight,u.x,u.y,u.z || 0,
+        Math.max(u.visualRadius || 0,(u.model?.drawRadius || 0)*obj.matrixWorld.getMaxScaleOnAxis()));
       let tr = 0,
         tg = 0,
         tb = 0,
@@ -296,17 +297,17 @@ export class Instances {
       }
       let rest = 0,
         uk = -1;
-      const defer0 = !!J && !whole && !u.casters;
+      const defer0 = !!J && !whole && !u.casters, surface = surfaces?.get(u);
       for (let i = 0; i < list.length; i++) {
         const e = list[i],
           m = e.mesh;
-        if (e.pool && m.geometry !== e.pool.src) {
+        if (e.pool && m.geometry !== e.pool.src && m.geometry.battleSource !== e.pool.src) {
           m.layers.set(0);
           this.taken.delete(m);
           e.pool = null;
           e.skin = null;
         }
-        const away = !!e.pool && m.material !== e.mat;
+        const away = !!e.pool && (m.material !== e.mat || !!m.geometry.battleSource);
         if (away !== !!e.away) {
           e.away = away;
           if (away) {
@@ -333,13 +334,19 @@ export class Instances {
         while (o && o !== obj && o.visible) o = o.parent;
         if (o !== obj) continue;
         let p = e.pool;
+        if (surface && surface.mesh === m && p && !away && !e.skin && !fading)
+          p = this.poolFor({material:surface.mat,geometry:m.geometry,renderOrder:m.renderOrder});
         if (fading && p && !e.skin && !p.mat.transparent) {
           const f = (e.fpool ||= this.fadePool(p));
           if (f.ready) p = f;
         }
-        if (alternate?.size && p && !e.skin && !away && !fading && p.src === m.geometry) {
-          const geo = alternate.get(m);
-          if (geo) p = e.farPool ||= this.poolFor({ material:m.material, geometry:geo, renderOrder:m.renderOrder });
+        if (detail && p === e.pool && p && !away && !fading && !u.hyper && !u.construction) {
+          const geo = detail.pick(m,cam,this.displayHeight,pixels);
+          if (geo !== m.geometry) {
+            if (e.detailPool?.src !== geo || e.detailPool.high !== m.geometry)
+              e.detailPool = this.poolFor({ material:m.material, geometry:geo, detailHigh:m.geometry, renderOrder:m.renderOrder },!!e.skin);
+            if (e.detailPool.ready) p = e.detailPool;
+          }
         }
         const pooled = !!p && !away && !(e.skin && !this.taken.has(m)),
           defer = defer0 && pooled;

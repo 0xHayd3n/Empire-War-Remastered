@@ -47,7 +47,8 @@ struct VOut { @builtin(position) pos: vec4f, @location(0) vUv: vec2f }
   c = (c - 0.5) * D.contrast + 0.5;
   c *= D.tint;
   c *= 1.0 - D.vignette * smoothstep(0.3, 0.85, r);
-  return vec4f(clamp(c, vec3f(0.0), vec3f(1.0)), 1.0);
+  // UNORM still clamps on SDR. On the float target keep graded highlights for the display transform.
+  return vec4f(max(c, vec3f(0.0)), 1.0);
 }`
 });
 

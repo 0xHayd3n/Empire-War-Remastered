@@ -18,7 +18,14 @@ dialog.uc-atlas {
   font: 400 15px/1.35 var(--ui-font);
   text-align: left;
 }
-dialog.uc-atlas[open] {
+.uc-opening-size {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  visibility: hidden;
+  pointer-events: none;
+}
+dialog.uc-atlas[open], .uc-opening-size[data-kind='conquest'] {
   display: grid;
   grid-template-columns: minmax(0, 1fr) clamp(300px, 29vw, 420px);
 }
@@ -194,14 +201,57 @@ dialog.uc-atlas[open] {
   background: #242729;
   color: #eceeef;
 }
-.uc-panel h1 {
-  padding: 18px 18px 14px;
+.uc-map-heading {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  max-width: calc(100% - 16px);
+  margin: 8px;
+  padding-right: 12px;
+  background: linear-gradient(90deg, #0a101aeb, #0a101ac7 82%, transparent);
+  pointer-events: none;
+}
+:is(.uc-atlas, .op-setup, #instantBattle.op-setup) .uc-map-heading h1 {
   margin: 0;
-  border-bottom: 1px solid #ffffff21;
-  font: 500 clamp(23px, 1.85vw, 32px) / 1.2 var(--ui-font);
+  padding: 0;
+  border: 0;
+  color: #f4f2ec;
+  font: 500 clamp(20px, 1.9vw, 31px) / 1.16 var(--ui-font);
   letter-spacing: 0;
   text-transform: none;
-  color: inherit;
+  text-shadow: 0 1px 3px #000;
+}
+.uc-map-back {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  color: #f4f2ec;
+  background: transparent;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.uc-map-back::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border: solid currentColor;
+  border-width: 0 0 2px 2px;
+  transform: translateX(2px) rotate(45deg);
+}
+.uc-map-back:hover {
+  background: #ffffff1c;
+}
+.uc-map-heading ~ .uc-context-note:not([hidden]) {
+  position: relative;
+  top: auto;
+  left: 8px;
 }
 .uc-content {
   overflow-y: auto;
@@ -794,6 +844,10 @@ dialog.uc-atlas[open] {
   overflow-wrap: anywhere;
   text-shadow: 0 1px 2px #000;
 }
+.uc-cards .uc-choice:has(input:disabled), .uc-cards input:disabled { cursor:not-allowed; }
+.uc-cards input:disabled + .uc-face { filter:grayscale(1); background:#23272a; border-color:#ffffff1c; }
+.uc-cards input:disabled + .uc-face :is(.uc-crest,.uc-portrait) { opacity:.36; }
+.uc-cards .uc-locked-note { display:block; margin-top:3px; font-size:11px; font-weight:400; color:#c2c6c8; }
 .uc-cards input:checked + .uc-face {
   border-color: #ffd779;
   box-shadow:
@@ -911,16 +965,12 @@ dialog.uc-atlas[open] {
   outline-offset: 1px;
 }
 @media (max-width: 650px) {
-  dialog.uc-atlas[open] {
+  dialog.uc-atlas[open], .uc-opening-size[data-kind='conquest'] {
     grid-template-columns: minmax(0, 1fr) clamp(138px, 42vw, 245px);
   }
   .uc-fields,
-  .uc-panel footer,
-  .uc-panel h1 {
+  .uc-panel footer {
     padding: 10px;
-  }
-  .uc-panel h1 {
-    font-size: 20px;
   }
   .uc-era-strip {
     display: grid;

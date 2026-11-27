@@ -1,0 +1,38 @@
+[
+  {
+    "pack": "hoth-ground",
+    "id": "wind-snow",
+    "asset": "snow_02",
+    "role": "soil",
+    "tileMeters": 2.0,
+    "colorHash": "64a3bcac04b496f1a661a0a2958fd86d70c1061f46a0ca856a6ada91adaba199",
+    "surfaceHash": "a8a10aa440219b1d17a8f191f9837bfc2a43471192901fe2fc5a097ec316950b"
+  },
+  {
+    "pack": "hoth-ground",
+    "id": "tracked-firn",
+    "asset": "snow_01",
+    "role": "sand",
+    "tileMeters": 2.0,
+    "colorHash": "d34bee5b530c0b65948335317927629b4b43fdebbc9e776104bcdfaac770208b",
+    "surfaceHash": "9bb7c5aa47b015b97a3cb94d12bdc3ca57efda0fc3a20d5716c7a622fc96f68c"
+  },
+  {
+    "pack": "hoth-ground",
+    "id": "frost-rubble",
+    "asset": "rocks_ground_05",
+    "role": "rock",
+    "tileMeters": 3.0,
+    "colorHash": "3248fd4b0f77189b70b44ddfcf2582211b72b4c3f5a45fe238dba9354e4ccc48",
+    "surfaceHash": "946b693c4a0cf177b74225fe117d2b8a18d52993a61a81bc155f7dfcd0159384"
+  },
+  {
+    "pack": "hoth-ground",
+    "id": "glacial-bedrock",
+    "asset": "dark_rock_02",
+    "role": "rock",
+    "tileMeters": 2.0,
+    "colorHash": "db72b33a2534b2947309e5a0c9fb6006568468306be330272915ac2734fa11d5",
+    "surfaceHash": "1020b79acd97ae8cd66e6296552391ef7bc402670565aa235c2cfe986c0c1b19"
+  }
+]

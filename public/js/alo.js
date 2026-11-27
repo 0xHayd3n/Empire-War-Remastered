@@ -206,8 +206,18 @@ export function loadALO(name) {
   const key = modelStem(name);
   let p = models.get(key);
   if (!p) {
-    p = fetchModelBytes(name).then(buf => (buf ? diag.task('model ' + name, () => parseALO(buf)) : null));
+    p = fetchModelBytes(name).then(buf => buf ? diag.task('model ' + name, () => {
+      const model=parseALO(buf), scope=/^UXA(?:stock|\d+)_(?:stock|[0-9a-f]{64})__/i.exec(name)?.[0];
+      if(scope) for(const mesh of model.meshes)for(const sub of mesh.subs){const params=sub.material?.params||{};for(const [k,v]of Object.entries(params))if(typeof v==='string'&&v&&!v.startsWith(scope))params[k]=scope+v.replace(/^.*[\\/]/,'');}
+      return model;
+    }) : null);
     models.set(key, p);
+    // Scoped gallery/detachment art is revision-pinned. A frame remount or
+    // transient asset error must not turn that verified model into a session-long miss.
+    if (/^UXA(?:STOCK|\d+)_/.test(key)) {
+      const forget = () => { if (models.get(key) === p) models.delete(key); };
+      p.then(model => { if (!model) forget(); }, forget);
+    }
   }
   return p;
 }

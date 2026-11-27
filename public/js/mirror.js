@@ -443,10 +443,11 @@ export class MirrorRenderer {
     });
   }
 
-  gpuEnv(lighting, sources) {
-    const ids = {};
+  gpuEnv(lighting, sources, blasts = {}) {
+    const ids = {}, blastIds = {};
+    for (const k in blasts) blastIds[k] = this.uni(blasts[k]);
     for (const k in lighting) ids[k] = this.uni(lighting[k]);
-    this.ops.push(['gpuEnv', ids, { ...sources }]);
+    this.ops.push(['gpuEnv', ids, { ...sources }, blastIds]);
   }
   drawnUpTo() {
     return this.done ? Atomics.load(this.done, 0) : this.frameNo - this.pending;

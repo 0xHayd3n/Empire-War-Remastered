@@ -5,6 +5,7 @@ import { UNIT, SHOT, POINT, ABILITY, beamFromMessage } from './spacerecord.js';
 import { battleSnapshot } from './spaceprobe.js';
 import { TURN } from './netgame.js';
 import { pageOverlay } from '../vfs.js';
+import { activeLanguage } from '../language.js';
 
 const TICK = 1 / 30,
   LAG = 1.5 * TICK,
@@ -35,7 +36,16 @@ export class SpaceMirror {
     this.warned = new Set();
   }
 
-  constructor(game, loaded = null) {
+  static prepare(scripts) {
+    const worker = new Worker(new URL('./spacebattleworker.js', import.meta.url), { type: 'module' });
+    const pending = { worker, language: activeLanguage };
+    worker.onmessage = ({data}) => { if (data.k === 'vfs') SpaceMirror.answerFile(worker, data); };
+    worker.onerror = () => { pending.failed = true; };
+    worker.postMessage({ k:'prepare', base:new URL('.', location.href).href, language:activeLanguage, universalProfile:db.universalProfile, scripts });
+    return pending;
+  }
+
+  constructor(game, loaded = null, pending = null) {
     this.init(game);
     const w = this.world;
     const start = battleSnapshot(game, loaded && loaded.save, loaded && loaded.refs);
@@ -47,7 +57,9 @@ export class SpaceMirror {
       for (const f of q.fighters) page.set(f.id, f);
     }
     for (const u of w.units) page.set(u.id, u);
-    this.worker = new Worker(new URL('./spacebattleworker.js', import.meta.url), { type: 'module' });
+    if (pending && (pending.failed || pending.language !== start.language)) { pending.worker.terminate(); pending = null; }
+    this.worker = pending?.worker || new Worker(new URL('./spacebattleworker.js', import.meta.url), { type: 'module' });
+    this.whenReady = new Promise((resolve, reject) => { this.onReady = resolve; this.onStartupError = reject; });
     this.worker.onmessage = e => {
       const m = e.data;
       if (m.k === 'ready') {
@@ -57,6 +69,8 @@ export class SpaceMirror {
         }
         this.ready = true;
         this.setupMs = m.ms;
+        this.ramRule = m.ramRule;
+        this.battlePhysicsRule = m.battlePhysicsRule;
         this.scriptsFrom = m.scriptsFrom;
         this.onReady();
       } else if (m.k === 'step') {
@@ -80,7 +94,7 @@ export class SpaceMirror {
         s?.res(m);
       } else if (m.k === 'replayed') game.replayFinished?.(m);
       else if (m.k === 'result') game.commandResult(m.cmd, { why: m.why });
-      else if (m.k === 'vfs') this.answerFile(m);
+      else if (m.k === 'vfs') SpaceMirror.answerFile(this.worker, m);
       else if (m.k === 'spawnJobs') {
         for (let i = 0; i < m.n; i++) {
           const wk = new Worker(new URL('./jobworker.js', import.meta.url), { type: 'module' });
@@ -93,18 +107,23 @@ export class SpaceMirror {
         wk.onerror = e => console.error('route thread', e.message);
         wk.postMessage({ kind: 'port', port: m.port }, [m.port]);
         this.jobWorkers.push(wk);
-      } else if (m.ok === false) console.error('space worker:', m.error);
+      } else if (m.ok === false) {
+        console.error('space worker:', m.error);
+        this.onStartupError(Error(m.error));
+      }
     };
-    this.worker.onerror = e => console.error('space worker', e.message);
+    this.worker.onerror = e => { console.error('space worker', e.message); this.onStartupError(Error(e.message)); };
     this.worker.postMessage({
       ...start,
       k: 'run',
+      // Damage is decided by the worker. The mirror never runs its own ram check.
+      ramRule: game.setup.ramRule,
+      battlePhysicsRule: game.setup.battlePhysicsRule,
+      // Forward visual impact coordinates only if the page has a consumer.
+      presentArmorHits: !!w.presentArmorHits,
       base: new URL('.', location.href).href,
       nojobs: new URLSearchParams(location.search).has('nojobs'),
       pageroutes: new URLSearchParams(location.search).has('pageroutes')
-    });
-    this.whenReady = new Promise(res => {
-      this.onReady = res;
     });
     game.execute = (pid, cmd) => {
       this.pending.push([pid, this.ours(cmd)]);
@@ -120,7 +139,7 @@ export class SpaceMirror {
     };
   }
 
-  async answerFile(m) {
+  static async answerFile(worker, m) {
     let result;
     try {
       const o = await pageOverlay();
@@ -131,7 +150,7 @@ export class SpaceMirror {
     }
     if (result instanceof ArrayBuffer) result = result.slice(0);
     else if (ArrayBuffer.isView(result)) result = result.slice().buffer;
-    this.worker.postMessage({ k: 'vfsr', id: m.id, result }, result instanceof ArrayBuffer ? [result] : []);
+    worker.postMessage({ k: 'vfsr', id: m.id, result }, result instanceof ArrayBuffer ? [result] : []);
   }
 
   save(name = '') {
@@ -369,6 +388,7 @@ export class SpaceMirror {
       e.scriptHidden = !!v[6];
       if (v[7]) e.maxHealth = v[7];
       if (v[8] || e.maxShield) e.maxShield = v[8];
+      if (v.length > 12) e.startingPlaced = v[12];
       e.order = order(v[9]);
       e.queue = v[10].length ? v[10].map(order) : undefined;
       const t = v[11] && this.byW.get(v[11][0]);

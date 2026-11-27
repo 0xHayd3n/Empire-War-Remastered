@@ -294,7 +294,7 @@ export class TroopBay {
     const t = db.type(typeName);
     if (!t) return null;
     const file = t.str('Land_Model_Name'),
-      inst = file && (await loadModel(file, { teamColor: this.world.teamColorFor(this.side, t) }).catch(() => null));
+      inst = file && (await loadModel(file, { teamColor: this.world.teamColorFor(this.side, t), livery: this.world.liveryFor?.(this.side) ?? null }).catch(() => null));
     if (!inst) return null;
     const holder = new THREE.Group();
     holder.add(inst.root);

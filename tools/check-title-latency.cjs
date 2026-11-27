@@ -77,6 +77,7 @@ const { chromium } = require('playwright-core');
     for (let i = 0; i < 4; i++) {
       if (i) await visit(i % 2 ? 'TITLE_PLAY' : 'TITLE_WORKSHOP');
       await visit('TITLE_CUSTOMIZE');
+      await f.getByRole('button', { name: 'Fleet registry', exact: true }).click();
       const canvas = f.locator('armory-live-stage canvas:visible');
       await canvas.waitFor({ timeout: 12000 }).catch(async e => {
         console.error({
@@ -111,6 +112,7 @@ const { chromium } = require('playwright-core');
     const warmed = await ctl('TITLE_CUSTOMIZE').evaluate(() => ({ workers: armoryTiming.workers, assets: armoryTiming.assets }));
     assert.equal(warmed.assets, reports.at(-1).assets);
     await visit('TITLE_CUSTOMIZE');
+    await f.getByRole('button', { name: 'Fleet registry', exact: true }).click();
     await f.locator('armory-live-stage canvas:visible').waitFor({ timeout: 12000 });
     assert.deepEqual(
       await ctl('TITLE_CUSTOMIZE').evaluate(() => ({ workers: armoryTiming.workers, assets: armoryTiming.assets })),

@@ -86,10 +86,10 @@ export function portraitBank(repaint) {
   c.fill();
   return {
     load,
-    keep(keys) {
+    keep(keys, limit = 4) {
       return new Map(
         [...new Set(keys)]
-          .slice(0, 4)
+          .slice(0, limit)
           .map(k => [k, pages.get(k)?.img])
           .filter(([, img]) => img)
       );

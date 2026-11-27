@@ -1,5 +1,7 @@
 import { db } from '../gamedata.js';
 
+import { reading } from './readingpreferences.js';
+
 export class TooltipGate {
   constructor(game, encyclopedia) {
     this.game = game;
@@ -27,7 +29,7 @@ export class TooltipGate {
     return this.game.delayTooltips;
   }
   get delay() {
-    return this.delayed ? db.constants.num('Long_Encyclopedia_Delay', 4000) : db.constants.num('Encyclopedia_Delay', 750);
+    return reading.tooltip * (this.delayed ? db.constants.num('Long_Encyclopedia_Delay', 4000) : db.constants.num('Encyclopedia_Delay', 750));
   }
   get rate() {
     return db.constants.num('Encyclopedia_Fade_Rate', 4);

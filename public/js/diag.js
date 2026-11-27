@@ -7,6 +7,7 @@ export class Diag {
     this.counts = new Map();
     this.hitches = [];
     this.recent = new Float32Array(RING);
+    this.ordered = new Float32Array(RING);
     this.ri = 0;
     this.filled = 0;
     this.frameStart = 0;
@@ -122,8 +123,39 @@ export class Diag {
   median() {
     const n = this.filled;
     if (n < 30) return n ? 16.7 : 0;
-    const a = Array.from(this.recent.subarray(0, n)).sort((x, y) => x - y);
-    return a[n >> 1];
+    return this.ordered[n >> 1];
+  }
+
+  // Every frame needs the exact rolling median for hitch attribution. Update
+  // its sorted window in place rather than allocating and sorting 240 samples.
+  sample(interval) {
+    const a = this.ordered, n = this.filled, full = n === RING;
+    const lower = (value, end) => {
+      let lo = 0;
+      while (lo < end) {
+        const mid = (lo + end) >>> 1;
+        if (a[mid] < value) lo = mid + 1;
+        else end = mid;
+      }
+      return lo;
+    };
+    const value = Math.fround(interval);
+    if (full) {
+      const old = this.recent[this.ri];
+      if (old !== value) {
+        const from = lower(old, n), to = lower(value, n) - Number(old < value);
+        if (from < to) a.copyWithin(from, from + 1, to + 1);
+        else if (to < from) a.copyWithin(to + 1, to, from);
+        a[to] = value;
+      }
+    } else {
+      const at = lower(value, n);
+      a.copyWithin(at + 1, at, n);
+      a[at] = value;
+      this.filled++;
+    }
+    this.recent[this.ri] = value;
+    this.ri = (this.ri + 1) % RING;
   }
 
   end() {
@@ -143,9 +175,7 @@ export class Diag {
         this.slow.frames++;
       }
       for (const [k, v] of this.stages) this.total.set(k, (this.total.get(k) || 0) + v);
-      this.recent[this.ri] = iv;
-      this.ri = (this.ri + 1) % RING;
-      this.filled = Math.min(RING, this.filled + 1);
+      this.sample(iv);
     }
     const i = this.info,
       p = this.prev;

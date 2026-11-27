@@ -1,7 +1,12 @@
+import { campaignFactionCards } from './campaignfactions.js';
+import { conditionNames, conditionPrefs, eligibleConditions } from './startingconditions.js';
+import { openingDefaults } from './openingpreferences.js';
+import {startingDifficulty} from './battledrafts.js';
 import { activeLanguage } from '../language.js';
 import { appearances, appearanceEligible } from './appearancechoices.js';
 import { canonEligible, fractalEligible, envoyStart, equalFootingStart } from './universaleligibility.js';
 import { ruleFields, rescueCampaign } from './universalrules.js';
+import { campaignFields, campaignPreferences, eligibleCampaignPreferences } from './campaignpreferences.js';
 import { ruleChoices, rulePresets } from './universalrulemenu.js';
 import { eraTimeline, periodOf, startWithin } from './universaltimeline.js';
 import { mapStart, techCalendar } from './universalmaplist.js';
@@ -37,9 +42,16 @@ export function campaignLibrary(language = activeLanguage) {
     );
   return cached.get(language);
 }
+export function campaignOpening(data, origin) {
+  const eras = eraTimeline(data), families = e => e.periods.flatMap(period => [...period.maps.keys()]);
+  const era = eras.find(e => families(e).some(f => f.p.id === origin)) || eras.find(e => e.first) || eras.find(e => e.views.length);
+  const initial = era?.first && (families(era).find(f => f.p.id === origin) || era.first);
+  return { eras, era, initial };
+}
 export async function openUniversalCampaign({ start, back, profileId = 'stock', host }) {
   const origin = profileId || 'stock',
-    language = activeLanguage;
+    language = activeLanguage,
+    preferred = campaignPreferences(), touched = new Set(), preferredConditions=conditionPrefs(), editedConditions=new Set();
   let data,
     p,
     row,
@@ -69,7 +81,9 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     () => {
       if (!busy && row) {
         defaults();
-        choose(family, mapStart(family, null, faction));
+        difficulty = 'medium'; // Reset to the game's standard difficulty for this start.
+        for (const k of Object.keys(campaignFields)) touched.add(k); // Reset means authored defaults, not the stored preselection.
+        choose(family, mapStart(family, null, faction), true);
       }
     }
   );
@@ -117,15 +131,17 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     }
   }
   function defaults() {
-    difficulty = 'medium';
+    touched.clear();
+    difficulty = startingDifficulty();
     options = {};
     customMix = null;
     settings = {};
   }
-  function choose(next, selection) {
+  function choose(next, selection, reset = false) {
     const s = selection.choice;
     if (next.p !== p) defaults();
     if (s.row !== row) {
+      editedConditions.clear();
       settings = {};
       if (!s.row.customOpening || !row?.customOpening) delete options.opening;
       if (s.row.scripted) delete options.payAsYouGo;
@@ -144,6 +160,9 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
       delete options.heroRescue;
       if (s.row.scripted || !next.p.combat?.transport?.allowed.includes(s.variant?.id)) delete options.transportLosses;
     }
+    if (!reset && s.variant && (next.p !== p || s.row !== row || s.variant !== v)) {
+      Object.assign(options, openingDefaults(next.p, s.row, s.variant));
+    }
     family = next;
     p = next.p;
     date = selection.date;
@@ -151,6 +170,17 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     row = s.row;
     faction = row.faction;
     v = s.variant;
+    const eligible = eligibleCampaignPreferences(data.profiles, p, row, v, preferred);
+    for (const k of Object.keys(preferred)) if (!touched.has(k)) {
+      if (Object.hasOwn(eligible,k)) options[k]=eligible[k];
+      else delete options[k];
+    }
+    const conditions = v ? eligibleConditions(p,row,date,preferredConditions) : {};
+    for(const k of Object.keys(conditionNames)) {
+      if(reset) editedConditions.add(k);
+      if(editedConditions.has(k))continue;
+      if(Object.hasOwn(conditions,k)) settings[k]=conditions[k]; else delete settings[k];
+    }
     if (row.defaultFtguYear && date.year === row.defaultFtguYear) delete settings.credits;
     if (techCalendar(p, row)) {
       if (s.tech === undefined) delete settings.tech;
@@ -203,7 +233,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
       value => {
         const a = ps.find(e => e.key === value);
         if (a) {
-          for (const k of Object.keys(ruleFields)) delete options[k];
+          for (const k of Object.keys(ruleFields)) { touched.add(k); delete options[k]; }
           Object.assign(options, a.options);
           drawRules();
         }
@@ -219,6 +249,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
         choices,
         options[k] ?? '',
         value => {
+          touched.add(k);
           if (value === '') delete options[k];
           else options[k] = +value;
           drawRules();
@@ -236,6 +267,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
         [opt('', `Campaign default · ${terms(native)}`), opt('alternate', `${terms(!native)} · ${source}`)],
         options.payAsYouGo === undefined ? '' : 'alternate',
         value => {
+          touched.add('payAsYouGo');
           if (value) options.payAsYouGo = !native;
           else delete options.payAsYouGo;
         }
@@ -254,6 +286,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
         [opt('', `Campaign default · ${percent(t.native)}`), ...[...terms].map(([n, name]) => opt(String(n), `${percent(n)} · ${name}`))],
         String(options.transportLosses ?? ''),
         value => {
+          touched.add('transportLosses');
           if (value === '') delete options.transportLosses;
           else options.transportLosses = +value;
         }
@@ -270,6 +303,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
         ],
         options.buildTime ? 'alternate' : '',
         value => {
+          touched.add('buildTime');
           if (value) options.buildTime = altTime.buildTime.native;
           else delete options.buildTime;
         }
@@ -427,7 +461,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     ui.radios(
       'faction',
       'Faction',
-      date.choices.map(s => ({ value: s.row.faction, label: p.facts[s.row.faction].label || s.row.faction, fact: p.facts[s.row.faction] })),
+      campaignFactionCards(p, date.choices.map(s => ({ value: s.row.faction, faction:s.row.faction, label: p.facts[s.row.faction].label || s.row.faction, fact: p.facts[s.row.faction] })), [v]),
       faction,
       f => choose(family, { date, choice: date.choices.find(s => s.row.faction === f) }),
       true
@@ -482,6 +516,7 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
         for (let n = l.minCredits; n <= l.maxCredits && values.length < 1000; n += 1000) values.push(opt(n, n.toLocaleString()));
       } else for (let n = l.minTech; n <= l.maxTech && values.length < 256; n++) values.push(opt(n - adj, String(n)));
       ui.field(k, title, [opt('', 'Campaign default'), ...values], settings[k] ?? '', s => {
+        editedConditions.add(k);
         if (s === '') delete settings[k];
         else settings[k] = +s;
       });
@@ -493,12 +528,10 @@ export async function openUniversalCampaign({ start, back, profileId = 'stock', 
     data = await campaignLibrary(language);
     if (closed) return true;
     if (data.profiles.some(p => p.maps.length)) ui.map.setLibrary(data.profiles);
-    const eras = eraTimeline(data);
+    const opening = campaignOpening(data, origin), { eras, initial } = opening;
     roster = campaignRoster(ui.roster, eras, { pickEra, pickPeriod, pickMap, pickDate, clearChoice });
-    const families = e => e.periods.flatMap(period => [...period.maps.keys()]);
-    era = eras.find(e => families(e).some(f => f.p.id === origin)) || eras.find(e => e.first) || eras.find(e => e.views.length);
-    if (era?.first) {
-      const initial = families(era).find(f => f.p.id === origin) || era.first;
+    era = opening.era;
+    if (initial) {
       choose(initial, mapStart(initial));
       roster.focus();
     } else if (era) {

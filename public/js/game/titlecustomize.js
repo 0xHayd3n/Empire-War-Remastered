@@ -24,6 +24,12 @@ function thumbnail(url, label = '') {
   return img;
 }
 export async function customizeDesk(root) {
+  const { openArmyPainter } = await import('./army-painter.js');
+  if (!root.isConnected) return;
+  root.textContent = '';
+  const next = await openArmyPainter({ owner: root, alternate: 'Fleet registry' });
+  if (!root.isConnected) return;
+  if (next !== 'alternate') { root.closest('.title-menu')?.querySelector('.mode-back')?.click(); return; }
   armoryStyle();
   const [key, content] = await Promise.all([presetKey(), loadContent()]);
   if (!root.isConnected) return;

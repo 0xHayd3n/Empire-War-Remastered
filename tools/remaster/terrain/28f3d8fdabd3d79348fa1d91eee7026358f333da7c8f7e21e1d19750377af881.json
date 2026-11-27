@@ -1,0 +1,366 @@
+{
+  "job": "28f3d8fdabd3d79348fa1d91eee7026358f333da7c8f7e21e1d19750377af881",
+  "pack": "utapau-ground",
+  "policy": "polyhaven-2k",
+  "families": [
+    {
+      "id": "alluvial-grit",
+      "asset": "gravelly_sand",
+      "role": "sand",
+      "tileMeters": 2.48,
+      "slots": [
+        0,
+        5,
+        17,
+        27
+      ],
+      "regular": false,
+      "use": "natural",
+      "why": "Fine rusty grit forms a continuous mantle on the outer shelf and muster grounds.",
+      "evidence": "9f2e9c3191e6dd70c988bddc8bcc3ecb4e8dfe2bd9f7ac68d877e3661c30a68c",
+      "reuse": "tatooine-ground"
+    },
+    {
+      "id": "rim-talus",
+      "asset": "dry_river_pebbles",
+      "role": "rock",
+      "tileMeters": 2,
+      "slots": [
+        10,
+        18
+      ],
+      "regular": false,
+      "use": "natural",
+      "why": "Loose pebble lag at the mouths of the existing shallow runnels and the foot of scarps; not a river or a whole plain.",
+      "evidence": "9f2e9c3191e6dd70c988bddc8bcc3ecb4e8dfe2bd9f7ac68d877e3661c30a68c",
+      "levelTangent": true
+    },
+    {
+      "id": "apron-grit",
+      "asset": "dense_sand",
+      "role": "sand",
+      "tileMeters": 1.8,
+      "slots": [
+        1,
+        2,
+        11,
+        13,
+        19,
+        20,
+        21,
+        22,
+        23,
+        38,
+        39
+      ],
+      "regular": false,
+      "use": "natural",
+      "why": "Sheltered fines on the shelf and in shallow drainage lines. At command height this scan keeps a sandy surface rather than the angular bands seen in sandy_gravel_02.",
+      "evidence": "9f2e9c3191e6dd70c988bddc8bcc3ecb4e8dfe2bd9f7ac68d877e3661c30a68c",
+      "reuse": "yavin-ground"
+    },
+    {
+      "id": "broken-ledge",
+      "asset": "rock_face_03",
+      "role": "rock",
+      "tileMeters": 2.7,
+      "slots": [
+        6,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37
+      ],
+      "regular": false,
+      "use": "natural",
+      "why": "Fractured ochre stone follows the actual tilted wall projections; no rock carpet over the level shelf.",
+      "evidence": "9f2e9c3191e6dd70c988bddc8bcc3ecb4e8dfe2bd9f7ac68d877e3661c30a68c",
+      "reuse": "tatooine-ground"
+    },
+    {
+      "id": "deck-wear",
+      "asset": "concrete_floor_03",
+      "role": "concrete",
+      "tileMeters": 2.5,
+      "slots": [
+        54,
+        62
+      ],
+      "regular": true,
+      "use": "built",
+      "why": "Fine worn aggregate on the six painted and walled service platforms. Keep both projections aligned; slot 62 also accepts actual construction receipts.",
+      "evidence": "9c6cda37f76c945199577f00a179cf2ef7331976794518df22f919db41427480",
+      "levelTangent": true
+    }
+  ],
+  "composition": {
+    "kind": "sinkhole-shelf",
+    "design": "Loose fines collect in lee hollows of the dry outer terrace. Exposed shoulders carry lag, the short runnels collect grit, and fractured faces turn down into the authored sink. No surface is added over the opening.",
+    "channels": [
+      2,
+      0,
+      10,
+      13,
+      30,
+      37,
+      31
+    ],
+    "gravelHints": [
+      10,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23
+    ],
+    "runHints": [
+      13
+    ],
+    "deposition": {
+      "seed": 54137,
+      "heading": 0.64,
+      "length": 209,
+      "width": 154
+    },
+    "variation": {
+      "pair": [
+        0,
+        2
+      ],
+      "minSpan": 0.2,
+      "process": "Concentrate coarse angular grains on exposed shoulders; fines collect in sheltered swales and subsequent tongues around the actual lip.",
+      "preserve": "Exclude platform paving and the authored void. Do not paint the cliffs as sand."
+    },
+    "regions": [
+      {
+        "name": "Southeast muster shelf",
+        "view": "command",
+        "grid": [
+          251,
+          56,
+          29,
+          30
+        ],
+        "maxBoundary": 0.19,
+        "maxSmallShare": 0.06,
+        "maxJump": 0.042
+      },
+      {
+        "name": "Northwest rim approach",
+        "view": "north-rim",
+        "grid": [
+          51,
+          223,
+          30,
+          30
+        ],
+        "maxBoundary": 0.19,
+        "maxSmallShare": 0.06,
+        "maxJump": 0.042
+      }
+    ],
+    "evidence": [
+      "9f2e9c3191e6dd70c988bddc8bcc3ecb4e8dfe2bd9f7ac68d877e3661c30a68c",
+      "140c0c945803358ef603792eaa42e579e359df1f5b2415b5c626d2928b8b429c",
+      "d96a397dd830b0f7924fd5b4f67adc58fea77915a825dc5b9835cb560159d64b",
+      "44ea511f9770957440d9414a4995ff192bf8b2d582f11825af88363d3d485b0f",
+      "e0e52a6783d828d5f4683fc88abd8e9b28ebed868005ff693717ffdcd66374c8",
+      "bacc0f4f7222c35ee70dddea0425c347a68d75907bbc3735a705541959145501"
+    ]
+  },
+  "zones": [
+    {
+      "slot": 54,
+      "natural": 0,
+      "construction": false,
+      "aprons": [
+        {
+          "model": "W_URBANHALFWALL_B.ALO",
+          "anchor": [
+            4353.89697265625,
+            1755.974609375
+          ],
+          "rect": [
+            4160,
+            1400,
+            5080,
+            2340
+          ]
+        },
+        {
+          "model": "W_URBANHALFWALL_B.ALO",
+          "anchor": [
+            2282.926025390625,
+            1703.0345458984375
+          ],
+          "rect": [
+            1860,
+            1480,
+            2380,
+            2060
+          ]
+        },
+        {
+          "model": "W_URBANHALFWALL_B.ALO",
+          "anchor": [
+            1737.165771484375,
+            2865.403564453125
+          ],
+          "rect": [
+            1320,
+            2160,
+            2200,
+            2900
+          ]
+        },
+        {
+          "model": "W_URBANHALFWALL_B.ALO",
+          "anchor": [
+            5091.583984375,
+            3594.111572265625
+          ],
+          "rect": [
+            4500,
+            3540,
+            5440,
+            4300
+          ]
+        },
+        {
+          "model": "W_URBANHALFWALL_B.ALO",
+          "anchor": [
+            2344.339111328125,
+            4640.9267578125
+          ],
+          "rect": [
+            1720,
+            4040,
+            2560,
+            4920
+          ]
+        },
+        {
+          "model": "W_URBANHALFWALL_B.ALO",
+          "anchor": [
+            2955.015380859375,
+            4960.638671875
+          ],
+          "rect": [
+            2440,
+            4640,
+            3060,
+            5400
+          ]
+        }
+      ],
+      "evidence": "9c6cda37f76c945199577f00a179cf2ef7331976794518df22f919db41427480"
+    },
+    {
+      "slot": 62,
+      "natural": 0,
+      "construction": true,
+      "aprons": [
+        {
+          "model": "W_URBANHALFWALL_B.ALO",
+          "anchor": [
+            4353.89697265625,
+            1755.974609375
+          ],
+          "rect": [
+            4160,
+            1400,
+            5080,
+            2340
+          ]
+        },
+        {
+          "model": "W_URBANHALFWALL_B.ALO",
+          "anchor": [
+            2282.926025390625,
+            1703.0345458984375
+          ],
+          "rect": [
+            1860,
+            1480,
+            2380,
+            2060
+          ]
+        },
+        {
+          "model": "W_URBANHALFWALL_B.ALO",
+          "anchor": [
+            1737.165771484375,
+            2865.403564453125
+          ],
+          "rect": [
+            1320,
+            2160,
+            2200,
+            2900
+          ]
+        },
+        {
+          "model": "W_URBANHALFWALL_B.ALO",
+          "anchor": [
+            5091.583984375,
+            3594.111572265625
+          ],
+          "rect": [
+            4500,
+            3540,
+            5440,
+            4300
+          ]
+        },
+        {
+          "model": "W_URBANHALFWALL_B.ALO",
+          "anchor": [
+            2344.339111328125,
+            4640.9267578125
+          ],
+          "rect": [
+            1720,
+            4040,
+            2560,
+            4920
+          ]
+        },
+        {
+          "model": "W_URBANHALFWALL_B.ALO",
+          "anchor": [
+            2955.015380859375,
+            4960.638671875
+          ],
+          "rect": [
+            2440,
+            4640,
+            3060,
+            5400
+          ]
+        }
+      ],
+      "evidence": "9c6cda37f76c945199577f00a179cf2ef7331976794518df22f919db41427480"
+    }
+  ],
+  "binding": {
+    "key": "utapau",
+    "seed": 54137,
+    "retainedPlants": {
+      "scrub": [
+        "W_BUSH_TAT00.ALO",
+        "W_BUSH_TAT01.ALO",
+        "W_BUSH_TAT02.ALO",
+        "W_BUSH_TEMP02.ALO",
+        "W_LEAFBUSH00.ALO"
+      ],
+      "tufts": [
+        "W_SWAMPGRASS00.ALO"
+      ]
+    }
+  }
+}

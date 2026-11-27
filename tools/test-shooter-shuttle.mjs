@@ -96,5 +96,31 @@ world.time = 48;
 W.step();
 assert.equal(calls.length, 1, 'without a pad the shuttle lands at a held command post');
 assert.equal(calls[0].x, 500);
+// A configured match uses a common clock for both sides and treats the infantry cap as a manifest limit, not a queue limit.
+const { matchRules } = await import('../public/js/game/battlefrontrules.js');
+for (const seats of [4, 6]) {
+  world.time = 100;
+  sh.points = () => [padA];
+  calls.length = 0;
+  const rules = matchRules({mode:'land', soloBattlefront:{enabled:true,rules:{shuttleEvery:20,shuttleFirst:6,shuttleSeats:seats}}});
+  const custom = new ShuttleWaves({...sh,rules});
+  assert.deepEqual([custom.launchIn(0),custom.launchIn(1)],[6,6]);
+  const bot = () => ({side:0,who:'bot',unit:foot,company:foot});
+  for(let i=0;i<seats+2;i++) custom.add(bot());
+  world.time = 102;
+  custom.add({side:0,who:'me',point:padA,cls:{},unit:foot,company:foot});
+  assert.equal(custom.room.F.load.length,seats,'boarding from a waiting queue respects the same cap');
+  assert.equal(calls[0].at,106,'boarding does not restart the clock');
+  for(let i=0;i<seats-2;i++) custom.add(bot());
+  custom.add({...bot(),unit:car,company:car,car:true});
+  world.time=106;custom.step();
+  assert.deepEqual([...custom.flights.values()].map(f=>f.load.length),[seats,seats,1,1]);
+  assert([...custom.flights.values()].at(-1).load[0].car);
+  assert.deepEqual(calls.map(c=>c.hold),[4,3,6,9],'the player boards before the cutoff; other transports keep the normal stagger');
+  assert.deepEqual([custom.launchIn(0),custom.launchIn(1)],[20,20]);
+  world.time=151;custom.step();
+  assert.equal(custom.launchIn(0),20,'a skipped wave does not backfill multiple launches');
+}
+console.log('PASS: configured first and subsequent wave clocks, 4/6-seat boarding and overflow, separate vehicle flights.');
 console.log('PASS: shuttle waves - setting, boarding at once, bots fill the bay, fixed clock, 8 per shuttle, own shuttle per vehicle, stagger, spacing, clear ramp lanes, post fallback');
 process.exit(0);

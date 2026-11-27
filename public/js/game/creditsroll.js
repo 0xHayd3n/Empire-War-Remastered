@@ -1,4 +1,5 @@
 import { db } from '../gamedata.js';
+import { reading } from './readingpreferences.js';
 import { fetchBinary } from '../vfs.js';
 import { activeLanguage, LANGUAGES } from '../language.js';
 import { fontPixels } from '../fontpolicy.js';
@@ -126,9 +127,9 @@ export class CreditsRoll {
     const px = 1 / this.height;
     if (this.scroll > px) return;
     this.scroll += px;
-    for (const t of this.texts) t.y -= 1;
+    for (const t of this.texts) t.y -= reading.credits;
     for (const l of this.logos) {
-      l.y -= 1;
+      l.y -= reading.credits;
       l.alpha = creditsFade(l.y / this.height, this.margin);
     }
     this.draw();

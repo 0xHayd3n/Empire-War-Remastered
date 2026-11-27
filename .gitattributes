@@ -1,1 +1,7 @@
 public/vendor/ffmpeg/ffmpeg-core.js -text -whitespace
+public/vendor/rapier/rapier.es.js -text -whitespace
+public/vendor/meshoptimizer/meshopt_simplifier.js -text -whitespace
+*.dds binary
+*.bin binary
+*.zip binary
+*.png binary

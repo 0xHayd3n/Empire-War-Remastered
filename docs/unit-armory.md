@@ -1,6 +1,6 @@
-# Customize: the fleet registry
+# Fleet registry
 
-Open **Customize** and pick a profile and faction. The selected ship occupies the inspection bay. Choose another in the horizontal flight line, use the previous/next controls, or filter by class and search by name, role or roster ID. Selection does **not** add a unit or reset the camera, fleet draft or other units’ edited flight cards. The separate **+** adds one copy to the blueprint. The list is the actual `instantRoster`, not every XML object in a mod. With a unit focused, arrow keys browse the roster and Home/End go to its ends.
+Open **Home → [Army Painter](army-painter.md) → Fleet registry** and pick a profile and faction. The selected ship occupies the inspection bay. Choose another in the horizontal flight line, use the previous/next controls, or filter by class and search by name, role or roster ID. Selection does **not** add a unit or reset the camera, fleet draft or other units’ edited flight cards. The separate **+** adds one copy to the blueprint. The list is the actual `instantRoster`, not every XML object in a mod. With a unit focused, arrow keys browse the roster and Home/End go to its ends.
 
 The previous registry gave the catalog, still and planner equal space; enlarging a picture didn't let you inspect the bow or underside. The bay instead separates **look** (one live camera), **choose** (the flight line) and **deploy** (the orders below). The identity strip shows the localized unit, role, price and space population. **Unit record** includes the roster ID, available native encyclopedia copy and resolved complement. For squadrons and companies the feed identifies the representative hull; sizes are framed for inspection, not compared at a shared physical scale.
 

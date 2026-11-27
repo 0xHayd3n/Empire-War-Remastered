@@ -83,12 +83,14 @@ const ids = ['1125571106', '1976399102'];
       for (let i = 0; i < 4 && (await section()) !== 'home'; i++) await f.locator('.title-menu .mode-back:visible').first().click();
       await f.locator('.title-menu[data-section="home"]').waitFor();
     };
-    await click('TITLE_CUSTOMIZE');
+    const registry = () => button('Fleet registry').click();
+    await click('TITLE_CUSTOMIZE'); await registry();
     async function mount(id) {
       const s = f.getByLabel('Mod profile');
       await s.locator(`option[value="${id}"]`).waitFor({ state: 'attached' });
       await s.selectOption(id);
       await f.locator(`meta[name="swr-pack-revision"][content^="${id}:"]`).waitFor({ state: 'attached' });
+      await registry();
       await f.locator('.armory-inspect').first().waitFor();
       const opt = await f
         .locator('.faction option')
@@ -139,7 +141,7 @@ const ids = ['1125571106', '1976399102'];
     console.log('Mounted:', faction, lead, support, '· checking saved v1, art, keyboard, editing');
     // A Home round trip must keep the mounted profile and its saved blueprint.
     await goHome();
-    await click('TITLE_CUSTOMIZE');
+    await click('TITLE_CUSTOMIZE'); await registry();
     await f.locator('.faction').selectOption(faction);
     await f.getByLabel('Blueprint', { exact: true }).selectOption('legacy');
     assert.equal(await f.locator('.preset-name').inputValue(), 'Legacy patrol');
@@ -269,8 +271,8 @@ const ids = ['1125571106', '1976399102'];
     await click('IDC_MAIN_MENU_SINGLE_PLAYER_GAMES');
     await click('IDC_INSTANT_BATTLE_BUTTON');
     await actual().waitForFunction(() => stageTrace.opened === stageTrace.closed);
-    await button('Continue').click();
-    await f.locator('#instantBattle').waitFor();
+    await button('Edit fleets').click();
+    await f.locator('#instantBattle .ib-editor:visible').waitFor();
     const preset = f.getByLabel('Fleet preset', { exact: true }),
       card = f.getByLabel('Flight card', { exact: true });
     await preset.selectOption('legacy');
@@ -307,7 +309,7 @@ const ids = ['1125571106', '1976399102'];
       alpha
     );
     await page.goto(origin);
-    await click('TITLE_CUSTOMIZE');
+    await click('TITLE_CUSTOMIZE'); await registry();
     await mount(ids[1]);
     const otherKey = await actual().evaluate(async () => (await import('./js/game/fleetpresets.js')).presetKey());
     assert.notEqual(key, otherKey);

@@ -57,7 +57,7 @@ cine.stop();
 near(camera.position.x, 0);
 assert.equal(camera.near, 5);
 assert.equal(camera.far, 40000);
-const archive = openGame(fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)));
+const archive = openGame(process.env.SWR_GAME || fileURLToPath(new URL('../../Star Wars Empire at War', import.meta.url)));
 game.tacticalCameraData = parseTacticalCameraData(archive.read(archive.resolve('Data/XML/TacticalCameras.xml')).toString());
 cine.start(false);
 cine.paint();

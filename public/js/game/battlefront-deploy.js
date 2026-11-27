@@ -181,7 +181,7 @@ export class BattlefrontDeploy {
       host = this.preview.host;
     host.classList.toggle('bf-locked', locked);
     host.setAttribute('aria-label', c ? `${s.cardName(c)}${locked ? ' (locked)' : ''}` : 'No unit available');
-    this.preview.show(c?.unit, c && s.world.teamColorFor(s.me, c.unit), c && s.iconOf(c.unit));
+    this.preview.show(c?.unit, c && s.world.teamColorFor(s.me, c.unit), c && s.iconOf(c.unit), c && s.world.liveryFor?.(s.me));
   }
   update(pts) {
     const s = this.s,

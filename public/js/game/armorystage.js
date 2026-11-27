@@ -1,10 +1,12 @@
+import { armoryPreview, saveArmoryPreview } from './armorypreference.js';
+import {menuMotion} from './menumotion.js';
 import { fetchPart } from '../vfs.js';
+import {usingRefit,readMaterialFile} from '../texture-showcase/store.js';
 import { parkHull, takeHull, forgetHull } from './armoryparking.js';
 let requestId = 0;
 
 const MiB = 1024 * 1024,
   clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-const preference = 'swr-armory-portrait';
 // Each worker contains one hull's model/material caches. Never run a preview clock
 // outside its visible stage; only a finished hull can be parked for a quick revisit.
 class ArmoryStage extends HTMLElement {
@@ -24,14 +26,10 @@ class ArmoryStage extends HTMLElement {
     this.status = this.querySelector('.stage-status');
     this.motion = this.querySelector('[data-tool="motion"]');
     this.zoomButtons = [...this.querySelectorAll('[data-tool]:not([data-tool="motion"])')];
-    this.reduce = matchMedia('(prefers-reduced-motion: reduce)');
-    try {
-      this.mode.value = localStorage.getItem(preference) === '1' || navigator.connection?.saveData ? 'portrait' : 'live';
-    } catch {}
+    this.reduce = menuMotion;
+    this.mode.value = armoryPreview();
     this.mode.onchange = () => {
-      try {
-        localStorage.setItem(preference, this.mode.value === 'portrait' ? '1' : '0');
-      } catch {}
+      saveArmoryPreview(this.mode.value);
       this.show(this.unit);
     };
     this.querySelector('.camera-tools').onclick = e => {
@@ -241,7 +239,8 @@ class ArmoryStage extends HTMLElement {
             const path = String(q.path).replaceAll('\\', '/'),
               cap = 32 * MiB;
             const valid = /^data\/art\/(models|textures|shaders)\//i.test(path) && !path.split('/').includes('..');
-            let bytes = valid && received < 96 * MiB ? await fetchPart(path, 0, cap + 1) : null;
+            const label=usingRefit&&/^data\/art\/textures\/(SWR_SHIPYARD__[^/]+)$/i.exec(path);
+            let bytes = valid && received < 96 * MiB ? (label?await readMaterialFile(label[1],file=>fetchPart('Data/Art/Textures/'+file,0,cap+1)):await fetchPart(path, 0, cap + 1)) : null;
             if (this.worker !== w) return;
             if (bytes) received += bytes.byteLength;
             if (bytes?.byteLength > cap || received > 96 * MiB) throw Error('Preview asset limit');
@@ -280,7 +279,7 @@ class ArmoryStage extends HTMLElement {
         }
       };
       if (hit) this.ready(hit.model);
-      else w.postMessage({ kind: 'open', file: this.unit.file, color: this.unit.color || '#ffffff' });
+      else w.postMessage({ kind: 'open', refit:usingRefit, file: this.unit.file, color: this.unit.color || '#ffffff' });
     } catch {
       this.fail();
     }

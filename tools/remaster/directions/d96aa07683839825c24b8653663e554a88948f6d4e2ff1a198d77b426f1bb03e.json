@@ -1,0 +1,102 @@
+{
+  "job": "d96aa07683839825c24b8653663e554a88948f6d4e2ff1a198d77b426f1bb03e",
+  "planet": "Yavin 4",
+  "views": [
+    {
+      "page": "https://www.starwars.com/yavin-4-history-gallery",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/open-uri20150608-27674-1gmvxqf_d14c93ec.jpeg",
+      "sha256": "0c432ae2d1389decf79d3bdb72249f5cad87c63aa90b6e3cabd2c31457c0d255",
+      "visible": "Light, flat temple apron; green overgrowth at the edges of massive stepped masonry. The landing area is not a carpet of plants."
+    },
+    {
+      "page": "https://www.starwars.com/databank/base-one",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/rebel-massassi-outpost-main_6f7094bd.jpeg",
+      "sha256": "224cd5aef80d8ac1764bcc65a512dd1182bf88a86ae5540d972056c0195d88df",
+      "visible": "Tree crowns overlap the flanks of the temple. Rectangular hangar openings and the flat working apron remain unobscured."
+    },
+    {
+      "page": "https://www.starwars.com/news/andor-season-2-world-building-production-design-feature",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/andor-season-2-episode-12-yavin-4-cassian-uwing_f0709600.jpeg",
+      "sha256": "321c91da869ade1eb422fed7a04778e0ae9801b9a23b7e381c279a71db379d57",
+      "visible": "At human height the U-wing and people have a clear lane, with pale branching trunks and layers of leaves behind them; not conifer ladders."
+    },
+    {
+      "page": "https://www.starwars.com/news/andor-season-2-world-building-production-design-feature",
+      "image": "https://lumiere-a.akamaihd.net/v1/images/andor-season-2-yavin-cassian-home-concept-art_1241e6dd.jpeg",
+      "sha256": "37dac8a7b14350314914a9730f469a1dbd344b5f3759387040e268f6c27b2595",
+      "visible": "Concept image, not a film still: dark leafy pockets between exposed roots, rocks and tall irregular trunks. The clearing stays open."
+    },
+    {
+      "page": "https://www.flickr.com/photos/ea_dice/45177137601",
+      "image": "https://live.staticflickr.com/1972/45177137601_91bcdcdcfa_b.jpg",
+      "sha256": "1c16f291ed99f7a01d522f7aa4522d6d48ea8c96037b55beea28056df7602686",
+      "visible": "Official Battlefront II game image, not film photography: a light landing surface and steps stop at the edge of the base; deep green foliage and bare trunks frame it. This is not evidence for an industrial jungle floor."
+    }
+  ],
+  "ground": {
+    "decision": "Keep the layout of the worn routes and temple apron, not the old textures. Use complete Poly Haven scans: laid weathered stone on the apron, light compact grit on the approach, worn green cover on exposed ground and dark soil and fallen leaves under the crowns.",
+    "reject": "Reject painting every moss patch as ochre forest litter; do not lay jungle mulch on the temple apron.",
+    "evidence": [
+      "0c432ae2d1389decf79d3bdb72249f5cad87c63aa90b6e3cabd2c31457c0d255",
+      "37dac8a7b14350314914a9730f469a1dbd344b5f3759387040e268f6c27b2595"
+    ]
+  },
+  "foliage": {
+    "decision": "Use irregular branching broadleaf crowns in the authored forest stands and groups of broad leaves at the edges with ferns below. Keep the clearing legible.",
+    "reject": "Reject the regular pointed Endor evergreen skyline and the same generic shrub repeated across the floor.",
+    "review": {
+      "disposition":"replace", "basis":"The Massassi exteriors establish the crown line and clear apron. The human-height Andor exterior and forest concept support layered foliage, not a botanical inventory. The three living classes below are the actual rendered analogues.",
+      "forms":[
+        {"id":"canopy","form":"Spreading branching broadleaf trees","silhouette":"Overlapping irregular rounded crowns behind the lower temple courses.","disposition":"replace","variation":"Use the same Jacaranda analogue in uneven groups with varied height, rotation and stem spacing.","reason":"Replace authored conifer stands rather than planting a second forest.","evidence":["224cd5aef80d8ac1764bcc65a512dd1182bf88a86ae5540d972056c0195d88df","321c91da869ade1eb422fed7a04778e0ae9801b9a23b7e381c279a71db379d57"]},
+        {"id":"broadleaf","form":"Clumps of large understory leaves","silhouette":"Separate fans of broad leaves at ground height against finer branches.","disposition":"replace","variation":"Three Anthurium shapes, including wide and young growth, vary scale and rotation within the authored cover clumps.","reason":"Interpret the layered tropical floor rather than repeating a temperate weed mesh.","evidence":["37dac8a7b14350314914a9730f469a1dbd344b5f3759387040e268f6c27b2595","321c91da869ade1eb422fed7a04778e0ae9801b9a23b7e381c279a71db379d57"]},
+        {"id":"fern","form":"Low divided fern fronds","silhouette":"A fine radial spray below the broad leaves, low enough to see over from squad height.","disposition":"retain","variation":"Retain the existing fern analogue; vary the size and spacing of fronds along grassy and sheltered pockets.","reason":"The greenery around stone supports a second low leaf shape; it does not establish a named fern species.","evidence":["0c432ae2d1389decf79d3bdb72249f5cad87c63aa90b6e3cabd2c31457c0d255","37dac8a7b14350314914a9730f469a1dbd344b5f3759387040e268f6c27b2595"]},
+        {"id":"needle-conifer","form":"Regular needle conifers","silhouette":"Tall triangular tiers of needles above the forest edge.","disposition":"absent","variation":"No conifer variants or instance slots in the replacement.","reason":"The spreading, irregular crowns do not support the old Endor-like tree line.","evidence":["224cd5aef80d8ac1764bcc65a512dd1182bf88a86ae5540d972056c0195d88df"]}],
+      "zones":{"place":[{"where":"Authored tree and canopy stands flanking the clearings.","forms":["canopy"],"evidence":["224cd5aef80d8ac1764bcc65a512dd1182bf88a86ae5540d972056c0195d88df"]},{"where":"Leafy natural ground, scattered edge pockets and existing cover clumps.","forms":["broadleaf","fern"],"evidence":["37dac8a7b14350314914a9730f469a1dbd344b5f3759387040e268f6c27b2595"]}],"exclude":[{"where":"The active landing apron, masonry stairs and working pads.","reason":"Exterior views keep the working space clear, with foliage at its edge.","evidence":["0c432ae2d1389decf79d3bdb72249f5cad87c63aa90b6e3cabd2c31457c0d255","1c16f291ed99f7a01d522f7aa4522d6d48ea8c96037b55beea28056df7602686"]}]},
+      "variation":{"decision":"Vary scale, crown overlap and fine versus broad understory silhouette by habitat, rather than adding one tree slot per picture.","limits":["Keep gaps between low clumps in the muster ground.","The temple profile must remain legible above the canopy."],"evidence":["224cd5aef80d8ac1764bcc65a512dd1182bf88a86ae5540d972056c0195d88df","321c91da869ade1eb422fed7a04778e0ae9801b9a23b7e381c279a71db379d57"]}
+    },
+    "evidence": [
+      "224cd5aef80d8ac1764bcc65a512dd1182bf88a86ae5540d972056c0195d88df",
+      "321c91da869ade1eb422fed7a04778e0ae9801b9a23b7e381c279a71db379d57",
+      "37dac8a7b14350314914a9730f469a1dbd344b5f3759387040e268f6c27b2595"
+    ]
+  },
+  "landmark": {
+    "decision": "Keep the Massassi stairs, masonry scale and cleared foreground recognizable; taller crowns frame the lower courses, not the peak.",
+    "reject": "Do not replace the temple or move its footprint to manufacture a closer match to a single camera.",
+    "evidence": [
+      "0c432ae2d1389decf79d3bdb72249f5cad87c63aa90b6e3cabd2c31457c0d255",
+      "224cd5aef80d8ac1764bcc65a512dd1182bf88a86ae5540d972056c0195d88df"
+    ]
+  },
+  "outskirts": {
+    "treatment":"foothills", "foliage":["canopy"],
+    "skyline":"Layered green tree lines at the flanks of the temple, broken by saddles with open sky above. Model modest forested hills for depth, not a literal survey of Yavin's topography.",
+    "join":"Follow the outermost authored ground vertex for vertex. Extend its natural substrate and Jacaranda crown silhouette in irregular stands beyond the playable area; keep the working clearings, temple and routes untouched.",
+    "reject":"No rectangular parapet, endless flat card, uniform hedge or alpine peak behind every temple. Do not shrink the camera bounds or fill the real sky with fog.",
+    "evidence":["224cd5aef80d8ac1764bcc65a512dd1182bf88a86ae5540d972056c0195d88df","1c16f291ed99f7a01d522f7aa4522d6d48ea8c96037b55beea28056df7602686","321c91da869ade1eb422fed7a04778e0ae9801b9a23b7e381c279a71db379d57"]
+  },
+  "uncertain": "The images do not identify the floor species or give physical soil measurements. Jacaranda and anthurium are licensed visual analogues, not claims about canonical species. The map owns its weather.",
+  "landUse": {
+    "natural": {
+      "decision": "Away from the bases use weathered rock, root-threaded earth, groundcover and litter. The forest concept shows irregular rocks, not laid slabs.",
+      "evidence": [
+        "37dac8a7b14350314914a9730f469a1dbd344b5f3759387040e268f6c27b2595",
+        "321c91da869ade1eb422fed7a04778e0ae9801b9a23b7e381c279a71db379d57"
+      ]
+    },
+    "built": {
+      "decision": "Hard surfacing is local to the temple landing apron and actual building pads, not a planet-wide stone texture.",
+      "evidence": [
+        "0c432ae2d1389decf79d3bdb72249f5cad87c63aa90b6e3cabd2c31457c0d255",
+        "224cd5aef80d8ac1764bcc65a512dd1182bf88a86ae5540d972056c0195d88df"
+      ]
+    },
+    "transition": {
+      "decision": "Keep the abrupt change from clear working surface to foliage at the base. Never infer an apron from flatness, a pale texture or an isolated ruin in the forest.",
+      "evidence": [
+        "321c91da869ade1eb422fed7a04778e0ae9801b9a23b7e381c279a71db379d57",
+        "1c16f291ed99f7a01d522f7aa4522d6d48ea8c96037b55beea28056df7602686"
+      ]
+    }
+  }
+}

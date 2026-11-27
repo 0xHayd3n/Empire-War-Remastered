@@ -3,6 +3,7 @@ import { tutorialSuggestionDue, markTutorialSuggestion } from './tutorialprofile
 import { openDialog } from './dialogs.js';
 import { loadCampaignData } from './galaxy.js';
 import { expansion } from '../edition.js';
+import { openSoloStories } from './solostorymenu.js';
 
 export const MAIN_CAMPAIGN = 'Full_Story_Campaign_Underworld';
 const MAIN_CAMPAIGNS = () => (expansion() ? { A: MAIN_CAMPAIGN } : { A: 'Full_Story_Campaign_Rebel', B: 'Full_Story_Campaign_Empire' });
@@ -44,15 +45,27 @@ export function mainCampaign(campaigns, name = MAIN_CAMPAIGNS().A) {
   return null;
 }
 
-export async function openMainCampaignMenu({ start, cancel = null, audio = null, signal }) {
+export async function openMainCampaignMenu(args) {
+  if (!args.profiles) return openOriginalStoryMenu(args);
+  if (args.signal?.aborted) return false;
+  return openSoloStories({...args, original: opts => openOriginalStoryMenu({...opts, audio:args.audio})});
+}
+
+function storySetup(c, difficulty) {
+  return { mode: 'galactic', menuFamily: 'story', campaign: c.name, faction: c.str('Starting_Active_Player'), difficulty, players: [], teamFactions: [] };
+}
+
+async function openOriginalStoryMenu({ start, cancel = null, audio = null, signal, difficulty = 'medium' }) {
   const data = await loadCampaignData();
   if (signal?.aborted) return false;
   const dlg = await openDialog('IDD_MAIN_CAMPAIGN_DIALOG', { modal: false, anchor: 9, nativeImages: true, nativeFonts: true });
   if (!dlg) return false;
-  if (signal?.aborted) { dlg.close(); return false; }
+  if (signal?.aborted) {
+    dlg.close();
+    return false;
+  }
   const names = MAIN_CAMPAIGNS();
-  let difficulty = 'medium',
-    closed = false,
+  let closed = false,
     starting = false;
   const close = () => {
     if (closed) return;
@@ -78,7 +91,7 @@ export async function openMainCampaignMenu({ start, cancel = null, audio = null,
   dlg.show('IDC_LOAD_FACTION_A_PROGRESS', false);
   dlg.show('IDC_LOAD_FACTION_B_PROGRESS', false);
   const ids = ['IDC_RADIO_EASY', 'IDC_RADIO_MEDIUM', 'IDC_RADIO_HARD'];
-  dlg.radios(ids, ids[1], id => {
+  dlg.radios(ids, ids[['easy', 'medium', 'hard'].indexOf(difficulty)], id => {
     difficulty = ['easy', 'medium', 'hard'][ids.indexOf(id)];
   });
   const play = side => {
@@ -89,15 +102,7 @@ export async function openMainCampaignMenu({ start, cancel = null, audio = null,
     dlg.enable('IDC_MAIN_CAMPAIGN_START', false);
     dlg.show('IDC_LOAD_FACTION_' + side + '_PROGRESS', true);
     close();
-    start({
-      mode: 'galactic',
-      menuFamily: 'story',
-      campaign: campaign.name,
-      faction: campaign.str('Starting_Active_Player'),
-      difficulty,
-      players: [],
-      teamFactions: []
-    });
+    start(storySetup(campaign, difficulty));
   };
   dlg.on('IDC_CANCEL_BUTTON', back);
   for (const id of ['IDC_MAIN_CAMPAIGN_START', 'IDC_PLAY_FACTION_A_BUTTON_BIG']) if (dlg.ctl(id)) dlg.on(id, () => play('A'));

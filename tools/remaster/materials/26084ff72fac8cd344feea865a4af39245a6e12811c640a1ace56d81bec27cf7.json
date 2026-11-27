@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "pair": "6c5957b6fdeb2acabf5d2ee5b7be62936d8f9521d533d443b001bc5ce240eac6:4ac70fedcdf554116174000f2b8f1407a6cef258b9534e9fad80b7462ff88b45",
+  "decision": "avoid",
+  "donor": {
+    "id": "sand",
+    "asset": "sand_01",
+    "tileMeters": 1.5,
+    "colorHash": "78656a9eba925a31c4ddff68a0414c4ec48203308a0dcfec8c9becfa0d2bbc70",
+    "surfaceHash": "8c1bf1d1e6854152eccb95c23ba054a24a887b18177bcba12c92c4f139e04dd9"
+  },
+  "reason": "On Tatooine the stock smooth orange sand reads as a clear lane. Sand 01 introduced a grey, granular patch between warm rocks beneath deployed troops. Look for a finer, warm dry sand instead.",
+  "example": {
+    "job": "801c35a32439b92bb81d9f45c3aa6b405dc260362096156eb42e25ae84acd9e5",
+    "path": "DATA\\ART\\MAPS\\_MP_LAND_TATOOINE.TED",
+    "edition": "foc",
+    "order": [],
+    "slot": 5,
+    "backend": "webgpu",
+    "environment": "Sunrise_Sandstorm",
+    "revision": "stock"
+  }
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "forest-earth",
+    "asset": "mud_forest",
+    "role": "mud",
+    "tileMeters": 2.5,
+    "pack": "yavin-jungle",
+    "colorHash": "1f3a4f372d03c884cd447c707790b1cdb27500cce4d96f0077f81bec24805996",
+    "surfaceHash": "9aa9350f27995f11bfa8b4fc18b613f5b3256b17dfdb4b223e3292bb75ac68c1"
+  },
+  {
+    "id": "fallen-leaves",
+    "asset": "leaves_forest_ground",
+    "role": "litter",
+    "tileMeters": 2.1,
+    "pack": "yavin-jungle",
+    "colorHash": "0bbf4d6d193862397bf5b838a001a2760bb8078435a6c6108e4cf8d5dbf93354",
+    "surfaceHash": "87d94db4aa8d22465fe5a50977507084811349fff9c652e5d202ccb0c956389b"
+  }
+]

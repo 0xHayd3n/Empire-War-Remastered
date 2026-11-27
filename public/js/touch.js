@@ -1,8 +1,8 @@
 import { enterFullscreen, exitFullscreen, fullscreen } from './pointertrap.js';
 
+import { viewOptions as prefs } from './game/viewpreferences.js';
+
 const ID = 7;
-const SLOP = 10;
-const HOLD = 450;
 const TWICE = 350;
 const TURN_START = 0.15;
 const NOTCH = Math.log(1.12);
@@ -23,7 +23,7 @@ function down(e) {
   own(e);
   fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (!g) {
-    g = { kind: 'wait', x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, button: 0, timer: setTimeout(hold, HOLD) };
+    g = { kind: 'wait', x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, button: 0, timer: setTimeout(hold, prefs.touchHold) };
     moveTo(e.clientX, e.clientY, 0);
     return;
   }
@@ -49,7 +49,7 @@ function move(e) {
   g.x = f.x;
   g.y = f.y;
   if (g.kind === 'wait') {
-    if (Math.hypot(f.x - g.x0, f.y - g.y0) <= SLOP) return;
+    if (Math.hypot(f.x - g.x0, f.y - g.y0) <= prefs.touchSlop) return;
     clearTimeout(g.timer);
     g.kind = 'drag';
     g.button = 0;
@@ -83,7 +83,7 @@ function hold() {
   if (!g || g.kind !== 'wait') return;
   g.kind = 'hold';
   g.button = 2;
-  ring(g.x, g.y);
+  if (prefs.touchRing) ring(g.x, g.y);
   press(g.x, g.y, 2);
 }
 
@@ -109,8 +109,9 @@ function two() {
     if (Math.abs(g.turned) > TURN_START) g.turning = true;
   }
   moveTo(p.mx, p.my, 0);
-  if (game && !game.controlsLocked && game.touchView && (dx || dy || turn)) game.touchView(dx, dy, turn);
-  const step = game?.touchZoomStep || NOTCH;
+  turn *= prefs.touchTwist;
+  if (game && !game.controlsLocked && game.touchView && (dx || dy || turn)) game.touchView(dx * prefs.touchPan, dy * prefs.touchPan, turn);
+  const step = (game?.touchZoomStep || NOTCH) / prefs.touchPinch;
   g.zoom += Math.log(p.d / g.d);
   while (g.zoom >= step) {
     g.zoom -= step;
@@ -127,7 +128,7 @@ const BUTTONS = [1, 4, 2];
 
 function tap(x, y, button) {
   const now = performance.now(),
-    again = button === 0 && now - lastTap.t < TWICE && Math.hypot(x - lastTap.x, y - lastTap.y) < SLOP * 3;
+    again = button === 0 && now - lastTap.t < TWICE && Math.hypot(x - lastTap.x, y - lastTap.y) < 30; // Double-tap radius is independent of the threshold for starting a drag.
   moveTo(x, y, 0);
   press(x, y, button, again ? 2 : 1);
   release(x, y, button, true, again ? 2 : 1);

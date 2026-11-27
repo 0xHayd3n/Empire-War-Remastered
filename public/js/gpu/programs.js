@@ -1,6 +1,30 @@
 import * as THREE from '../../vendor/three/build/three.module.js';
 import { env } from './env.js';
+import { cubicShader } from '../imagesampling.js';
+import { orbitShader } from '../orbitcolor.js';
+import { hullFinish } from '../hullfinish.js';
+import { BLAST_SLOTS, blastShader } from '../blastlight.js';
+import { backdropExposure } from '../game/spacebackdrop.js';
+import { LIVERY_BINDING, LIVERY_BYTES, LIVERY_WGSL, packLivery } from './livery.js';
 
+import { materialEnvironmentShader, receiverShader,puffShader,waterShader } from '../fieldreceivers.js';
+import { airShader, footprintShader, bendShader } from '../battlefield.js';
+import { wetLayerShader } from '../groundrain.js';
+import { forestShader, scanSamplers } from '../forestfloor.js';
+import { slideShader } from '../game/liquid-sheet.js';
+import { reliefCutVertex, scorchedSoil } from '../game/terrain-cell.js';
+import { BANK_HEIGHT } from '../game/endor-habitat.js';
+import { landscapeBlend, applyLandscapeBlend } from '../game/endor-blend.js';
+import { groundFillShader, nearGroundShader, terrainSurfaceShader } from '../landlight.js';
+import { diskBounce } from '../planetshine.js';
+
+import {dayWater} from '../daywater.js';
+import { forestAir, showerSky, ringShader } from '../endor-weather.js';
+import { dustSpriteShader } from '../immersive-weather.js';
+import { skyAtmosphereShader } from '../land-atmosphere.js';
+import { canopyWindowShader } from '../canopy-view.js';
+import { woodFunctions, woodGround, woodColor, woodMist, highlightKnee } from '../woodland-light.js';
+import { naturalShade } from '../scenery-surface.js';
 export const PASS_WGSL = `
 struct Pass {
   view: mat4x4f, proj: mat4x4f, shadowMatrix: mat4x4f,
@@ -9,21 +33,31 @@ struct Pass {
   sunColor: vec3f, fowSide: f32,
   fillDir: vec3f, height: f32,
   fillColor: vec3f, soft: f32,
-  ambient: vec3f, _b: f32,
-  fogTint: vec3f, _c: f32,
-  fogRange: vec2f, _d: vec2f,
+  ambient: vec3f, textureCubic: f32,
+  fogTint: vec3f, orbitalKey: f32,
+  fogRange: vec2f, surfaceLook: vec2f,
   fillDir2: vec3f, fillWrap: f32,
-  fillColor2: vec3f, _e: f32,
+  fillColor2: vec3f, orbitHDR: f32,
   sunSpecular: vec3f, boltN: f32,
   boltAt: array<vec4f, 16>,
   boltTint: array<vec4f, 16>,
-  shadowTint: vec3f, _f: f32,
+  shadowTint: vec3f, materialFinish: f32,
+  orbitPos: mat3x3f, orbitNeg: mat3x3f, orbitDir: vec3f, _f: f32, orbitRadiance: vec3f, _g: f32,
+  hullShadowMatrix: mat4x4f, hullShadowParams: vec3f, blastCount: f32,
+  blastSource: array<vec4f, ${BLAST_SLOTS}>, blastEnergy: array<vec4f, ${BLAST_SLOTS} >,
+  planetDisk: vec4f, planetRadiance: vec3f, _pd: f32, landGround: vec4f, fieldLook: vec4f, fieldWind: vec4f, receiverMap:vec4f, receiverMode:vec4f, landStyle:vec4f, forestWeather:vec4f, wideShadow:vec3f, landProbeOn:f32, canopyView:vec4f, sceneryWet:f32,
 }
 @group(0) @binding(0) var<uniform> P: Pass;
 @group(0) @binding(1) var shadowMap: texture_depth_2d;
 @group(0) @binding(2) var shadowS: sampler_comparison;
 @group(0) @binding(3) var fowMap: texture_2d<f32>;
 @group(0) @binding(4) var fowS: sampler;
+@group(0) @binding(5) var hullShadowMap: texture_depth_2d;
+@group(0) @binding(6) var fieldCloudT:texture_2d<f32>; @group(0) @binding(7) var fieldCloudS:sampler;
+@group(0) @binding(8) var fieldSoilT:texture_2d<f32>; @group(0) @binding(9) var fieldSkyT:texture_2d<f32>; @group(0) @binding(10) var fieldClampS:sampler;
+${receiverShader(true)}
+${airShader(true)}
+${footprintShader(true)}
 fn glDepth(p: vec4f) -> vec4f { return vec4f(p.x, -p.y, (p.z + p.w) * 0.5, p.w); }
 fn glMod(x: f32, y: f32) -> f32 { return x - y * floor(x / y); }
 fn fillTerm(n: vec3f, d: vec3f) -> f32 {
@@ -47,6 +81,9 @@ fn softFade(pos: vec4f, view: vec2f) -> f32 {
 `;
 
 const MODEL_DEFINES = [
+  'WIND_LEAVES','LEAF_CASTER','MAP_FINISH','NATURAL_STONE','NATURAL_PLANT',
+  'DEEP_BACKDROP',
+  'FITTING_FINISH', 'HULL_FINISH', 'HULL_ENV', 'ENDOR_WOODLAND','ENDOR_BARK','CANOPY_STEM',
   'ADDITIVE',
   'NATIVE_MESH_ADDITIVE',
   'NEBULA',
@@ -64,9 +101,15 @@ const MODEL_DEFINES = [
   'SKINNED',
   'INSTSKIN',
   'REFLECT',
-  'SELF_SHADOW'
+  'SELF_SHADOW',
+  'LIVERY'
 ];
 const LIGHTING_KEYS = [
+  'landStyle','canopyView','forestWeather','sceneryWet','landProbeOn','wideShadow','fieldLook', 'fieldWind','receiverMap','receiverMode','fieldCloud','fieldSoil','fieldSky',
+  'surfaceLook',
+  'textureCubic',
+  'materialFinish',
+  'landGround','planetDisk', 'planetRadiance', 'orbitalKey', 'orbitPos', 'orbitNeg', 'orbitHDR', 'orbitDir', 'orbitRadiance',
   'sunDir',
   'sunColor',
   'fillDir',
@@ -77,6 +120,7 @@ const LIGHTING_KEYS = [
   'ambient',
   'shadowMap',
   'shadowMatrix',
+  'hullShadowParams', 'hullShadowMatrix', 'hullShadowMap',
   'shadowOn',
   'shadowTexel',
   'shadowTint',
@@ -86,7 +130,7 @@ const LIGHTING_KEYS = [
   'fowSide'
 ];
 
-function modelCode(D, instanced, depth, turned = false) {
+function modelCode(D, instanced, depth, turned = false, incident = false) {
   const L = [];
   const on = k => !!D[k];
   L.push(
@@ -109,13 +153,14 @@ struct Draw {
 @group(1) @binding(4) var glossT: texture_2d<f32>;
 @group(1) @binding(5) var glossS: sampler;
 @group(2) @binding(0) var<uniform> D: Draw;
+${on('LIVERY') ? LIVERY_WGSL : ''}
 `
   );
   if (on('REFLECT'))
     L.push(`
 @group(1) @binding(6) var skyT: texture_2d<f32>;
 @group(1) @binding(7) var skyS: sampler;
-fn skyAt(r: vec3f) -> vec3f {
+fn skyUV(r: vec3f) -> vec2f {
   let a = abs(r);
   var i = 0.0; var F = vec3f(0.0); var U = vec3f(0.0, 0.0, 1.0);
   if (a.x >= a.y && a.x >= a.z) { i = select(1.0, 0.0, r.x > 0.0); F = vec3f(sign(r.x), 0.0, 0.0); }
@@ -123,8 +168,10 @@ fn skyAt(r: vec3f) -> vec3f {
   else { i = select(5.0, 4.0, r.z > 0.0); F = vec3f(0.0, 0.0, sign(r.z)); U = vec3f(0.0, 1.0, 0.0); }
   let d = max(dot(r, F), 1e-4);
   let f = clamp(vec2f(dot(r, cross(F, U)), dot(r, U)) / d * 0.5 + 0.5, vec2f(0.004), vec2f(0.996));
-  return textureSample(skyT, skyS, vec2f((i + f.x) / 6.0, f.y)).rgb;
+  let uv = ${on('FITTING_FINISH') || on('HULL_ENV') ? 'clamp(f,vec2f(0.5/48.0),vec2f(1.0-0.5/48.0))' : 'f'};
+  return vec2f((i+uv.x)/6.0,uv.y);
 }
+fn skyAt(r: vec3f) -> vec3f { return textureSample(skyT,skyS,skyUV(r)).rgb; }
 `
   );
   L.push(`
@@ -144,13 +191,16 @@ struct VOut {
   @builtin(position) pos: vec4f,
   @location(0) vUv: vec2f, @location(1) vNormal: vec3f, @location(2) vTangent: vec3f, @location(3) vBinormal: vec3f,
   @location(4) vWorldPos: vec3f, @location(5) vTint: vec4f,
+  ${on('ENDOR_WOODLAND')?'@location(10) stemHeight:f32,':''}
   ${on('USE_VCOLOR') ? '@location(6) vColor: vec4f,' : ''}
-  ${on('DETAIL') ? '@location(7) vObjPos: vec3f,' : ''}
+  ${on('DETAIL') || on('HULL_FINISH') ? '@location(7) vObjPos: vec3f,' : ''}
   ${on('NEBULA') ? '@location(8) vShade: vec3f,' : ''}
+  ${on('LIVERY') ? '@location(9) vLiveryPos: vec3f,' : ''}
 }
 @vertex fn vs(i: VIn) -> VOut {
   var o: VOut;
   o.vUv = i.uv + D.uvScroll;
+  ${on('LIVERY') ? 'o.vLiveryPos = i.position;' : ''}
   ${on('NATIVE_MESH_ADDITIVE') ? 'o.vUv += D.time * D.uvScrollRate;' : ''}
   ${
     on('SKINNED')
@@ -175,10 +225,11 @@ struct VOut {
   let vn = normalize(mat3x3f(P.view[0].xyz, P.view[1].xyz, P.view[2].xyz) * (mat3x3f(mm[0].xyz, mm[1].xyz, mm[2].xyz) * i.normal));
   var facing = vn.z * vn.z; facing *= facing; facing *= facing;
   o.vShade = clamp(${on('USE_VCOLOR') ? 'i.color.rgb' : 'vec3f(1.0)'} * (2.0 * facing + 0.1), vec3f(0.0), vec3f(1.0));`
-      : 'let wp = mm * vec4f(i.position, 1.0);'
+      : `var wp = mm * vec4f(i.position, 1.0); ${on('WIND_LEAVES') ? bendShader(true) : ''}`
   }
   o.vWorldPos = wp.xyz;
-  ${on('DETAIL') ? 'o.vObjPos = i.position;' : ''}
+  ${on('ENDOR_WOODLAND')?'o.stemHeight=wp.z-mm[3].z;':''}
+  ${on('DETAIL') || on('HULL_FINISH') ? 'o.vObjPos = i.position;' : ''}
   let nm = mat3x3f(mm[0].xyz, mm[1].xyz, mm[2].xyz);
   o.vNormal = nm * i.normal;
   o.vTangent = nm * i.tangent;
@@ -187,6 +238,9 @@ struct VOut {
   o.pos = glDepth(P.proj * P.view * wp);
   return o;
 }
+${orbitShader('wgsl')}
+${on('ENDOR_WOODLAND')?woodFunctions(true):''}
+${blastShader(true)}
 fn bayer2(a0: vec2f) -> f32 { let a = floor(a0); return fract(a.x / 2.0 + a.y * a.y * 0.75); }
 fn bayer4(a: vec2f) -> f32 { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
 fn tinted(c: vec3f, t: vec4f) -> vec3f { return select(mix(c, t.rgb, t.a), c, t.a < 0.0); }
@@ -196,6 +250,7 @@ fn haze(at: vec3f) -> f32 { return select(1.0, clamp((P.fogRange.y - distance(P.
   if (depth) {
     L.push(`
 @fragment fn fs(v: VOut) -> @location(0) vec4f {
+  ${on('LEAF_CASTER')?'if(textureSample(mapT,mapS,v.vUv).a*D.opacity<=D.alphaRef){discard;}':''}
   ${
     on('UNLIT')
       ? ''
@@ -209,11 +264,25 @@ fn haze(at: vec3f) -> f32 { return select(1.0, clamp((P.fogRange.y - distance(P.
   }
   if (!on('UNLIT'))
     L.push(`
+${groundFillShader(true)}
+${on('MAP_FINISH')?materialEnvironmentShader(true):''}
+${nearGroundShader(true)}
+fn hullSun(wp:vec3f)->f32 {
+  let face=cross(dpdx(wp),dpdy(wp)); let n=face/max(length(face),1e-12);
+  let nl=dot(n,P.sunDir);
+  let p=(P.hullShadowMatrix*vec4f(wp+n*(sign(nl)*(1.0-abs(nl))*1.95*P.hullShadowParams.x),1.0)).xyz;
+  if(any(p<vec3f(0.0)) || any(p>vec3f(1.0))){return 1.0;}
+  let d=p.z-0.38*P.hullShadowParams.y;let o=0.65*P.hullShadowParams.z;
+  let visibility=0.25*(textureSampleCompareLevel(hullShadowMap,shadowS,p.xy+vec2f(-o,-o),d)+textureSampleCompareLevel(hullShadowMap,shadowS,p.xy+vec2f(o,-o),d)+
+              textureSampleCompareLevel(hullShadowMap,shadowS,p.xy+vec2f(-o,o),d)+textureSampleCompareLevel(hullShadowMap,shadowS,p.xy+vec2f(o,o),d));
+  let edge=min(p,vec3f(1.0)-p)/P.hullShadowParams.zzy;
+  return mix(1.0,visibility,smoothstep(0.0,2.0,min(edge.x,min(edge.y,edge.z))));
+}
 fn sunlit(wp: vec3f, n: vec3f) -> f32 {
   if (P.shadowOn < 0.5) { return 1.0; }
-  let p = (P.shadowMatrix * vec4f(wp + n * 3.0, 1.0)).xyz;
+  let p = (P.shadowMatrix * vec4f(wp+n*select(3.,P.wideShadow.x*.48,P.wideShadow.x>0.),1.)).xyz;
   if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0 || p.z > 1.0) { return 1.0; }
-  let d = p.z - 0.0012; let o = P.shadowTexel * 1.4;
+  let d=p.z-select(.0012,.44*P.wideShadow.y,P.wideShadow.x>0.); let o = P.shadowTexel * 1.4;
   var s = textureSampleCompareLevel(shadowMap, shadowS, p.xy, d) * 2.0;
   s += textureSampleCompareLevel(shadowMap, shadowS, p.xy + vec2f(-o, -o), d);
   s += textureSampleCompareLevel(shadowMap, shadowS, p.xy + vec2f(o, -o), d);
@@ -241,19 +310,34 @@ fn rock(p: vec3f) -> f32 {
   let ridges = 1.0 - abs(dFbm(p * 0.6) * 2.0 - 1.0);
   return dFbm(p) * 0.6 + ridges * ridges * 0.3 + dNoise(p * 6.0) * 0.1;
 }`);
+  const cubic = !on('UNLIT') && !on('ALPHA') && !on('ADDITIVE');
+  const stable = cubic && !on('NATIVE_MESH_GLOSS_EMISSIVE');
+  if (cubic) L.push(cubicShader('wgsl'));
   L.push(`
 @fragment fn fs(v: VOut, @builtin(front_facing) facing: bool) -> @location(0) vec4f {
   let front = ${turned ? '!facing' : 'facing'};
   let fc = v.pos.xy;
   var base = textureSample(mapT, mapS, v.vUv);
+  ${on('ALPHA') && !on('UNLIT') && (on('WIND_LEAVES') || on('ENDOR_WOODLAND')) ? 'if(base.a*D.opacity<=D.alphaRef){discard;}' : ''}
+  ${on('WIND_LEAVES') || (on('ENDOR_WOODLAND') && on('ALPHA')) || on('CANOPY_STEM') ? canopyWindowShader(true) : ''}
+  ${stable ? `let dx=dpdx(v.vUv);let dy=dpdy(v.vUv);let filterK=detailWidth(dx,dy,vec2f(textureDimensions(mapT,0)));
+  if(filterK>1.0){base=vec4f(textureSampleGrad(mapT,mapS,v.vUv,dx*filterK,dy*filterK).rgb,base.a);}` : ''}
+  ${on('DEEP_BACKDROP') ? backdropExposure(true) : ''}
+  ${cubic ? `if (P.textureCubic>0.0) {
+    let size=vec2f(textureDimensions(mapT,0)); let span=max(length(dpdx(v.vUv)*size),length(dpdy(v.vUv)*size));
+    if (span<1.0) { base=vec4f(mix(base.rgb,cubicRGB(v.vUv,size),1.0-smoothstep(0.55,1.0,span)),base.a); }
+  }` : ''}
   ${on('REFLECT') && on('UNLIT') ? 'let skyR = skyAt(reflect(normalize(v.vWorldPos - P.cameraPosition), normalize(v.vNormal) * select(-1.0, 1.0, front)));' : ''}
   ${on('REFLECT') && on('UNLIT') ? 'base = vec4f(skyR, 1.0);' : ''}
   var albedo = base.rgb;
   ${on('COLORIZE') ? 'albedo = mix(albedo, albedo * D.colorization.rgb, base.a);' : ''}
+  ${on('LIVERY') ? 'albedo = liveryPaint(albedo, v.vLiveryPos);' : ''}
 `);
   if (on('UNLIT')) {
     L.push(`
   var col = albedo * D.diffuse;
+  ${on('WIND_LEAVES')?'if(P.receiverMode.y>0.0){col+=albedo*P.sunColor*((0.065+0.26*pow(max(0.0,dot(normalize(v.vWorldPos-P.cameraPosition),P.sunDir)),2.0))*cloudSun(v.vWorldPos));}':''}
+  ${on('WIND_LEAVES')?'if(P.fieldLook.x>0.0){col=mix(col,P.fogTint,airDepth(v.vWorldPos));}':''}
   var a = base.a;
   ${on('USE_VCOLOR') ? 'col *= v.vColor.rgb; a *= v.vColor.a;' : ''}
   let oc = objectTint(D.tint) * objectTint(v.vTint);
@@ -275,7 +359,7 @@ fn rock(p: vec3f) -> f32 {
   var n = normalize(v.vNormal);
   var gloss = 0.25;
   ${
-    on('BUMP') || on('SPECGLOW') || on('REFLECT') ? 'let nt = textureSample(normalT, normalS, v.vUv);' : ''
+    on('BUMP') || on('SPECGLOW') || on('REFLECT') ? `var nt = textureSample(normalT, normalS, v.vUv); ${stable && on('BUMP')?'if(filterK>1.0){nt=textureSampleGrad(normalT,normalS,v.vUv,dx*filterK,dy*filterK);}':''}` : ''
   }
   ${
     on('BUMP')
@@ -299,14 +383,37 @@ fn rock(p: vec3f) -> f32 {
   }`
       : ''
   }
+  ${!on('NATIVE_MESH_GLOSS_EMISSIVE') && !on('ALPHA') && !on('ENDOR_WOODLAND') && !on('NATURAL_PLANT') && !on('NATURAL_STONE') ? `let corrected = ${on('HULL_FINISH') || incident ? 'true' : '(P.orbitalKey >= 2.0 || P.landProbeOn>0.)'};
+  if (corrected) { albedo = orbitDecode(albedo); }
+  if (P.surfaceLook.x > 0.0) {
+    let dims = vec2f(textureDimensions(mapT,0));
+    let du = dpdx(v.vUv); let dv = dpdy(v.vUv);
+    let footprint = max(1.0, max(length(du*dims),length(dv*dims)));
+    let stepUV = footprint/dims; let luma = vec3f(0.2126,0.7152,0.0722);
+    var slope = vec2f(dot(base.rgb-textureSampleGrad(mapT,mapS,v.vUv+vec2f(stepUV.x,0.0),du,dv).rgb,luma),
+                      dot(base.rgb-textureSampleGrad(mapT,mapS,v.vUv+vec2f(0.0,stepUV.y),du,dv).rgb,luma));
+    slope = clamp(slope*5.0,vec2f(-0.85),vec2f(0.85))*P.surfaceLook.x/sqrt(footprint);
+    n = normalize(n+slope.x*v.vTangent/max(length(v.vTangent),1e-5)+slope.y*v.vBinormal/max(length(v.vBinormal),1e-5));
+  }` : ''}
   if (!front) { n = -n; }
   let gn = ${on('DETAIL') ? 'n' : 'normalize(v.vNormal) * select(-1.0, 1.0, front)'};
   var shadowLit = sunlit(v.vWorldPos, normalize(v.vNormal) * select(-1.0, 1.0, front));
   ${on('SELF_SHADOW') ? 'if (P.shadowOn > 0.5) { shadowLit = min(shadowLit, smoothstep(-0.05, 0.05, dot(normalize(v.vNormal) * select(-1.0, 1.0, front), P.sunDir))); }' : ''}
-  let mapShadow = P.shadowTint.x >= 0.0;
-  let sun = select(mix(0.38, 1.0, shadowLit), 1.0, mapShadow);
-  let sunTerm = ${on('BUMP') ? 'max(dot(n, P.sunDir), 0.0)' : 'fillTerm(gn, P.sunDir)'};
-  var light = P.ambient + P.fillColor * fillTerm(gn, P.fillDir) + P.fillColor2 * fillTerm(gn, P.fillDir2) + P.sunColor * sunTerm * sun;
+  var mapShadow = P.shadowTint.x >= 0.0;
+  let vacuum = P.orbitalKey == 4.0;
+  if (vacuum) { mapShadow = false; }
+  var sun = select(select(mix(0.38, 1.0, shadowLit), 1.0, mapShadow),shadowLit,vacuum);
+  if(P.landGround.w>0.0){sun=groundSun(v.vWorldPos,gn,shadowLit);}
+  if(P.hullShadowParams.x>0.0 && P.landGround.w<1.5){sun=min(sun,hullSun(v.vWorldPos));}
+  sun*=cloudSun(v.vWorldPos);
+  let sunTerm = ${on('BUMP') ? 'max(dot(n, P.sunDir), 0.0)' : 'fillTerm(select(gn,n,P.surfaceLook.x>0.0), P.sunDir)'};
+  var indirect = P.ambient + P.fillColor * fillTerm(gn, P.fillDir) + P.fillColor2 * fillTerm(gn, P.fillDir2);
+  var light = indirect + P.sunColor * sunTerm * sun;
+  if (P.orbitalKey > 0.5) { light = indirect * vec3f(0.64, 0.75, 0.92) + P.sunColor * (1.12 * max(dot(n, P.sunDir), 0.0) * sun); }
+  if (vacuum) { light = max(0.14*indirect,vec3f(0.012)) + P.sunColor*(1.22*max(dot(n,P.sunDir),0.0)*sun); }
+  if(P.landGround.w>0.0){indirect=groundFill(n)${on('ENDOR_WOODLAND')?'':'*shelteredSky(v.vWorldPos)'};light=indirect+P.sunColor*(max(dot(n,P.sunDir),0.0)*sun);}
+  light+=soilBounce(v.vWorldPos,gn);
+  ${on('WIND_LEAVES')?'if(P.receiverMode.y>0.0){light+=P.sunColor*((0.10+0.35*max(dot(-gn,P.sunDir),0.0))*(0.50+0.50*pow(max(0.0,dot(normalize(v.vWorldPos-P.cameraPosition),P.sunDir)),2.0))*sun);}':''}
   var boltSum = vec3f(0.0);
   for (var bi = 0; bi < 16; bi++) {
     if (f32(bi) >= P.boltN) { break; }
@@ -319,6 +426,7 @@ fn rock(p: vec3f) -> f32 {
   let vv = normalize(P.cameraPosition - v.vWorldPos);
   let sp = pow(max(dot(n, normalize(P.sunDir + vv)), 0.0), 16.0) * sun;
   let ls = objectTint(D.tint) * objectTint(v.vTint);
+  ${on('NATURAL_PLANT') || on('NATURAL_STONE') ? naturalShade(true,on('NATURAL_PLANT')) : on('ENDOR_WOODLAND')?woodColor(true,on('ALPHA'),on('ENDOR_BARK')):`
   ${
     on('NATIVE_MESH_GLOSS_EMISSIVE')
       ? 'var col = albedo * D.emissive * 2.0;'
@@ -328,7 +436,68 @@ fn rock(p: vec3f) -> f32 {
   var col = albedo * D.diffuse * light * ls.rgb + P.sunSpecular * st.rgb * sh + D.emissive * nt.a;`
         : 'var col = albedo * (2.0 * D.emissive + D.diffuse * light * ls.rgb) + D.specular * P.sunSpecular * sp * gloss;'
   }
-  ${on('REFLECT') ? 'col += skyAt(reflect(-vv, n)) * D.specular * nt.a;' : ''}
+  let mapped=${on('MAP_FINISH')&&!on('HULL_FINISH')&&!on('FITTING_FINISH')?'P.receiverMode.z!=0.0':'false'};
+  ${on('MAP_FINISH')&&!on('HULL_FINISH')&&!on('FITTING_FINISH')?`if(mapped){let g=clamp(${on('SPECGLOW')?'st.a':'gloss'},0.0,1.0);let mask=clamp(${on('SPECGLOW')?'st.rgb':'D.specular'},vec3f(0),vec3f(1))${on('REFLECT')&&!on('SPECGLOW')?'*nt.a':''};
+    let reflected=materialEnvironment(v.vWorldPos,reflect(-vv,n),g)*mask*(0.10+0.45*g+0.28*pow(1.0-clamp(dot(vv,n),0.0,1.0),5.0));
+    col=select(orbitEncode(orbitDecode(max(col,vec3f(0)))+reflected),col+reflected,corrected);}`:''}
+  ${on('HULL_FINISH') ? '' : on('FITTING_FINISH') ? `let band=clamp(D.shininess${on('BUMP') ? '+0.5*(0.5-gloss)' : ''},0.0,1.0)*2.0;
+  let uv=skyUV(reflect(-vv,n));
+  let lo=orbitDecode(textureSample(skyT,skyS,vec2f(uv.x,(uv.y+floor(band))/3.0)).rgb);
+  let hi=orbitDecode(textureSample(skyT,skyS,vec2f(uv.x,(uv.y+min(floor(band)+1.0,2.0))/3.0)).rgb);
+  let F=mix(D.specular,vec3f(1.0),pow(1.0-clamp(dot(n,vv),0.0,1.0),5.0));
+  let bounce=mix(lo,hi,fract(band))*F*(1.0-0.27*band);
+  col=select(orbitEncode(orbitDecode(max(col,vec3f(0.0)))+bounce),col+bounce,corrected);` : on('REFLECT') ? `var reflected = skyAt(reflect(-vv,n));
+  ${!on('ALPHA') && !on('NATIVE_MESH_GLOSS_EMISSIVE') ? 'if (corrected) { reflected = orbitDecode(reflected); }' : ''}
+  if(!mapped){col += reflected * D.specular * nt.a;}` : ''}
+  ${!on('NATIVE_MESH_GLOSS_EMISSIVE') && !on('ALPHA') ? `${on('HULL_FINISH') ? hullFinish(true,on('HULL_ENV')) : `if (P.materialFinish > 0.0) {
+    ${on('SPECGLOW') ? 'let g=clamp(st.a,0.0,1.0); let mask=clamp(st.rgb,vec3f(0.0),vec3f(1.0)); let legacy=P.sunSpecular*st.rgb*sh;' : 'let g=clamp(gloss,0.0,1.0); let mask=clamp(D.specular,vec3f(0.0),vec3f(1.0)); let legacy=D.specular*P.sunSpecular*sp*gloss;'}
+    let rough=mix(0.78,0.27,g); let a2=rough*rough*rough*rough;
+    let h=(vv+P.sunDir)/max(length(vv+P.sunDir),0.0001);
+    let nv=clamp(dot(n,vv),0.001,1.0); let nl=clamp(dot(n,P.sunDir),0.0,1.0); let nh=clamp(dot(n,h),0.0,1.0);
+    let d=nh*nh*(a2-1.0)+1.0; let k=(rough+1.0)*(rough+1.0)/8.0;
+    let f0=mix(vec3f(0.035),vec3f(0.22),g)*mask;
+    let F=f0+(1.0-f0)*pow(1.0-clamp(dot(vv,h),0.0,1.0),5.0);
+    let direct=P.sunSpecular*F*(a2/(3.14159*d*d))*(nl/max(4.0*mix(nv,1.0,k)*mix(nl,1.0,k),0.001))*sun;
+    let sky=clamp(0.5+0.5*reflect(-vv,n).z,0.0,1.0);
+    let bounce=(P.ambient+P.fillColor)*sky*(f0+(1.0-f0)*pow(1.0-nv,5.0))*(1.0-0.7*rough);
+    col += P.materialFinish*(direct${on('FITTING_FINISH')?'':'+select(select(1.0,0.14,vacuum),0.0,mapped)*bounce'}-legacy);
+  }
+  if (P.surfaceLook.y > 0.0 && P.landProbeOn<.5) {
+    let sky = 0.5 + 0.5*n.z; let edge = pow(1.0-clamp(dot(n,vv),0.0,1.0),2.5);
+    let skyColor = clamp(P.ambient*0.65 + P.fillColor*0.5 + P.sunColor*0.25, vec3f(0.0),vec3f(1.8))*vec3f(0.78,0.9,1.0);
+    col += P.surfaceLook.y * skyColor * (albedo*D.diffuse*ls.rgb*sky + select(edge,0.0,mapped)*(0.22+0.48*clamp(gloss,0.0,1.0))) * mix(0.65,1.0,shadowLit);
+  }
+  if (P.orbitalKey >= 3.0 && P.landProbeOn<.5) {
+    let ray=reflect(-vv,n); let nr=max(n,vec3f(0)); let nf=min(n,vec3f(0)); let rp=max(ray,vec3f(0)); let rn=min(ray,vec3f(0));
+    let broad=P.orbitPos*(nr*nr)+P.orbitNeg*(nf*nf); let sheen=P.orbitPos*(rp*rp)+P.orbitNeg*(rn*rn);
+    let g=clamp(gloss,0.0,1.0); let edge=1.0-clamp(dot(n,vv),0.0,1.0);
+    ${on('FITTING_FINISH') ? 'col += (2.0*broad + 1.25*P.orbitRadiance*max(dot(n,P.orbitDir),0.0))*albedo*D.diffuse*ls.rgb;' : `col += 2.0*broad*albedo*D.diffuse*ls.rgb + select(1.0,0.0,mapped)*mix(broad,sheen,g)*(0.06+0.3*g+0.18*edge*edge);
+    let face = max(dot(n,P.orbitDir),0.0); let highlight = pow(max(dot(ray,P.orbitDir),0.0),mix(3.0,22.0,g));
+    col += P.orbitRadiance * (1.25*face*albedo*D.diffuse*ls.rgb + select(1.0,0.0,mapped)*(0.05+0.19*g)*highlight);`}
+  }`}
+  ${diskBounce(true,on('HULL_FINISH')?'coatBase':'(select(orbitDecode(albedo),albedo,corrected)*D.diffuse*ls.rgb)')}
+  if (P.blastCount > 0.0 && P.receiverMode.x<1.5) {
+    var local = vec3f(0.0);
+    let paint = ${on('HULL_FINISH') ? 'coatBase' : 'select(orbitDecode(albedo),albedo,corrected)*D.diffuse*ls.rgb'};
+    ${on('HULL_FINISH') ? 'let mask=coatF0; let g=1.0-rough;' : on('SPECGLOW') ? 'let mask=st.rgb; let g=st.a;' : 'let mask=clamp(D.specular,vec3f(0.0),vec3f(1.0)); let g=gloss;'}
+    for (var i=0; i<${BLAST_SLOTS}; i++) {
+      if (f32(i) >= P.blastCount) { break; }
+      local += blastBounce(P.blastSource[i].xyz-v.vWorldPos,P.blastSource[i].w,P.blastEnergy[i].rgb,n,vv,paint,mask,g);
+    }
+    if (any(local > vec3f(0.0))) {
+      if (mapShadow) { col *= mix(P.shadowTint,vec3f(1.0),shadowLit); }
+      mapShadow = false;
+      col = select(orbitEncode(orbitDecode(max(col,vec3f(0.0)))+local),col+local,corrected);
+    }
+  }
+  if (corrected) {
+    if (mapShadow) { col *= mix(P.shadowTint,vec3f(1.0),shadowLit); }
+    mapShadow = false;
+    col = orbitEncode(${incident?'col':'select(orbitShoulder(col), col, P.orbitHDR > 0.5)'});
+  }` : ''}
+  `}
+  if(P.fieldLook.x>0.0){col=mix(col,P.fogTint,airDepth(v.vWorldPos));}
+  ${on('ENDOR_WOODLAND')?woodMist(true,'col','v.vWorldPos')+forestAir(true,true,'v.vWorldPos','col'):highlightKnee(true)}
   col = tinted(col, D.tint);
   col = tinted(col, v.vTint);
   if (D.ghost > 0.5 && glMod(floor(fc.x) + floor(fc.y), 2.0) < 1.0) { discard; }
@@ -336,7 +505,8 @@ fn rock(p: vec3f) -> f32 {
   ${on('FOW_DIM') ? 'if (P.fowSide > 0.0) { col *= mix(0.3, 1.0, textureSample(fowMap, fowS, v.vWorldPos.xy / P.fowSide).r); }' : ''}
   col = mix(P.fogTint, col, haze(v.vWorldPos));
   if (mapShadow) { col *= mix(P.shadowTint, vec3f(1.0), shadowLit); }
-  ${on('ALPHA') ? 'if (base.a * D.opacity <= D.alphaRef) { discard; }\n  return vec4f(col, base.a * D.opacity * ls.a);' : 'return vec4f(col, D.opacity * ls.a);'}
+  ${on('ALPHA') && !(on('WIND_LEAVES') || on('ENDOR_WOODLAND')) ? 'if (base.a * D.opacity <= D.alphaRef) { discard; }' : ''}
+  ${on('ALPHA') ? 'return vec4f(col, base.a * D.opacity * ls.a);' : 'return vec4f(col, D.opacity * ls.a);'}
 }`);
   return L.join('');
 }
@@ -366,12 +536,21 @@ export const num = u => (u ? +u.value || 0 : 0);
 let turnedSrc = null;
 const turnedFrag = () => (turnedSrc ||= env.programSources.FRAG.replace(/\bgl_FrontFacing\b/g, '(!gl_FrontFacing)'));
 
+const liveryOf = m => !!(m.defines && m.defines.LIVERY);
+
+// Shared by the stock and the painted model families: the same three shader
+// sources, split only by REFLECT, which needs the sky bindings.
+function modelMatch(m, reflect) {
+  const P = env.programSources;
+  if (!m.isShaderMaterial || m.vertexShader !== P.VERT) return false;
+  if (!!(m.defines && m.defines.REFLECT) !== reflect) return false;
+  return m.fragmentShader === P.FRAG || m.fragmentShader === P.DEPTH_FRAG || m.fragmentShader === turnedFrag();
+}
+
 const model = {
   name: 'model',
   match(m) {
-    const P = env.programSources;
-    if (!m.isShaderMaterial || m.vertexShader !== P.VERT || (m.defines && m.defines.REFLECT)) return false;
-    return m.fragmentShader === P.FRAG || m.fragmentShader === P.DEPTH_FRAG || m.fragmentShader === turnedFrag();
+    return modelMatch(m, false) && !liveryOf(m);
   },
   light: m => (LIGHTING_KEYS.every(k => !m.uniforms[k] || m.uniforms[k] === env.lighting[k]) ? null : m.uniforms),
   key(m, instanced) {
@@ -384,8 +563,8 @@ const model = {
       (m.fragmentShader === turnedFrag() ? '|T' : '')
     );
   },
-  code(m, instanced) {
-    return modelCode(m.defines || {}, instanced, m.fragmentShader === env.programSources.DEPTH_FRAG, m.fragmentShader === turnedFrag());
+  code(m, instanced, incident) {
+    return modelCode(m.defines || {}, instanced, m.fragmentShader === env.programSources.DEPTH_FRAG, m.fragmentShader === turnedFrag(), incident);
   },
   attributes(m, instanced) {
     const D = m.defines || {},
@@ -437,12 +616,13 @@ const model = {
   }
 };
 
+import { compositionShader } from '../game/ground-composition.js';
 const TERRAIN_SLOTS = 64;
-const terrainCode = () =>
+const terrainCode = (mixed=false) =>
   PASS_WGSL +
   `
-struct Draw { model: mat4x4f, modelView: mat4x4f }
-struct Terrain { texU: array<vec4f, ${TERRAIN_SLOTS}>, texV: array<vec4f, ${TERRAIN_SLOTS}>, matDiffuse: array<vec4f, ${TERRAIN_SLOTS}>, matSpecular: array<vec4f, ${TERRAIN_SLOTS}>, cloudAt: vec4f, side: vec4f, glowAt: array<vec4f, 8>, glowTint: array<vec4f, 8>, occAt: array<vec4f, 16> }
+struct Draw { model: mat4x4f, modelView: mat4x4f, terrainContactMask:f32 }
+struct Terrain { texU: array<vec4f, ${TERRAIN_SLOTS}>, texV: array<vec4f, ${TERRAIN_SLOTS}>, matDiffuse: array<vec4f, ${TERRAIN_SLOTS}>, matSpecular: array<vec4f, ${TERRAIN_SLOTS}>, cloudAt: vec4f, side: vec4f, glowAt: array<vec4f, 8>, glowTint: array<vec4f, 8>, occAt: array<vec4f, 16>, forest: vec4f, reliefPatch:vec4f ${mixed?', groundMixA:vec4f, groundMixB:vec4f':''} }
 @group(1) @binding(0) var mapT: texture_2d_array<f32>;
 @group(1) @binding(1) var mapS: sampler;
 @group(1) @binding(2) var bumpT: texture_2d_array<f32>;
@@ -452,6 +632,11 @@ struct Terrain { texU: array<vec4f, ${TERRAIN_SLOTS}>, texV: array<vec4f, ${TERR
 @group(1) @binding(6) var fogT: texture_2d<f32>;
 @group(1) @binding(7) var fogS: sampler;
 @group(1) @binding(8) var<uniform> T: Terrain;
+@group(1) @binding(9) var soilColorT: ${mixed?'texture_2d_array':'texture_2d'}<f32>;
+@group(1) @binding(10) var soilColorS: sampler;
+@group(1) @binding(11) var soilSurfaceT: ${mixed?'texture_2d_array':'texture_2d'}<f32>;
+@group(1) @binding(12) var soilSurfaceS: sampler;
+@group(1) @binding(13) var canopyT:texture_2d<f32>;@group(1) @binding(14) var canopyS:sampler;
 @group(2) @binding(0) var<uniform> D: Draw;
 struct VIn { @location(0) position: vec3f, @location(1) normal: vec3f, @location(2) layers: vec4f, @location(3) corner: vec2f, @location(4) shade: f32 }
 struct VOut { @builtin(position) pos: vec4f, @location(0) vCorner: vec2f, @location(1) vNormal: vec3f, @location(2) vWorld: vec3f, @location(3) vShade: f32, @location(4) @interpolate(flat) vLayers: vec4f }
@@ -460,69 +645,111 @@ struct VOut { @builtin(position) pos: vec4f, @location(0) vCorner: vec2f, @locat
   o.vCorner = i.corner; o.vLayers = i.layers; o.vShade = i.shade;
   o.vNormal = i.normal; o.vWorld = i.position;
   o.pos = glDepth(P.proj * D.modelView * vec4f(i.position, 1.0));
+  ${reliefCutVertex(true)}
   return o;
 }
-fn sunlit(wp: vec3f) -> f32 {
+${groundFillShader(true)}
+${nearGroundShader(true, true)}
+fn remasteredReceiver()->bool { return ${mixed?'true':'T.forest.y>.5'}; }
+fn sunlit(wp: vec3f, normal: vec3f) -> f32 {
   if (P.shadowOn < 0.5) { return 1.0; }
-  let p = (P.shadowMatrix * vec4f(wp + vec3f(0.0, 0.0, 1.5), 1.0)).xyz;
+  let p = (P.shadowMatrix * vec4f(wp+select(vec3f(0.,0.,1.5),normal*.48*P.wideShadow.x,P.wideShadow.x>0.),1.)).xyz;
   if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0 || p.z > 1.0) { return 1.0; }
-  let d = p.z - 0.0015; let o = P.shadowTexel * 1.3;
+  let d=p.z-select(.0015,.44*P.wideShadow.y,P.wideShadow.x>0.); let o = P.shadowTexel * 1.3;
   var s = textureSampleCompareLevel(shadowMap, shadowS, p.xy, d);
   s += textureSampleCompareLevel(shadowMap, shadowS, p.xy + vec2f(-o, -o), d) + textureSampleCompareLevel(shadowMap, shadowS, p.xy + vec2f(o, -o), d) + textureSampleCompareLevel(shadowMap, shadowS, p.xy + vec2f(-o, o), d) + textureSampleCompareLevel(shadowMap, shadowS, p.xy + vec2f(o, o), d);
   let e = min(p.xy, 1.0 - p.xy);
-  return mix(1.0, mix(0.5, 1.0, s / 5.0), smoothstep(0.0, 0.05, min(e.x, e.y)));
+  return mix(1.0, select(mix(0.5,1.0,s/5.0),s/5.0,P.landGround.w>0.0 || remasteredReceiver()), smoothstep(0.0, 0.05, min(e.x, e.y)));
 }
 var<private> n: vec3f;
 var<private> toEye: vec3f;
 var<private> dPx: vec3f;
 var<private> dPy: vec3f;
 var<private> soft: vec3f;
+var<private> terrainSky: vec3f;
+${terrainSurfaceShader(true)}
+${woodFunctions(true)}
 var<private> vWorld: vec3f;
+var<private> direct: vec3f;
 var<private> nearK: f32;
+${cubicShader('wgsl',true)}
+${orbitShader('wgsl')}
+${scanSamplers(true,mixed)}
+${landscapeBlend(true,mixed)}
 fn layer(slot: f32) -> vec3f {
   let i = clamp(i32(slot + 0.5), 0, ${TERRAIN_SLOTS - 1});
   let U = T.texU[i].xyz; let V = T.texV[i].xyz;
   let at = vec2f(dot(U, vWorld), dot(V, vWorld));
-  let gx = vec2f(dot(U, dPx), dot(V, dPx)); let gy = vec2f(dot(U, dPy), dot(V, dPy));
+  var gx = vec2f(dot(U, dPx), dot(V, dPx)); var gy = vec2f(dot(U, dPy), dot(V, dPy));
+  ${forestShader(true,mixed)}
+  if(P.fieldLook.z>0.0){let k=detailWidth(gx,gy,vec2f(textureDimensions(mapT,0)));gx*=k;gy*=k;}
   var t = textureSampleGrad(mapT, mapS, at, i, gx, gy);
+  if (P.textureCubic>0.0) {
+    let size=vec2f(textureDimensions(mapT,0)); let span=max(length(gx*size),length(gy*size));
+    if (span<1.0) { t=vec4f(mix(t.rgb,cubicRGB(at,size,i),1.0-smoothstep(0.55,1.0,span)),t.a); }
+  }
   var b = textureSampleGrad(bumpT, bumpS, at, i, gx, gy).xyz * 2.0 - 1.0;
+  let Y = vec3f(0.299,0.587,0.114);
+  var mean = 0.0;
+  if (T.side.z > 0.0 || nearK > 0.0) { mean = dot(textureSampleLevel(mapT,mapS,at,i,9.0).rgb,Y); }
+  if (T.side.z > 0.0) {
+    let macroUV=at*0.29+vec2f(0.37,0.71);
+    let field = dot(textureSampleGrad(mapT,mapS,macroUV,i,gx*0.29,gy*0.29).rgb,Y);
+    t=vec4f(t.rgb*mix(1.0,clamp((field+0.06)/(mean+0.06),0.57,1.48),T.side.z*0.77),t.a);
+  }
   if (nearK > 0.0) {
-    let Y = vec3f(0.299, 0.587, 0.114);
     let tf = textureSampleGrad(mapT, mapS, at * 7.0, i, gx * 7.0, gy * 7.0).rgb;
-    let avg = textureSampleLevel(mapT, mapS, at, i, 9.0).rgb;
-    t = vec4f(t.rgb * mix(1.0, clamp(dot(tf, Y) / max(dot(avg, Y), 0.04), 0.55, 1.6), nearK), t.a);
+    t = vec4f(t.rgb * mix(1.0, clamp(dot(tf, Y) / max(mean, 0.04), 0.55, 1.6), nearK), t.a);
     let bd = textureSampleGrad(bumpT, bumpS, at * 7.0, i, gx * 7.0, gy * 7.0).xyz * 2.0 - 1.0;
     b = normalize(b + vec3f(bd.xy, 0.0) * nearK * 0.8);
   }
-  let Tv = normalize(vec3f(U.xy, -dot(U.xy, n.xy) / n.z)); let Bv = normalize(vec3f(V.xy, -dot(V.xy, n.xy) / n.z));
-  let L = normalize(vec3f(dot(P.sunDir, Tv), dot(P.sunDir, Bv), dot(P.sunDir, n)));
-  let h = normalize(toEye + P.sunDir); let H = normalize(vec3f(dot(h, Tv), dot(h, Bv), dot(h, n)));
-  var shine = clamp(dot(b, H), 0.0, 1.0); shine *= shine; shine *= shine; shine *= shine; shine *= shine;
-  return t.rgb * (P.sunColor * clamp(dot(b, L), 0.0, 1.0) + soft) * T.matDiffuse[i].xyz + t.a * shine * 0.5 * P.sunColor * T.matSpecular[i].xyz;
+  let frame=terrainFrame(n,U,V);
+  let sn=normalize(frame*vec3f(b.xy,max(.01,b.z)));
+  var shine = clamp(dot(sn,normalize(toEye+P.sunDir)), 0.0, 1.0); shine *= shine; shine *= shine; shine *= shine; shine *= shine;
+  var paint=t.rgb; if(P.landProbeOn>0.){paint=orbitDecode(paint);}
+  var result=paint * (direct * clamp(dot(sn, P.sunDir), 0.0, 1.0) + terrainFill(sn)) * T.matDiffuse[i].xyz + t.a * shine * 0.5 * direct * T.matSpecular[i].xyz;
+  ${wetLayerShader(true)}
+  ${mixed?'if(P.landProbeOn>0.){return max(result,vec3f(0.));}return orbitDecode(max(result,vec3f(0.)));':'if(P.landProbeOn>0.){return orbitEncode(max(result,vec3f(0.0)));}return result;'}
 }
+${mixed?compositionShader(true):''}
 @fragment fn fs(v: VOut) -> @location(0) vec4f {
   vWorld = v.vWorld;
   n = normalize(v.vNormal); toEye = normalize(P.cameraPosition - vWorld);
   dPx = dpdx(vWorld); dPy = dpdy(vWorld);
-  nearK = T.side.y * (1.0 - smoothstep(25.0, 260.0, distance(P.cameraPosition, vWorld)));
+  let dist = distance(P.cameraPosition,vWorld);
+  nearK = max(T.side.y * (1.0 - smoothstep(25.0,260.0,dist)),T.side.z * 0.85 * (1.0 - smoothstep(160.0,1200.0,dist)));
   soft = P.ambient + P.fillColor * max(dot(n, P.fillDir), 0.0) + P.fillColor2 * max(dot(n, P.fillDir2), 0.0);
   let cl = textureSample(cloudsT, cloudsS, (vWorld.xy + T.cloudAt.xy) / T.cloudAt.z).rgb;
   let seen = textureSample(fogT, fogS, vWorld.xy / T.side.x).r;
+  let vis=groundSun(vWorld,n); direct=P.sunColor;
+  terrainSky=vec3f(1.);
+  if(P.landGround.w>0.0 || remasteredReceiver()){direct*=cl*vis;}else if(P.receiverMap.z>0.0){direct*=cl;}
+  ${woodGround(true)}
   let Ly = v.vLayers;
+  let shelter=select(mix(.55,1.,clamp(v.vShade,0.,1.)),1.,T.forest.y>.5);terrainSky*=shelter;soft*=shelter;
+  ${mixed?'let keep=vec4f(1.)-step(vec4f(2.),vec4f(T.texU[i32(Ly.x)].w,T.texU[i32(Ly.y)].w,T.texU[i32(Ly.z)].w,T.texU[i32(Ly.w)].w));':''}
   var c: vec3f;
-  if (Ly.x == Ly.y && Ly.x == Ly.z && Ly.x == Ly.w) { c = layer(Ly.x); }
+  let bank=select(0.,1.-smoothstep(0.,${BANK_HEIGHT},vWorld.z-T.cloudAt.w),T.forest.y>.5);
+  ${mixed?'if(T.groundMixB.w>0.){c=composed(Ly,v.vCorner);}else':''}
+  if(bank>=1.){c=layer(63.);}
+  else if (Ly.x == Ly.y && Ly.x == Ly.z && Ly.x == Ly.w) { c = layer(Ly.x); }
   else {
     var w = vec4f((1.0 - v.vCorner.x) * (1.0 - v.vCorner.y), v.vCorner.x * (1.0 - v.vCorner.y), (1.0 - v.vCorner.x) * v.vCorner.y, v.vCorner.x * v.vCorner.y);
+    ${mixed?'w=mix(w,forestWeights(v.vCorner),1.-dot(w,keep));':'if(T.forest.y>1.5){w=forestWeights(v.vCorner);}'}
     if (Ly.y == Ly.x) { w.x += w.y; w.y = 0.0; }
     if (Ly.z == Ly.x) { w.x += w.z; w.z = 0.0; } else if (Ly.z == Ly.y) { w.y += w.z; w.z = 0.0; }
     if (Ly.w == Ly.x) { w.x += w.w; w.w = 0.0; } else if (Ly.w == Ly.y) { w.y += w.w; w.w = 0.0; } else if (Ly.w == Ly.z) { w.z += w.w; w.w = 0.0; }
+    ${applyLandscapeBlend(true,mixed)}
     c = vec3f(0.0);
-    if (w.x > 0.004) { c += layer(Ly.x) * w.x; }
-    if (w.y > 0.004) { c += layer(Ly.y) * w.y; }
-    if (w.z > 0.004) { c += layer(Ly.z) * w.z; }
-    if (w.w > 0.004) { c += layer(Ly.w) * w.w; }
+    if (w.x > 0.) { c += layer(Ly.x) * w.x; }
+    if (w.y > 0.) { c += layer(Ly.y) * w.y; }
+    if (w.z > 0.) { c += layer(Ly.z) * w.z; }
+    if (w.w > 0.) { c += layer(Ly.w) * w.w; }
   }
-  c *= cl * sunlit(vWorld);
+  if(bank>0. && bank<1.){c=mix(c,layer(63.),bank);}
+  ${mixed?'c=orbitEncode(c);':'if(T.forest.y>.5){c=orbitEncode(c);}'}
+  if(P.landGround.w<0.5 && !remasteredReceiver()){if(P.receiverMap.z>0.0){c*=vis;}else{c*=cl*vis;}}
+  ${scorchedSoil(true)}
   var glow = vec3f(0.0);
   for (var i = 0; i < 8; i++) {
     let G = T.glowAt[i];
@@ -534,15 +761,17 @@ fn layer(slot: f32) -> vec3f {
     if (O.z > 0.0) { let d = distance(vWorld.xy, O.xy) / O.z; if (d < 1.0) { occ *= 1.0 - O.w * (1.0 - d) * (1.0 - d); } }
   }
   c = c * occ + glow * (vec3f(0.35) + c);
+  if(T.forest.y>.5){${woodMist(true,'c','vWorld')}${forestAir(true,false,'vWorld','c')}}
+  if(P.fieldLook.x>0.0){c=mix(c,P.fogTint,airDepth(vWorld));}
   let clear = select(1.0, clamp((P.fogRange.y - distance(P.cameraPosition, vWorld)) / max(1.0, P.fogRange.y - P.fogRange.x), 0.0, 1.0), P.fogRange.y > 0.0);
-  return vec4f(mix(P.fogTint, c * v.vShade * mix(0.3, 1.0, seen), clear), 1.0);
+  return vec4f(mix(P.fogTint, c * mix(0.3, 1.0, seen), clear), 1.0-D.terrainContactMask);
 }`;
 
 const terrain = {
   name: 'terrain',
   match: m => m.isShaderMaterial && !!m.uniforms && !!m.uniforms.texU && !!m.uniforms.bump && !!m.uniforms.cloudAt,
   key: () => 'terrain',
-  code: terrainCode,
+  code: () => terrainCode(false),
   attributes: () => ({
     vertex: [
       ['position', 3, 0],
@@ -558,11 +787,12 @@ const terrain = {
     ...texBinding(2, 'float', '2d-array'),
     ...texBinding(4),
     ...texBinding(6),
-    { binding: 8, visibility: 3, buffer: { type: 'uniform' } }
+    { binding: 8, visibility: 3, buffer: { type: 'uniform' } },
+    ...texBinding(9), ...texBinding(11), ...texBinding(13)
   ],
-  textures: m => [m.uniforms.map.value, m.uniforms.bump.value, m.uniforms.clouds.value, m.uniforms.fog.value],
+  textures: m => [m.uniforms.map.value, m.uniforms.bump.value, m.uniforms.clouds.value, m.uniforms.fog.value, m.uniforms.soilColor?.value, m.uniforms.soilSurface?.value,m.uniforms.canopyMap?.value],
   block: {
-    size: (TERRAIN_SLOTS * 4 + 2 + 32) * 16,
+    size: (TERRAIN_SLOTS * 4 + 2 + 32 + 2) * 16,
     fill(m, f) {
       const U = m.uniforms,
         S = TERRAIN_SLOTS * 4;
@@ -580,8 +810,11 @@ const terrain = {
       f[4 * S] = c.x;
       f[4 * S + 1] = c.y;
       f[4 * S + 2] = c.z;
+      f[4 * S + 3] = U.waterLine?.value ?? -1e20;
       f[4 * S + 4] = num(U.side);
       f[4 * S + 5] = num(U.detail);
+      f[4 * S + 6] = num(U.terrainLayers);
+      f[4 * S + 7] = num(U.groundWet);
       const lights = (list, at, n) => {
         for (let k = 0; k < n; k++) {
           const v = list && list[k];
@@ -594,28 +827,38 @@ const terrain = {
       lights(U.glowAt && U.glowAt.value, 4 * S + 8, 8);
       lights(U.glowTint && U.glowTint.value, 4 * S + 40, 8);
       lights(U.occAt && U.occAt.value, 4 * S + 72, 16);
+      f[4 * S + 136] = num(U.forestSlot);
+      f[4 * S + 137] = num(U.fullTerrain);
+      if(U.reliefPatch)vec4(f,4*S+140,U.reliefPatch.value);
     }
   },
-  params() {}
+  // A material block can be shared with this frame's water reflection. Coverage is per draw.
+  params(m,f,o) { f[o]=num(m.uniforms.terrainContactMask); }
 };
 
-const particleCode = kind =>
+// The mixed-material program keeps the mounted 512 atlas bound for retained temple/pad slots;
+// the two optional earth bindings instead carry BC3 donor arrays. Same texture-unit budget.
+const reviewedTerrain={...terrain,name:'reviewed-terrain',key:()=>'reviewed-terrain',block:{size:terrain.block.size+32,fill(m,f){terrain.block.fill(m,f);const o=terrain.block.size/4;if(m.uniforms.groundMixA){vec4(f,o,m.uniforms.groundMixA.value);vec4(f,o+4,m.uniforms.groundMixB.value);}else f.fill(0,o,o+8);}}, match:m=>!!m.defines?.BIOME_RECIPE && terrain.match(m),code:()=>terrainCode(true),layout:terrain.layout.map(e=>[9,11].includes(e.binding)?{...e,texture:{...e.texture,viewDimension:'2d-array'}}:e)};
+
+const particleCode = (kind, dust) =>
   PASS_WGSL +
   `
-struct Draw { model: mat4x4f, modelView: mat4x4f }
+struct Draw { model: mat4x4f, modelView: mat4x4f, ${dust ? 'dustAir: vec4f,' : ''} }
 @group(1) @binding(0) var mapT: texture_2d<f32>;
 @group(1) @binding(1) var mapS: sampler;
 @group(1) @binding(2) var framesT: texture_2d<f32>;
 @group(1) @binding(3) var sceneD: texture_2d<f32>;
 @group(2) @binding(0) var<uniform> D: Draw;
 struct VIn { @location(0) position: vec3f, @location(1) center: vec4f, @location(2) tint: vec4f, @location(3) cell: vec4f, @location(4) slot: f32, @location(5) dir: vec4f }
-struct VOut { @builtin(position) pos: vec4f, @location(0) vUv: vec2f, @location(1) vTint: vec4f, @location(2) vView: vec2f }
+struct VOut { @builtin(position) pos: vec4f, @location(0) vUv: vec2f, @location(1) vTint: vec4f, @location(2) vView: vec2f, ${dust ? '@location(3) dustMask:f32,' : ''} }
+${dust ? dustSpriteShader(true) : ''}
 ${SOFT_WGSL}
 @vertex fn vs(i: VIn) -> VOut {
   var o: VOut;
   o.vTint = i.tint;
  
-  o.vUv = (i.cell.xy + vec2f(i.position.x * 0.5 + 0.5, 0.5 - i.position.y * 0.5)) * i.cell.z;
+  ${dust ? 'o.dustMask=select(0.,1.,i.cell.z<0.);' : ''}
+  o.vUv = (i.cell.xy + vec2f(i.position.x * 0.5 + 0.5, 0.5 - i.position.y * 0.5)) * abs(i.cell.z);
   let c = cos(i.cell.w); let s = sin(i.cell.w);
   var corner = vec2f(i.position.x * c - i.position.y * s, i.position.x * s + i.position.y * c) * i.center.w;
   var at = i.center.xyz;
@@ -642,6 +885,7 @@ ${SOFT_WGSL}
       }
     }
   }
+  ${kind==='normal'?puffShader(true):''}
   o.vView = vec2f(-mv.z, i.center.w);
   mv = vec4f(mv.xy + corner, mv.zw);
   o.pos = glDepth(P.proj * mv);
@@ -653,7 +897,7 @@ ${SOFT_WGSL}
       ? 'let t = textureSample(mapT, mapS, v.vUv); return vec4f(t.rg, 0.0, t.a * v.vTint.a);'
       : kind === 'add'
         ? 'let t = textureSample(mapT, mapS, v.vUv); return vec4f(t.rgb * v.vTint.rgb * softFade(v.pos, v.vView), 1.0);'
-        : 'let t = textureSample(mapT, mapS, v.vUv) * v.vTint; return vec4f(t.rgb, t.a * softFade(v.pos, v.vView));'
+        : `let raw = textureSample(mapT, mapS, v.vUv) * v.vTint; let t=${dust ? 'dustSprite(raw,D.dustAir,v.dustMask)' : 'raw'}; return vec4f(t.rgb, t.a * softFade(v.pos, v.vView));`
   }
 }`;
 const particleKind = m =>
@@ -665,8 +909,8 @@ const particles = {
     !!m.uniforms &&
     !!m.uniforms.frames &&
     m.vertexShader.startsWith('attribute vec4 center; attribute vec4 tint; attribute vec4 cell; attribute float slot;'),
-  key: m => 'particles|' + particleKind(m),
-  code: m => particleCode(particleKind(m)),
+  key: m => 'particles|' + particleKind(m) + (m.uniforms.dustAir ? '|dust' : ''),
+  code: m => particleCode(particleKind(m), !!m.uniforms.dustAir),
   attributes: () => ({
     vertex: [['position', 3, 0]],
     instance: [
@@ -684,7 +928,7 @@ const particles = {
   ],
   textures: m => [m.uniforms.map.value, m.uniforms.frames.value, particleKind(m) === 'heat' ? null : env.softDepth],
   soft: m => particleKind(m) !== 'heat',
-  params() {}
+  params(m, f, o) { if (m.uniforms.dustAir) vec4(f, o, m.uniforms.dustAir.value); }
 };
 
 const basicCode = (map, instanced, opaque) =>
@@ -774,7 +1018,7 @@ export function simple(spec) {
   const tex =
     (spec.textures || [])
       .map((t, i) => `@group(1) @binding(${i * 2}) var ${t}T: texture_2d<f32>;\n@group(1) @binding(${i * 2 + 1}) var ${t}S: sampler;`)
-      .join('\n') + (spec.soft ? `\n@group(1) @binding(${nt * 2}) var sceneD: texture_2d<f32>;\n${SOFT_WGSL}` : '');
+      .join('\n') + (spec.contactDepth ? `\n@group(1) @binding(${nt * 2}) var contactDepthT: ${spec.contactDepth === 'multi' ? 'texture_depth_multisampled_2d' : 'texture_depth_2d'};` : '') + (spec.soft ? `\n@group(1) @binding(${nt * 2}) var sceneD: texture_2d<f32>;\n${SOFT_WGSL}` : '');
   const head =
     PASS_WGSL +
     `struct Draw { model: mat4x4f, modelView: mat4x4f, ${fields.join(', ')}${fields.length ? ',' : ''} }\n${tex}\n@group(2) @binding(0) var<uniform> D: Draw;\n`;
@@ -789,9 +1033,10 @@ export function simple(spec) {
     }),
     layout: [
       ...(spec.textures || []).flatMap((t, i) => texBinding(i * 2)),
+      ...(spec.contactDepth ? [{ binding: nt * 2, visibility: 2, texture: { sampleType: 'depth', multisampled: spec.contactDepth === 'multi' } }] : []),
       ...(spec.soft ? [{ binding: nt * 2, visibility: 3, texture: { sampleType: 'unfilterable-float' } }] : [])
     ],
-    textures: m => [...(spec.textures || []).map(t => m.uniforms[t] && m.uniforms[t].value), ...(spec.soft ? [env.softDepth] : [])],
+    textures: m => [...(spec.textures || []).map(t => m.uniforms[t] && m.uniforms[t].value), ...(spec.contactDepth ? [m.uniforms.contactDepth.value] : []), ...(spec.soft ? [env.softDepth] : [])],
     soft: spec.soft ? () => true : undefined,
     params(m, f, base) {
       const U = m.uniforms;
@@ -904,13 +1149,24 @@ struct VOut { @builtin(position) pos: vec4f, @location(0) vUv: vec2f, @location(
   }
 });
 
+const landAtmosphere = simple({
+  name: 'land-atmosphere', match: m => m.isShaderMaterial && !!m.uniforms?.skyFlow,
+  params: [['wxZenith','v4'],['wxHorizon','v4'],['wxOptics','v4'],['skyFlow','v4'],['wxFormation','v4'],['wxPhenomena','v4']],
+  vertex: () => [['position',3,0]],
+  code: () => `
+${skyAtmosphereShader(true)}
+struct VIn { @location(0) position:vec3f }
+struct VOut { @builtin(position) pos:vec4f, @location(0) ray:vec3f }
+@vertex fn vs(i:VIn)->VOut {var o:VOut; o.ray=i.position; o.pos=glDepth(P.proj*D.modelView*vec4f(i.position,1.)); return o;}
+@fragment fn fs(v:VOut)->@location(0) vec4f {return vec4f(landAtmosphere(normalize(v.ray)),1.);}`
+});
+
 const skydome = simple({
   name: 'skydome',
   match: m => m.isShaderMaterial && !!m.uniforms && !!m.uniforms.clouds && !!m.uniforms.cloudScale && !!m.uniforms.cloudRate,
   params: [
     ['cloudScale', 'f'],
-    ['cloudRate', 'f'],
-    ['time', 'f']
+    ['cloudRate', 'f'], ['time', 'f']
   ],
   textures: ['map', 'clouds'],
   vertex: () => [
@@ -924,7 +1180,8 @@ struct VOut { @builtin(position) pos: vec4f, @location(0) vUv: vec2f }
 @fragment fn fs(v: VOut) -> @location(0) vec4f {
   let base = textureSample(mapT, mapS, v.vUv).rgb;
   let c = textureSample(cloudsT, cloudsS, v.vUv * D.cloudScale + vec2f(D.time * D.cloudRate, 0.0));
-  return vec4f(base + c.rgb * c.a * 0.35, 1.0);
+  let sky=base+c.rgb*c.a*0.35;
+  return vec4f(${showerSky(true)},1.0);
 }`
 });
 
@@ -980,13 +1237,9 @@ struct VIn { @location(0) position: vec3f, @location(1) depth: f32 }
 
 struct VOut { @builtin(position) pos: vec4f, @location(0) vWorld: vec3f, @location(1) vMirror: vec4f, @location(2) vDepth: f32 }
 
-fn sheetHaze(at: vec3f) -> f32 { return select(1.0, clamp((P.fogRange.y - distance(P.cameraPosition, at)) / max(1.0, P.fogRange.y - P.fogRange.x), 0.0, 1.0), P.fogRange.y > 0.0); }
+fn sheetHaze(at: vec3f) -> f32 { return (1.0-airDepth(at))*select(1.0, clamp((P.fogRange.y - distance(P.cameraPosition, at)) / max(1.0, P.fogRange.y - P.fogRange.x), 0.0, 1.0), P.fogRange.y > 0.0); }
 
-fn slide(vWorld: vec3f, r: vec4f, aside: f32) -> vec2f {
-
-  return vec2f((vWorld.x * cos(r.y) + vWorld.y * sin(r.y)) / r.x + r.z * cos(r.w + aside) * D.time, vWorld.y * cos(r.y) / r.x + r.z * sin(r.w + aside) * D.time);
-
-}
+${slideShader(true)}
 
 `;
 
@@ -1017,7 +1270,7 @@ const waterUnder = simple({
   match: m => m.isShaderMaterial && !!m.uniforms && !!m.uniforms.under && !!m.uniforms.shore,
 
   params: [
-    ['under', 'c3'],
+    ['waterBase','v4'], ['under', 'c3'],
     ['time', 'f'],
     ['shore', 'v2']
   ],
@@ -1027,10 +1280,10 @@ const waterUnder = simple({
   code: () =>
     SHEET_WGSL +
     SHORE_WGSL +
-    sheetVS(false) +
+    sheetVS(false) + waterShader(true) + dayWater(true) +
     `
 
-@fragment fn fs(v: VOut) -> @location(0) vec4f { let a = shoreAlpha(v.vDepth) * sheetHaze(v.vWorld); return vec4f(vec3f(1.0 - a) + a * D.under, 1.0); }`
+@fragment fn fs(v: VOut) -> @location(0) vec4f { let a = shoreAlpha(v.vDepth) * sheetHaze(v.vWorld);var bed=D.under;if(P.receiverMode.w>0.0){bed=mix(bed,bedLight(viewWater(v.vWorld,v.vDepth)),P.receiverMode.w);if(P.landProbeOn>0.){bed=mix(D.under,pow(lakeT(v.vWorld,v.vDepth)*(1.-lakeF(v.vWorld)),vec3f(1./2.2)),smoothstep(0.,.32,P.receiverMode.w));}}return vec4f(vec3f(1.0 - a) + a * bed, 1.0); }`
 });
 
 const waterOver = simple({
@@ -1040,7 +1293,7 @@ const waterOver = simple({
 
   params: [
     ['mirror', 'm4'],
-    ['over', 'c3'],
+    ['waterBase','v4'], ['over', 'c3'],
     ['bend', 'f'],
     ['ripple', 'v4'],
     ['side', 'f'],
@@ -1055,18 +1308,22 @@ const waterOver = simple({
   code: () =>
     SHEET_WGSL +
     SHORE_WGSL +
-    sheetVS(true) +
+    sheetVS(true) + waterShader(true) + dayWater(true) + ringShader(true) +
     `
 
 @fragment fn fs(v: VOut) -> @location(0) vec4f {
 
-  let d = (textureSample(bumpT, bumpS, slide(v.vWorld, D.ripple, -0.7853982)).xy - 0.5) * 2.0 + (textureSample(bumpT, bumpS, slide(v.vWorld, D.ripple, 0.7853982)).xy - 0.5) * 2.0;
+  var d = (textureSample(bumpT, bumpS, slide(v.vWorld, D.ripple, -0.7853982)).xy - 0.5) * 2.0 + (textureSample(bumpT, bumpS, slide(v.vWorld, D.ripple, 0.7853982)).xy - 0.5) * 2.0;
 
+  var ring=vec2f(0.); if(P.forestWeather.y>0.){ring=P.forestWeather.y*showerRing(v.vWorld.xy,D.time);d+=.6*ring;}
   let r = textureSample(reflectionT, reflectionS, clamp((v.vMirror.xy + d * D.bend * 200.0) / v.vMirror.w, vec2f(0.002), vec2f(0.998))).rgb;
 
   let seen = mix(0.3, 1.0, textureSample(fogT, fogS, v.vWorld.xy / D.side).r);
 
-  return vec4f(r * D.over * shoreAlpha(v.vDepth) * seen * sheetHaze(v.vWorld), 1.0);
+  var surface=r*D.over;if(P.receiverMode.w>0.0){let opt=viewWater(v.vWorld,v.vDepth);surface=mix(surface,r*opt.x+D.waterBase.rgb*(1.0-exp(-opt.y))*0.10*(1.0-opt.x),P.receiverMode.w);}
+  if(P.landProbeOn>0. && P.receiverMode.w>0.){surface=mix(r*D.over,lakeLd(v.vWorld,v.vDepth,r),smoothstep(0.,.32,P.receiverMode.w));}
+  surface+=vec3f(.10,.13,.14)*max(0.,dot(ring,vec2f(.62,.79)));
+  return vec4f(surface * shoreAlpha(v.vDepth) * seen * sheetHaze(v.vWorld), 1.0);
 
 }`
 });
@@ -1267,15 +1524,34 @@ const modelReflect = {
   ...model,
   name: 'modelReflect',
   dims: null,
-  match(m) {
-    const P = env.programSources;
-    return !!(m.isShaderMaterial && m.defines && m.defines.REFLECT && m.vertexShader === P.VERT && (m.fragmentShader === P.FRAG || m.fragmentShader === P.DEPTH_FRAG || m.fragmentShader === turnedFrag()));
-  },
+  match: m => modelMatch(m, true) && !liveryOf(m),
   layout: [...texBinding(0), ...texBinding(2), ...texBinding(4), ...texBinding(6)],
   textures(m) {
     const U = m.uniforms;
     return [U.map && U.map.value, U.normalMap && U.normalMap.value, U.glossMap && U.glossMap.value, U.skyAtlas && U.skyAtlas.value];
   }
+};
+
+// A painted hull carries its palette in one small uniform block per material,
+// the way terrain carries its layer table. Draw stays 256 bytes and the stock
+// program is byte-for-byte the shader it was, so only LIVERY materials pay.
+const LIVERY_SLOT = { binding: LIVERY_BINDING, visibility: 3, buffer: { type: 'uniform' } };
+const liveryBlock = { size: LIVERY_BYTES, fill: (m, f) => packLivery(m.uniforms, f) };
+
+const modelLivery = {
+  ...model,
+  name: 'modelLivery',
+  match: m => modelMatch(m, false) && liveryOf(m),
+  layout: [...model.layout, LIVERY_SLOT],
+  block: liveryBlock
+};
+
+const modelReflectLivery = {
+  ...modelReflect,
+  name: 'modelReflectLivery',
+  match: m => modelMatch(m, true) && liveryOf(m),
+  layout: [...modelReflect.layout, LIVERY_SLOT],
+  block: liveryBlock
 };
 
 const baySurface = simple({
@@ -1323,14 +1599,17 @@ fn bayLit(wp: vec3f, n: vec3f) -> f32 {
 
 export const families = [
   model,
+  modelLivery,
   modelReflect,
+  modelReflectLivery,
+  reviewedTerrain,
   terrain,
   particles,
   basic,
   baySurface,
   decals,
   shield,
-  skydome,
+  landAtmosphere, skydome,
   pills,
   bolts,
   ghost,

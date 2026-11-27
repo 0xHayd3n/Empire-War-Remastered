@@ -1,0 +1,232 @@
+{
+  "job": "801c35a32439b92bb81d9f45c3aa6b405dc260362096156eb42e25ae84acd9e5",
+  "policy": "polyhaven-2k",
+  "pack": "tatooine-ground",
+  "families": [
+    {
+      "id": "alluvial-grit",
+      "asset": "gravelly_sand",
+      "role": "sand",
+      "tileMeters": 2.48,
+      "regular": false,
+      "use": "natural",
+      "slots": [
+        0,
+        18,
+        26,
+        63
+      ],
+      "why": "Fine buff sand interrupted by small embedded grains on the exposed plain; build a gravel fan, not a uniformly rippled dune.",
+      "evidence": "78bea418d6e1ae12dac0bf18652d243636727d6b0a080cbb22fb08fb08de77f4"
+    },
+    {
+      "id": "wind-plain",
+      "asset": "aerial_beach_01",
+      "role": "soil",
+      "tileMeters": 30,
+      "regular": false,
+      "use": "natural",
+      "slots": [
+        3,
+        4,
+        5,
+        17,
+        27
+      ],
+      "why": "Wide shallow ripples fade into open, pale sand at the foot of the rocky shelves. The 30 m analogue is mixed with smaller native gravel scans; a square-patterned gravel candidate was rejected under the deployed army.",
+      "evidence": "6e58cb1273817f2e8883d8194cdbf6382c89ea77f32bc054b0bd9c83073dd2a1"
+    },
+    {
+      "id": "sun-crust",
+      "asset": "sandstone_cracks",
+      "role": "rock",
+      "tileMeters": 2,
+      "regular": false,
+      "use": "natural",
+      "slots": [
+        1,
+        6,
+        7,
+        11,
+        12,
+        15,
+        19,
+        23
+      ],
+      "why": "Hard sunlit sandstone with irregular shallow fissures on the rocky shoulders, not a repeating set of blocks.",
+      "evidence": "68329eb16e49bff2bc983fe398e5d5dbbd9a14e836b85595bd5ef95070c48e64"
+    },
+    {
+      "id": "broken-ledge",
+      "asset": "rock_face_03",
+      "role": "rock",
+      "tileMeters": 2.7,
+      "regular": false,
+      "use": "natural",
+      "slots": [
+        2,
+        8,
+        9,
+        13,
+        14,
+        20,
+        21,
+        22,
+        24
+      ],
+      "why": "Broken strata and shadows at actual gullies and steep outcrop feet; avoid moss and damp river stone.",
+      "evidence": "78bea418d6e1ae12dac0bf18652d243636727d6b0a080cbb22fb08fb08de77f4"
+    },
+    {
+      "id": "apron-grit",
+      "asset": "dense_sand",
+      "role": "sand",
+      "tileMeters": 1.8,
+      "regular": false,
+      "use": "natural",
+      "slots": [
+        16
+      ],
+      "reuse": "yavin-ground",
+      "why": "Compact grit under repeated traffic and between crates. A working yard is not automatically paved.",
+      "evidence": "6fe38e3036e082d35bd052c0478add58d6a8430d2d9f09c3090b71df6e2c24bc"
+    },
+    {
+      "id": "concrete",
+      "asset": "concrete_floor_02",
+      "role": "concrete",
+      "tileMeters": 2,
+      "regular": true,
+      "use": "built",
+      "slots": [
+        62
+      ],
+      "reuse": "endor-terrain",
+      "why": "Keep the concrete scan only for a real construction receipt, never use it to infer a road outdoors.",
+      "evidence": "6fe38e3036e082d35bd052c0478add58d6a8430d2d9f09c3090b71df6e2c24bc"
+    },
+    {
+      "id": "drift-fines",
+      "asset": "sand_01",
+      "role": "sand",
+      "tileMeters": 1.5,
+      "regular": false,
+      "use": "natural",
+      "slots": [
+        10
+      ],
+      "why": "Light mineral sand deposited between larger wind ripples and across the foot of shelves; a partial surface mixed with the 30 m ripple scan, not a mottled single-material replacement for the whole desert.",
+      "evidence": "6e58cb1273817f2e8883d8194cdbf6382c89ea77f32bc054b0bd9c83073dd2a1"
+    }
+  ],
+  "binding": {
+    "key": "tatooine",
+    "seed": 307,
+    "retainedPlants": {
+      "scrub": [
+        "W_BUSH_TAT00.ALO",
+        "W_BUSH_TAT01.ALO",
+        "W_BUSH_TAT02.ALO"
+      ],
+      "desert-tree": [
+        "W_TREE_TAT00.ALO",
+        "W_TREE_ALIEN_02_HI.ALO",
+        "W_TREE_ALIEN_02_CLUSTER.ALO"
+      ]
+    }
+  },
+  "zones": [
+    {
+      "slot": 62,
+      "natural": 16,
+      "construction": true,
+      "aprons": [],
+      "evidence": "6fe38e3036e082d35bd052c0478add58d6a8430d2d9f09c3090b71df6e2c24bc"
+    }
+  ],
+  "composition": {
+    "kind": "arid-basin",
+    "deposition": { "seed": 557, "heading": 0.73, "length": 182, "width": 99 },
+    "variation": { "pair": [5,10], "minSpan": 0.22, "process": "Irregular tongues of fine sand interrupt the longer ripple trains. Exposed shoulders carry grit; existing packed approaches interrupt the loose fan.", "preserve": "Keep the underlying sandy hue continuous. Only rising ledges uncover bedrock; keep constructed paving aligned." },
+    "design": "Wind transports fine pale grains through the basin and up onto gravel shoulders. Ripples and compact grit describe exposure and travel within that same mantle. Bare sandstone and broken strata emerge with actual slope, not in a circular halo around a rock prop; retain light and shadow on the ridges.",
+    "evidence": [
+      "6e58cb1273817f2e8883d8194cdbf6382c89ea77f32bc054b0bd9c83073dd2a1",
+      "78bea418d6e1ae12dac0bf18652d243636727d6b0a080cbb22fb08fb08de77f4",
+      "68329eb16e49bff2bc983fe398e5d5dbbd9a14e836b85595bd5ef95070c48e64",
+      "867c74613f30466852df6a4ecbd7b2986f58680cda944e3e43f7a4666bacdd8b",
+      "a5eba9e9ebc862cd0f5cf43689ad7eaa3d88dbcd36d339bf7971cb88e2b8f6e8",
+      "6fe38e3036e082d35bd052c0478add58d6a8430d2d9f09c3090b71df6e2c24bc"
+    ],
+    "channels": [
+      5,
+      16,
+      1,
+      0,
+      2,
+      10,
+      13
+    ],
+    "rockHints": [
+      1,
+      2,
+      6,
+      7,
+      8,
+      9,
+      11,
+      12,
+      13,
+      14,
+      15,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+    ],
+    "looseHints": [
+      3,
+      4,
+      5,
+      27
+    ],
+    "packedHints": [
+      16,
+      17
+    ],
+    "outcrops": [
+      "W_TAT_ROCKFORM00.ALO",
+      "W_TAT_ROCKFORM01.ALO"
+    ],
+    "rockRadius": 162,
+    "regions": [
+      {
+        "name": "Western deployment",
+        "view": "command",
+        "grid": [
+          20,
+          69,
+          35,
+          30
+        ],
+        "maxBoundary": 0.19,
+        "maxSmallShare": 0.055,
+        "maxJump": 0.045
+      },
+      {
+        "name": "Krayt boneyard",
+        "view": "bone-basin",
+        "grid": [
+          68,
+          10,
+          35,
+          27
+        ],
+        "maxBoundary": 0.19,
+        "maxSmallShare": 0.055,
+        "maxJump": 0.045
+      }
+    ]
+  }
+}

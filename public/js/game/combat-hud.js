@@ -33,13 +33,14 @@ export class BattleReadout {
     this.hasTickets = teams.length > 0;
   }
 
-  aim(u, nameOf, ally, neutral, now = performance.now()) {
+  aim(u, nameOf, ally, neutral, now = performance.now(), showHealth = true) {
     const on = u && !u.gone && !u.dead && u.health > 0 && u.maxHealth > 0;
     const mode = on ? (neutral ? 'neutral' : ally ? 'ally' : 'enemy') : 'empty';
-    this.el.hidden = !on && !this.hasTickets;
-    if (this.el.dataset.mode !== mode) {
+    this.el.hidden = !(on && showHealth) && !this.hasTickets;
+    if (this.el.dataset.mode !== mode || this.showHealth !== showHealth) {
       this.el.dataset.mode = mode;
-      this.center.style.visibility = on ? 'visible' : 'hidden';
+      this.showHealth = showHealth;
+      this.center.style.visibility = on && showHealth ? 'visible' : 'hidden';
     }
     const subject = on ? u : null,
       fraction = on ? Math.max(0, Math.min(1, u.health / u.maxHealth)) : 0;
@@ -95,7 +96,14 @@ export function facingArrow(ctx, x, y, heading, radius, color) {
   ctx.fill();
 }
 
-// Edge pins use the same yaw-relative coordinates as contacts and terrain.
+const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+export function compassBearing(worldDegrees, mode) {
+  const bearing = (450 - worldDegrees) % 360; // Game yaw increases counter-clockwise from east.
+  if (bearing % (mode === 'degrees' || mode === 'eight' ? 45 : 90)) return '';
+  return mode === 'degrees' ? `${bearing}°` : directions[bearing / 45];
+}
+
+// Edge pins use the same coordinates as contacts and terrain.
 // Keep the marker (not just its center) inside the visible circle.
 export function pinRadarPoint(x, y, center, rim) {
   const dx = x - center,

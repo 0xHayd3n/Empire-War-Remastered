@@ -42,4 +42,5 @@ run('node', [
     .map(f => path.join('dist', f))
 ]);
 
+execFileSync(process.execPath, [path.join(web, 'tools', 'test-rapier-runtime.mjs'), dist], { stdio: 'inherit' });
 console.log(`built dist/ (${build})`);

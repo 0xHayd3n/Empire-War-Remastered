@@ -4,6 +4,8 @@ import { BinkPlayer } from '../bink.js';
 import { TacticalCrawl } from './tacticalcrawl.js';
 import { movieDefinitions } from './galacticmovies.js';
 import { CreditsRoll } from './creditsroll.js';
+import { viewOptions as prefs } from './viewpreferences.js';
+import { movieCaptionStyle } from './moviecaptionstyle.js';
 import { movieSubtitles } from './subtitles.js';
 import { fontFamily } from '../fonts.js';
 const yes = value => /^(yes|true|1)$/i.test(value || '');
@@ -28,7 +30,7 @@ export class TacticalMovies {
     this.player = new BinkPlayer(this.canvas, {
       audio: () => {
         const audio = this.game.audio;
-        return audio?.ctx ? { context: audio.ctx, destination: audio.master, volume: audio.musicVolume } : null;
+        return audio?.ctx ? { context: audio.ctx, destination: audio.master, volume: audio.musicVolume * prefs.movieMix } : null;
       },
       onEnd: () => this.finish(),
       onError: error => {
@@ -168,19 +170,20 @@ export class TacticalMovies {
     const id = start[0].toUpperCase(),
       length = +(pairs('Caption_Duration').find(([n]) => n.toUpperCase() === id)?.[1] ?? 150);
     this.caption?.el.remove();
-    const el = document.createElement('div'),
-      rect = this.canvas.getBoundingClientRect(),
+    const el = document.createElement('div'), text = document.createElement('span'),
       size = db.constants.num('Bink_Player_Caption_Font_Size', 10);
     el.className = 'movie-caption';
-    el.textContent = db.t(id) || id;
+    text.textContent = db.t(id) || id;
+    movieCaptionStyle(text, size * 1.6);
+    el.append(text);
     Object.assign(el.style, {
       position: 'fixed',
-      left: rect.left + 'px',
-      width: Math.max(200, rect.width) + 'px',
-      top: rect.bottom + 4 + 'px',
+      left: '5%', right: '5%',
+      [prefs.captionPosition]: 'max(5%, env(safe-area-inset-' + prefs.captionPosition + '))',
+      overflowWrap: 'anywhere',
       textAlign: 'center',
       color: '#fff',
-      font: `${size * 1.6}px ${fontFamily(db.constants.str('Bink_Player_Caption_Font_Name') || 'EmpireAtWar-Medium')}`,
+      fontFamily: fontFamily(db.constants.str('Bink_Player_Caption_Font_Name') || 'EmpireAtWar-Medium'),
       textShadow: '0 0 2px #000, 0 0 2px #000',
       pointerEvents: 'none',
       zIndex: String((+this.canvas.style.zIndex || 9) + 1)

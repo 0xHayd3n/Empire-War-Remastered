@@ -1,0 +1,1263 @@
+{
+  "format": "yavin-groundcover-cutout/1",
+  "note": "Distal cutouts: one RGBA atlas + four 8-triangle proxies baked from the donor meshes' own UVs. Runtime builds geometry like the other packs (32 B float P/N/UV, uint16 indices) and can derive tangent/binormal with computeTangents() as endor-grove.js does. Double-sided cutout material, alphaRef ~0.3.",
+  "atlas": {
+    "file": "atlas.png",
+    "width": 512,
+    "height": 256,
+    "tileWidth": 128,
+    "tileHeight": 64,
+    "gutter": 8,
+    "columns": [
+      "side0",
+      "side45",
+      "side90",
+      "top"
+    ],
+    "rows": [
+      "fern",
+      "anthurium",
+      "anthurium-wide",
+      "anthurium-young"
+    ],
+    "sha256": "873ecbbac81ad7b09d17d102efa4cff40fd6f37e3d4b8fefd86547abcf552901"
+  },
+  "coordinate": {
+    "up": "z",
+    "units": "metres",
+    "vertexBytes": 32,
+    "layout": "float32 x,y,z, nx,ny,nz, u,v then uint16 indices",
+    "flipY": false,
+    "vOrigin": "PNG row 0; the shipped loader samples row 0 at v=0"
+  },
+  "models": [
+    {
+      "name": "fern",
+      "kind": "fern",
+      "file": "fern.bin",
+      "vertices": 16,
+      "triangles": 8,
+      "bytes": 560,
+      "sha256": "a5d3d6bbbc43da77d4b5528ca1f29b614bae668ff971479b2b322f64bc0a34ce",
+      "bounds": {
+        "min": [
+          -0.297657,
+          -0.302153,
+          -0.028774
+        ],
+        "max": [
+          0.254283,
+          0.311268,
+          0.25803
+        ]
+      },
+      "sourceBounds": {
+        "min": [
+          -0.297657,
+          -0.302153,
+          -0.028774
+        ],
+        "max": [
+          0.254283,
+          0.311268,
+          0.25803
+        ]
+      },
+      "source": {
+        "pack": "endor-grove",
+        "kind": "fern",
+        "asset": "fern_02",
+        "variant": 2,
+        "file": "fern2-fern.bin",
+        "vertices": 544,
+        "triangles": 784,
+        "sha256": "40472f1da4179b0b0f9b0d52abcb838c3b0150107893c4949c07317fc316bbe4",
+        "modelsJson": {
+          "file": "models.json",
+          "sha256": "6204072d187d66e46d96ddec1f0c4a5c5a0b731b41f21cfec0f361ebd45b4463"
+        }
+      },
+      "texture": {
+        "pack": "endor-grove",
+        "file": "fern.png",
+        "width": 1024,
+        "height": 1024,
+        "sha256": "e3a10714b30d95a7aae660614d5b3ecaffcade7c3a959d17ba9f38af2fc53a57"
+      },
+      "quads": [
+        {
+          "view": "side0",
+          "plane": "vertical",
+          "yawDeg": 0.0,
+          "atlas": {
+            "column": 0,
+            "row": 0,
+            "x": 13,
+            "y": 8,
+            "w": 102,
+            "h": 48
+          },
+          "uv": [
+            0.025391,
+            0.03125,
+            0.224609,
+            0.21875
+          ],
+          "frame": {
+            "uAxis": "y",
+            "u": [
+              -0.306711,
+              0.306711
+            ],
+            "z": [
+              -0.028774,
+              0.25803
+            ]
+          },
+          "normal": [
+            0.447214,
+            0.0,
+            0.894427
+          ],
+          "bake": {
+            "coverage": 0.20179738562091504,
+            "alphaMean": 0.20555241405963898,
+            "rgbMean": [
+              0.269116,
+              0.330289,
+              0.130817
+            ],
+            "rgbStd": 0.093048,
+            "contentWidth": 102,
+            "contentHeight": 48,
+            "bandClipFraction": 0.0,
+            "silhouetteCorrelation": 0.821515,
+            "alphaOnGeometry": 0.648169,
+            "alphaOffGeometry": 0.002829,
+            "aspect": 2.13882,
+            "coveragePixels": 0.227737,
+            "alphaMeanPixels": 0.205604,
+            "rgbStdPixels": 0.092199,
+            "uniqueColours": 1255
+          }
+        },
+        {
+          "view": "side45",
+          "plane": "vertical",
+          "yawDeg": 45.0,
+          "atlas": {
+            "column": 1,
+            "row": 0,
+            "x": 136,
+            "y": 11,
+            "w": 112,
+            "h": 42
+          },
+          "uv": [
+            0.265625,
+            0.042969,
+            0.484375,
+            0.207031
+          ],
+          "frame": {
+            "uAxis": "y",
+            "u": [
+              -0.390281,
+              0.390281
+            ],
+            "z": [
+              -0.028774,
+              0.25803
+            ]
+          },
+          "normal": [
+            0.316228,
+            0.316228,
+            0.894427
+          ],
+          "bake": {
+            "coverage": 0.16602891156462585,
+            "alphaMean": 0.17341741919517517,
+            "rgbMean": [
+              0.268484,
+              0.334438,
+              0.13371
+            ],
+            "rgbStd": 0.092554,
+            "contentWidth": 112,
+            "contentHeight": 42,
+            "bandClipFraction": 0.0,
+            "silhouetteCorrelation": 0.820555,
+            "alphaOnGeometry": 0.639694,
+            "alphaOffGeometry": 0.00116,
+            "aspect": 2.721591,
+            "coveragePixels": 0.189838,
+            "alphaMeanPixels": 0.173454,
+            "rgbStdPixels": 0.105093,
+            "uniqueColours": 1011
+          }
+        },
+        {
+          "view": "side90",
+          "plane": "vertical",
+          "yawDeg": 90.0,
+          "atlas": {
+            "column": 2,
+            "row": 0,
+            "x": 274,
+            "y": 8,
+            "w": 92,
+            "h": 48
+          },
+          "uv": [
+            0.535156,
+            0.03125,
+            0.714844,
+            0.21875
+          ],
+          "frame": {
+            "uAxis": "y",
+            "u": [
+              -0.27597,
+              0.27597
+            ],
+            "z": [
+              -0.028774,
+              0.25803
+            ]
+          },
+          "normal": [
+            0.0,
+            0.447214,
+            0.894427
+          ],
+          "bake": {
+            "coverage": 0.19067028985507245,
+            "alphaMean": 0.1956626921892166,
+            "rgbMean": [
+              0.278301,
+              0.343305,
+              0.131671
+            ],
+            "rgbStd": 0.09719,
+            "contentWidth": 92,
+            "contentHeight": 48,
+            "bandClipFraction": 0.0,
+            "silhouetteCorrelation": 0.81788,
+            "alphaOnGeometry": 0.644762,
+            "alphaOffGeometry": 0.002527,
+            "aspect": 1.924455,
+            "coveragePixels": 0.213542,
+            "alphaMeanPixels": 0.195699,
+            "rgbStdPixels": 0.115355,
+            "uniqueColours": 1104
+          }
+        },
+        {
+          "view": "top",
+          "plane": "horizontal",
+          "yawDeg": null,
+          "atlas": {
+            "column": 3,
+            "row": 0,
+            "x": 426,
+            "y": 8,
+            "w": 44,
+            "h": 48
+          },
+          "uv": [
+            0.832031,
+            0.03125,
+            0.917969,
+            0.21875
+          ],
+          "frame": {
+            "uAxis": "x",
+            "u": [
+              -0.297657,
+              0.254283
+            ],
+            "vAxis": "-y",
+            "v": [
+              0.311268,
+              -0.302153
+            ],
+            "z": 0.102166
+          },
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "bake": {
+            "coverage": 0.17992424242424243,
+            "alphaMean": 0.18667568266391754,
+            "rgbMean": [
+              0.276821,
+              0.344788,
+              0.130805
+            ],
+            "rgbStd": 0.098215,
+            "contentWidth": 44,
+            "contentHeight": 48,
+            "topSurfaceZ": 0.10216600988941421,
+            "bandClipFraction": 0.0,
+            "silhouetteCorrelation": 0.812852,
+            "alphaOnGeometry": 0.602802,
+            "alphaOffGeometry": 0.001667,
+            "aspect": 0.899774,
+            "coveragePixels": 0.20928,
+            "alphaMeanPixels": 0.186731,
+            "rgbStdPixels": 0.109549,
+            "uniqueColours": 547
+          }
+        }
+      ],
+      "rowOrderCheck": {
+        "decision": "v = PNG row index (loader flipY=false)",
+        "views": {
+          "side0": {
+            "unflippedOnGeometry": 0.648169,
+            "mirroredOnGeometry": 0.501513
+          },
+          "side45": {
+            "unflippedOnGeometry": 0.639694,
+            "mirroredOnGeometry": 0.535656
+          },
+          "side90": {
+            "unflippedOnGeometry": 0.644762,
+            "mirroredOnGeometry": 0.562277
+          },
+          "top": {
+            "unflippedOnGeometry": 0.602802,
+            "mirroredOnGeometry": 0.508689
+          }
+        },
+        "worstMargin": 0.082485
+      },
+      "credit": "Poly Haven 'Fern 02' (Rob Tuytel, Rico Cilliers), CC0; geometry and diffuse/alpha already cooked into public/art/endor-grove.",
+      "derivation": "Orthographic front/side3/plan bakes of fern2-fern.bin through its own UVs into fern.png (alpha channel), 2x supersampled and box-filtered; proxies reuse the donor's UV/texture, no recolor and no new art."
+    },
+    {
+      "name": "anthurium",
+      "kind": "anthurium",
+      "file": "anthurium.bin",
+      "vertices": 16,
+      "triangles": 8,
+      "bytes": 560,
+      "sha256": "4598ce73a94a89c09a925a6a015b24a71b13c9a2071c46ba72ea715ee142ba22",
+      "bounds": {
+        "min": [
+          -0.224631,
+          -0.317777,
+          -0.00658
+        ],
+        "max": [
+          0.369801,
+          0.339191,
+          0.351512
+        ]
+      },
+      "sourceBounds": {
+        "min": [
+          -0.224631,
+          -0.317777,
+          -0.00658
+        ],
+        "max": [
+          0.369801,
+          0.339191,
+          0.351512
+        ]
+      },
+      "source": {
+        "pack": "yavin-jungle",
+        "kind": "anthurium",
+        "asset": "anthurium_botany_01",
+        "variant": 3,
+        "file": "anthurium.bin",
+        "vertices": 1396,
+        "triangles": 2436,
+        "sha256": "4b560f804bca72903fd4634bb53c6e05e41b36f51258a87c9d79473e1f9b4131",
+        "modelsJson": {
+          "file": "models.json",
+          "sha256": "8bed07579903c4598040b26a04e91d65a012ce91b13757242cfcdd0680073fb1"
+        }
+      },
+      "texture": {
+        "pack": "yavin-jungle",
+        "file": "anthurium.png",
+        "width": 1024,
+        "height": 1024,
+        "sha256": "40adae07cdd850b147c04dbae7e39afd38735933f70eff83ec5151a79e37c05a"
+      },
+      "quads": [
+        {
+          "view": "side0",
+          "plane": "vertical",
+          "yawDeg": 0.0,
+          "atlas": {
+            "column": 0,
+            "row": 1,
+            "x": 20,
+            "y": 72,
+            "w": 88,
+            "h": 48
+          },
+          "uv": [
+            0.039062,
+            0.28125,
+            0.210938,
+            0.46875
+          ],
+          "frame": {
+            "uAxis": "y",
+            "u": [
+              -0.328484,
+              0.328484
+            ],
+            "z": [
+              -0.00658,
+              0.351512
+            ]
+          },
+          "normal": [
+            0.447214,
+            0.0,
+            0.894427
+          ],
+          "bake": {
+            "coverage": 0.28125,
+            "alphaMean": 0.29472216963768005,
+            "rgbMean": [
+              0.211187,
+              0.256453,
+              0.113692
+            ],
+            "rgbStd": 0.072229,
+            "contentWidth": 88,
+            "contentHeight": 48,
+            "bandClipFraction": 0.0,
+            "silhouetteCorrelation": 0.965366,
+            "alphaOnGeometry": 0.931908,
+            "alphaOffGeometry": 0.012061,
+            "aspect": 1.834637,
+            "coveragePixels": 0.308002,
+            "alphaMeanPixels": 0.294779,
+            "rgbStdPixels": 0.069722,
+            "uniqueColours": 1186
+          }
+        },
+        {
+          "view": "side45",
+          "plane": "vertical",
+          "yawDeg": 45.0,
+          "atlas": {
+            "column": 1,
+            "row": 1,
+            "x": 136,
+            "y": 72,
+            "w": 112,
+            "h": 48
+          },
+          "uv": [
+            0.265625,
+            0.28125,
+            0.484375,
+            0.46875
+          ],
+          "frame": {
+            "uAxis": "y",
+            "u": [
+              -0.420327,
+              0.420327
+            ],
+            "z": [
+              -0.00658,
+              0.351512
+            ]
+          },
+          "normal": [
+            0.316228,
+            0.316228,
+            0.894427
+          ],
+          "bake": {
+            "coverage": 0.2152157738095238,
+            "alphaMean": 0.22406478226184845,
+            "rgbMean": [
+              0.207057,
+              0.249459,
+              0.114875
+            ],
+            "rgbStd": 0.06793,
+            "contentWidth": 112,
+            "contentHeight": 48,
+            "bandClipFraction": 0.0,
+            "silhouetteCorrelation": 0.970212,
+            "alphaOnGeometry": 0.932887,
+            "alphaOffGeometry": 0.006628,
+            "aspect": 2.347591,
+            "coveragePixels": 0.231957,
+            "alphaMeanPixels": 0.224098,
+            "rgbStdPixels": 0.06955,
+            "uniqueColours": 1116
+          }
+        },
+        {
+          "view": "side90",
+          "plane": "vertical",
+          "yawDeg": 90.0,
+          "atlas": {
+            "column": 2,
+            "row": 1,
+            "x": 280,
+            "y": 72,
+            "w": 80,
+            "h": 48
+          },
+          "uv": [
+            0.546875,
+            0.28125,
+            0.703125,
+            0.46875
+          ],
+          "frame": {
+            "uAxis": "y",
+            "u": [
+              -0.297216,
+              0.297216
+            ],
+            "z": [
+              -0.00658,
+              0.351512
+            ]
+          },
+          "normal": [
+            0.0,
+            0.447214,
+            0.894427
+          ],
+          "bake": {
+            "coverage": 0.26276041666666666,
+            "alphaMean": 0.27096691727638245,
+            "rgbMean": [
+              0.22344,
+              0.265318,
+              0.122836
+            ],
+            "rgbStd": 0.071709,
+            "contentWidth": 80,
+            "contentHeight": 48,
+            "bandClipFraction": 0.0,
+            "silhouetteCorrelation": 0.976032,
+            "alphaOnGeometry": 0.9482,
+            "alphaOffGeometry": 0.008346,
+            "aspect": 1.659998,
+            "coveragePixels": 0.278125,
+            "alphaMeanPixels": 0.270995,
+            "rgbStdPixels": 0.071573,
+            "uniqueColours": 983
+          }
+        },
+        {
+          "view": "top",
+          "plane": "horizontal",
+          "yawDeg": null,
+          "atlas": {
+            "column": 3,
+            "row": 1,
+            "x": 426,
+            "y": 72,
+            "w": 44,
+            "h": 48
+          },
+          "uv": [
+            0.832031,
+            0.28125,
+            0.917969,
+            0.46875
+          ],
+          "frame": {
+            "uAxis": "x",
+            "u": [
+              -0.224631,
+              0.369801
+            ],
+            "vAxis": "-y",
+            "v": [
+              0.339191,
+              -0.317777
+            ],
+            "z": 0.232146
+          },
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "bake": {
+            "coverage": 0.4237689393939394,
+            "alphaMean": 0.43871432542800903,
+            "rgbMean": [
+              0.206169,
+              0.257088,
+              0.118966
+            ],
+            "rgbStd": 0.063999,
+            "contentWidth": 44,
+            "contentHeight": 48,
+            "topSurfaceZ": 0.23214565549506105,
+            "bandClipFraction": 0.0,
+            "silhouetteCorrelation": 0.965171,
+            "alphaOnGeometry": 0.942276,
+            "alphaOffGeometry": 0.013436,
+            "aspect": 0.90481,
+            "coveragePixels": 0.451705,
+            "alphaMeanPixels": 0.438766,
+            "rgbStdPixels": 0.066599,
+            "uniqueColours": 819
+          }
+        }
+      ],
+      "rowOrderCheck": {
+        "decision": "v = PNG row index (loader flipY=false)",
+        "views": {
+          "side0": {
+            "unflippedOnGeometry": 0.931908,
+            "mirroredOnGeometry": 0.621771
+          },
+          "side45": {
+            "unflippedOnGeometry": 0.932887,
+            "mirroredOnGeometry": 0.65791
+          },
+          "side90": {
+            "unflippedOnGeometry": 0.9482,
+            "mirroredOnGeometry": 0.669052
+          },
+          "top": {
+            "unflippedOnGeometry": 0.942276,
+            "mirroredOnGeometry": 0.561309
+          }
+        },
+        "worstMargin": 0.274977
+      },
+      "credit": "Poly Haven 'Anthurium Botany 01', CC0; geometry and cutout diffuse already cooked into public/art/yavin-jungle.",
+      "derivation": "Orthographic front/side3/plan bakes of anthurium.bin through its own UVs into anthurium.png (alpha channel), 2x supersampled and box-filtered; no recolor and no new art."
+    },
+    {
+      "name": "anthurium-wide",
+      "kind": "anthurium",
+      "file": "anthurium-wide.bin",
+      "vertices": 16,
+      "triangles": 8,
+      "bytes": 560,
+      "sha256": "36f5f52dbee5f6c887e26137011da94856216ba53152981463adae34d1519715",
+      "bounds": {
+        "min": [
+          -0.419987,
+          -0.651006,
+          -0.009473
+        ],
+        "max": [
+          0.476229,
+          0.49015,
+          0.489345
+        ]
+      },
+      "sourceBounds": {
+        "min": [
+          -0.419987,
+          -0.651006,
+          -0.009473
+        ],
+        "max": [
+          0.476229,
+          0.49015,
+          0.489345
+        ]
+      },
+      "source": {
+        "pack": "yavin-jungle",
+        "kind": "anthurium",
+        "asset": "anthurium_botany_01",
+        "variant": 0,
+        "file": "anthurium-wide.bin",
+        "vertices": 2627,
+        "triangles": 4743,
+        "sha256": "8c535e189300a99040cf51155a15f3d9db308124ba5fbd50dd177f540f34d900",
+        "modelsJson": {
+          "file": "models.json",
+          "sha256": "8bed07579903c4598040b26a04e91d65a012ce91b13757242cfcdd0680073fb1"
+        }
+      },
+      "texture": {
+        "pack": "yavin-jungle",
+        "file": "anthurium.png",
+        "width": 1024,
+        "height": 1024,
+        "sha256": "40adae07cdd850b147c04dbae7e39afd38735933f70eff83ec5151a79e37c05a"
+      },
+      "quads": [
+        {
+          "view": "side0",
+          "plane": "vertical",
+          "yawDeg": 0.0,
+          "atlas": {
+            "column": 0,
+            "row": 2,
+            "x": 9,
+            "y": 136,
+            "w": 110,
+            "h": 48
+          },
+          "uv": [
+            0.017578,
+            0.53125,
+            0.232422,
+            0.71875
+          ],
+          "frame": {
+            "uAxis": "y",
+            "u": [
+              -0.570578,
+              0.570578
+            ],
+            "z": [
+              -0.009473,
+              0.489345
+            ]
+          },
+          "normal": [
+            0.447214,
+            0.0,
+            0.894427
+          ],
+          "bake": {
+            "coverage": 0.20208333333333334,
+            "alphaMean": 0.21003443002700806,
+            "rgbMean": [
+              0.211364,
+              0.264564,
+              0.116375
+            ],
+            "rgbStd": 0.070348,
+            "contentWidth": 110,
+            "contentHeight": 48,
+            "bandClipFraction": 0.0,
+            "silhouetteCorrelation": 0.96919,
+            "alphaOnGeometry": 0.930067,
+            "alphaOffGeometry": 0.007531,
+            "aspect": 2.287719,
+            "coveragePixels": 0.219508,
+            "alphaMeanPixels": 0.210068,
+            "rgbStdPixels": 0.071764,
+            "uniqueColours": 1035
+          }
+        },
+        {
+          "view": "side45",
+          "plane": "vertical",
+          "yawDeg": 45.0,
+          "atlas": {
+            "column": 1,
+            "row": 2,
+            "x": 136,
+            "y": 138,
+            "w": 112,
+            "h": 44
+          },
+          "uv": [
+            0.265625,
+            0.539062,
+            0.484375,
+            0.710938
+          ],
+          "frame": {
+            "uAxis": "y",
+            "u": [
+              -0.633721,
+              0.633721
+            ],
+            "z": [
+              -0.009473,
+              0.489345
+            ]
+          },
+          "normal": [
+            0.316228,
+            0.316228,
+            0.894427
+          ],
+          "bake": {
+            "coverage": 0.2398538961038961,
+            "alphaMean": 0.24663697183132172,
+            "rgbMean": [
+              0.218151,
+              0.272217,
+              0.118549
+            ],
+            "rgbStd": 0.07342,
+            "contentWidth": 112,
+            "contentHeight": 44,
+            "bandClipFraction": 0.0,
+            "silhouetteCorrelation": 0.967827,
+            "alphaOnGeometry": 0.932709,
+            "alphaOffGeometry": 0.008444,
+            "aspect": 2.540889,
+            "coveragePixels": 0.25487,
+            "alphaMeanPixels": 0.24667,
+            "rgbStdPixels": 0.07108,
+            "uniqueColours": 1094
+          }
+        },
+        {
+          "view": "side90",
+          "plane": "vertical",
+          "yawDeg": 90.0,
+          "atlas": {
+            "column": 2,
+            "row": 2,
+            "x": 277,
+            "y": 136,
+            "w": 86,
+            "h": 48
+          },
+          "uv": [
+            0.541016,
+            0.53125,
+            0.708984,
+            0.71875
+          ],
+          "frame": {
+            "uAxis": "y",
+            "u": [
+              -0.448108,
+              0.448108
+            ],
+            "z": [
+              -0.009473,
+              0.489345
+            ]
+          },
+          "normal": [
+            0.0,
+            0.447214,
+            0.894427
+          ],
+          "bake": {
+            "coverage": 0.26380813953488375,
+            "alphaMean": 0.2752196490764618,
+            "rgbMean": [
+              0.215567,
+              0.269605,
+              0.115202
+            ],
+            "rgbStd": 0.073737,
+            "contentWidth": 86,
+            "contentHeight": 48,
+            "bandClipFraction": 0.0,
+            "silhouetteCorrelation": 0.960997,
+            "alphaOnGeometry": 0.921514,
+            "alphaOffGeometry": 0.010033,
+            "aspect": 1.79668,
+            "coveragePixels": 0.284884,
+            "alphaMeanPixels": 0.27526,
+            "rgbStdPixels": 0.07114,
+            "uniqueColours": 1041
+          }
+        },
+        {
+          "view": "top",
+          "plane": "horizontal",
+          "yawDeg": null,
+          "atlas": {
+            "column": 3,
+            "row": 2,
+            "x": 429,
+            "y": 136,
+            "w": 38,
+            "h": 48
+          },
+          "uv": [
+            0.837891,
+            0.53125,
+            0.912109,
+            0.71875
+          ],
+          "frame": {
+            "uAxis": "x",
+            "u": [
+              -0.419987,
+              0.476229
+            ],
+            "vAxis": "-y",
+            "v": [
+              0.49015,
+              -0.651006
+            ],
+            "z": 0.276936
+          },
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "bake": {
+            "coverage": 0.36019736842105265,
+            "alphaMean": 0.3721191883087158,
+            "rgbMean": [
+              0.207766,
+              0.264613,
+              0.11825
+            ],
+            "rgbStd": 0.066653,
+            "contentWidth": 38,
+            "contentHeight": 48,
+            "topSurfaceZ": 0.2769357254362919,
+            "bandClipFraction": 0.0,
+            "silhouetteCorrelation": 0.969552,
+            "alphaOnGeometry": 0.942632,
+            "alphaOffGeometry": 0.013511,
+            "aspect": 0.785359,
+            "coveragePixels": 0.384868,
+            "alphaMeanPixels": 0.372158,
+            "rgbStdPixels": 0.069709,
+            "uniqueColours": 655
+          }
+        }
+      ],
+      "rowOrderCheck": {
+        "decision": "v = PNG row index (loader flipY=false)",
+        "views": {
+          "side0": {
+            "unflippedOnGeometry": 0.930067,
+            "mirroredOnGeometry": 0.585254
+          },
+          "side45": {
+            "unflippedOnGeometry": 0.932709,
+            "mirroredOnGeometry": 0.613078
+          },
+          "side90": {
+            "unflippedOnGeometry": 0.921514,
+            "mirroredOnGeometry": 0.560632
+          },
+          "top": {
+            "unflippedOnGeometry": 0.942632,
+            "mirroredOnGeometry": 0.429671
+          }
+        },
+        "worstMargin": 0.319631
+      },
+      "credit": "Poly Haven 'Anthurium Botany 01', CC0; geometry and cutout diffuse already cooked into public/art/yavin-jungle.",
+      "derivation": "Orthographic front/side3/plan bakes of anthurium-wide.bin through its own UVs into anthurium.png (alpha channel), 2x supersampled and box-filtered; no recolor and no new art."
+    },
+    {
+      "name": "anthurium-young",
+      "kind": "anthurium",
+      "file": "anthurium-young.bin",
+      "vertices": 16,
+      "triangles": 8,
+      "bytes": 560,
+      "sha256": "81d42194e0b24bdefd060db4e7397442c48dd4268d594f419b409e5b9bb00154",
+      "bounds": {
+        "min": [
+          -0.129713,
+          -0.172071,
+          -0.003514
+        ],
+        "max": [
+          0.180123,
+          0.103217,
+          0.133946
+        ]
+      },
+      "sourceBounds": {
+        "min": [
+          -0.129713,
+          -0.172071,
+          -0.003514
+        ],
+        "max": [
+          0.180123,
+          0.103217,
+          0.133946
+        ]
+      },
+      "source": {
+        "pack": "yavin-jungle",
+        "kind": "anthurium",
+        "asset": "anthurium_botany_01",
+        "variant": 5,
+        "file": "anthurium-young.bin",
+        "vertices": 657,
+        "triangles": 1118,
+        "sha256": "bfa53974e000a91247326d961faee5887c2e546b5171e69d2bf001d1a7d3c15a",
+        "modelsJson": {
+          "file": "models.json",
+          "sha256": "8bed07579903c4598040b26a04e91d65a012ce91b13757242cfcdd0680073fb1"
+        }
+      },
+      "texture": {
+        "pack": "yavin-jungle",
+        "file": "anthurium.png",
+        "width": 1024,
+        "height": 1024,
+        "sha256": "40adae07cdd850b147c04dbae7e39afd38735933f70eff83ec5151a79e37c05a"
+      },
+      "quads": [
+        {
+          "view": "side0",
+          "plane": "vertical",
+          "yawDeg": 0.0,
+          "atlas": {
+            "column": 0,
+            "row": 3,
+            "x": 16,
+            "y": 200,
+            "w": 96,
+            "h": 48
+          },
+          "uv": [
+            0.03125,
+            0.78125,
+            0.21875,
+            0.96875
+          ],
+          "frame": {
+            "uAxis": "y",
+            "u": [
+              -0.137644,
+              0.137644
+            ],
+            "z": [
+              -0.003514,
+              0.133946
+            ]
+          },
+          "normal": [
+            0.447214,
+            0.0,
+            0.894427
+          ],
+          "bake": {
+            "coverage": 0.3357204861111111,
+            "alphaMean": 0.3467141389846802,
+            "rgbMean": [
+              0.20402,
+              0.236711,
+              0.116385
+            ],
+            "rgbStd": 0.06687,
+            "contentWidth": 96,
+            "contentHeight": 48,
+            "bandClipFraction": 0.0,
+            "silhouetteCorrelation": 0.978103,
+            "alphaOnGeometry": 0.960315,
+            "alphaOffGeometry": 0.013405,
+            "aspect": 2.002678,
+            "coveragePixels": 0.360026,
+            "alphaMeanPixels": 0.346761,
+            "rgbStdPixels": 0.068993,
+            "uniqueColours": 1204
+          }
+        },
+        {
+          "view": "side45",
+          "plane": "vertical",
+          "yawDeg": 45.0,
+          "atlas": {
+            "column": 1,
+            "row": 3,
+            "x": 136,
+            "y": 204,
+            "w": 112,
+            "h": 40
+          },
+          "uv": [
+            0.265625,
+            0.796875,
+            0.484375,
+            0.953125
+          ],
+          "frame": {
+            "uAxis": "y",
+            "u": [
+              -0.194658,
+              0.194658
+            ],
+            "z": [
+              -0.003514,
+              0.133946
+            ]
+          },
+          "normal": [
+            0.316228,
+            0.316228,
+            0.894427
+          ],
+          "bake": {
+            "coverage": 0.1904017857142857,
+            "alphaMean": 0.2015572488307953,
+            "rgbMean": [
+              0.203655,
+              0.235662,
+              0.115877
+            ],
+            "rgbStd": 0.06707,
+            "contentWidth": 112,
+            "contentHeight": 40,
+            "bandClipFraction": 0.0,
+            "silhouetteCorrelation": 0.971846,
+            "alphaOnGeometry": 0.936374,
+            "alphaOffGeometry": 0.01036,
+            "aspect": 2.832215,
+            "coveragePixels": 0.213393,
+            "alphaMeanPixels": 0.201598,
+            "rgbStdPixels": 0.069224,
+            "uniqueColours": 822
+          }
+        },
+        {
+          "view": "side90",
+          "plane": "vertical",
+          "yawDeg": 90.0,
+          "atlas": {
+            "column": 2,
+            "row": 3,
+            "x": 266,
+            "y": 200,
+            "w": 108,
+            "h": 48
+          },
+          "uv": [
+            0.519531,
+            0.78125,
+            0.730469,
+            0.96875
+          ],
+          "frame": {
+            "uAxis": "y",
+            "u": [
+              -0.154918,
+              0.154918
+            ],
+            "z": [
+              -0.003514,
+              0.133946
+            ]
+          },
+          "normal": [
+            0.0,
+            0.447214,
+            0.894427
+          ],
+          "bake": {
+            "coverage": 0.2025462962962963,
+            "alphaMean": 0.21259164810180664,
+            "rgbMean": [
+              0.213684,
+              0.248523,
+              0.122424
+            ],
+            "rgbStd": 0.066414,
+            "contentWidth": 108,
+            "contentHeight": 48,
+            "bandClipFraction": 0.0,
+            "silhouetteCorrelation": 0.972635,
+            "alphaOnGeometry": 0.944464,
+            "alphaOffGeometry": 0.011354,
+            "aspect": 2.254007,
+            "coveragePixels": 0.221258,
+            "alphaMeanPixels": 0.212631,
+            "rgbStdPixels": 0.071101,
+            "uniqueColours": 983
+          }
+        },
+        {
+          "view": "top",
+          "plane": "horizontal",
+          "yawDeg": null,
+          "atlas": {
+            "column": 3,
+            "row": 3,
+            "x": 421,
+            "y": 200,
+            "w": 54,
+            "h": 48
+          },
+          "uv": [
+            0.822266,
+            0.78125,
+            0.927734,
+            0.96875
+          ],
+          "frame": {
+            "uAxis": "x",
+            "u": [
+              -0.129713,
+              0.180123
+            ],
+            "vAxis": "-y",
+            "v": [
+              0.103217,
+              -0.172071
+            ],
+            "z": 0.06298
+          },
+          "normal": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "bake": {
+            "coverage": 0.33796296296296297,
+            "alphaMean": 0.35008907318115234,
+            "rgbMean": [
+              0.192049,
+              0.225763,
+              0.110292
+            ],
+            "rgbStd": 0.065218,
+            "contentWidth": 54,
+            "contentHeight": 48,
+            "topSurfaceZ": 0.06297962064191835,
+            "bandClipFraction": 0.0,
+            "silhouetteCorrelation": 0.975766,
+            "alphaOnGeometry": 0.953195,
+            "alphaOffGeometry": 0.015994,
+            "aspect": 1.125496,
+            "coveragePixels": 0.360725,
+            "alphaMeanPixels": 0.350129,
+            "rgbStdPixels": 0.068569,
+            "uniqueColours": 785
+          }
+        }
+      ],
+      "rowOrderCheck": {
+        "decision": "v = PNG row index (loader flipY=false)",
+        "views": {
+          "side0": {
+            "unflippedOnGeometry": 0.960315,
+            "mirroredOnGeometry": 0.676362
+          },
+          "side45": {
+            "unflippedOnGeometry": 0.936374,
+            "mirroredOnGeometry": 0.68514
+          },
+          "side90": {
+            "unflippedOnGeometry": 0.944464,
+            "mirroredOnGeometry": 0.788364
+          },
+          "top": {
+            "unflippedOnGeometry": 0.953195,
+            "mirroredOnGeometry": 0.670998
+          }
+        },
+        "worstMargin": 0.1561
+      },
+      "credit": "Poly Haven 'Anthurium Botany 01', CC0; geometry and cutout diffuse already cooked into public/art/yavin-jungle.",
+      "derivation": "Orthographic front/side3/plan bakes of anthurium-young.bin through its own UVs into anthurium.png (alpha channel), 2x supersampled and box-filtered; no recolor and no new art."
+    }
+  ]
+}

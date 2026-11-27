@@ -15,6 +15,8 @@ import {
   bombardTargetWhy
 } from './landbase.js';
 import { CELL } from './terrain.js';
+import { contactSymbol } from './radarcontacts.js';
+import { viewOptions as prefs } from './viewpreferences.js';
 import { Radar } from './radar.js';
 import { BeaconView } from './beacons.js';
 import { PICKS_UNIT, SILENT, bribeCost } from './landabilities.js';
@@ -206,10 +208,7 @@ export class LandUI {
       buildOptions: b => {
         const own = this.siteOf(b);
         if (own) return w.siteMenu(own, this.me);
-        const u = b.members[0],
-          out = [];
-        if (!u) return out;
-        return out.concat(u.builds);
+        return w.productionFor(b.members[0], this.me);
       },
       cantBuild: (b, t) => {
         const own = this.siteOf(b);
@@ -688,25 +687,32 @@ export class LandUI {
         F = 2 * CELL;
       if (fog && !this.seeAll) g.drawImage(fog, lo[0] / F, fog.height - 1 - hi[1] / F, spanX / F, spanY / F, 0, 0, W, H);
     }
-    if (R.landBackdrop) g.drawImage(R.grid(W, H, R.landBackdrop), 0, 0);
+    if (prefs.radarGrid && R.landBackdrop) g.drawImage(R.grid(W, H, R.landBackdrop), 0, 0);
     const tone = s => {
       const c = s >= 0 && w.colors?.[s];
       return c ? R.tone([Math.round(c.r * 255), Math.round(c.g * 255), Math.round(c.b * 255)]) : R.tone([127, 149, 171]);
     };
     const radar = this.seeAll || this.radarOn(me),
       done = new Set();
-    const draw = (t, x, y, heading, s) => {
+    const symbolRadius = 3 * prefs.radarScale * (W / (cv.clientWidth || W));
+    const draw = (t, x, y, heading, s, native = false) => {
       const c = tone(s);
+      if (prefs.radarShapes) {
+        const neutral = s == null || s < 0 || (s === w.wild && !native);
+        contactSymbol(g, X(x), Y(y), symbolRadius, !neutral && w.ally(s, me), neutral, c.rgb);
+        return;
+      }
       if (!t.icon) {
         g.fillStyle = c.rgb;
-        g.fillRect(Math.round(X(x) - t.blip / 2), Math.round(Y(y) - t.blip / 2), t.blip, t.blip);
+        const b = t.blip * prefs.radarScale;
+        g.fillRect(Math.round(X(x) - b / 2), Math.round(Y(y) - b / 2), b, b);
         return;
       }
       let img = c.icons.get(t.icon);
       if (!img && (img = R.icon(t.icon, c.c))) c.icons.set(t.icon, img);
       if (!img) return;
-      const hw = (t.sx * W) / 2,
-        hh = (t.sy * H) / 2,
+      const hw = (t.sx * W * prefs.radarScale) / 2,
+        hh = (t.sy * H * prefs.radarScale) / 2,
         a = (t.facing ? -(heading - Math.PI / 2) : 0) + (t.turn ? Math.PI / 2 : 0);
       if (a) {
         g.setTransform(Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a), X(x), Y(y));
@@ -728,7 +734,7 @@ export class LandUI {
         if (enemy && (!t.enemy || u.cloaked || (!radar && !u.captures))) continue;
         if (!own && !this.seeAll && u.seen === false && !t.fogged) continue;
         if (many) done.add(q);
-        draw(t, u.x, u.y, u.heading || 0, u.side);
+        draw(t, u.x, u.y, u.heading || 0, u.side, q?.native);
       }
     if (S)
       for (const p of w.points) {
@@ -747,10 +753,11 @@ export class LandUI {
       );
     if (S) R.drawEvents(g, X, Y, W, H, w.time);
     R.drawStoryBlips(g, X, Y, w.storyBlips, w.time);
+    if (!prefs.radarView) return;
     const v = game.view,
       r = Math.max(8, ((v.dist * 0.55) / spanX) * W);
     g.strokeStyle = '#fff';
-    g.lineWidth = 1.5;
+    g.lineWidth = 1.5 * prefs.radarLine;
     g.strokeRect(X(v.x) - r, Y(v.y) - r * 0.75, r * 2, r * 1.5);
   }
 }

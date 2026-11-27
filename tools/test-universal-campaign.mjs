@@ -109,7 +109,7 @@ try {
     '<GameConstants><Credit_Cap_Per_Planet>12000</Credit_Cap_Per_Planet><Political_Control_Change_Time_Seconds>NaN</Political_Control_Change_Time_Seconds><Other>90000</Other></GameConstants>'
   );
   const entries = new Map([
-    ['DATA\\XML\\GAMECONSTANTS.XML', { ensure() {}, file, size: fs.statSync(file).size }],
+    ['DATA\\XML\\GAMECONSTANTS.XML', { readBytes: () => fs.readFileSync(file), size: fs.statSync(file).size }],
     ['X\\GOVERNMENTSTARFORGESEARCH.LUA', {}]
   ]);
   assert.deepEqual(portableRules({ entries, mounted: { workshop: '3417277973' } }), { values: { treasury: 12000 }, hasSearch: true });

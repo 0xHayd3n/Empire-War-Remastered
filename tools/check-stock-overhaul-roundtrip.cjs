@@ -57,6 +57,14 @@ async function run() {
       assert(box && box.x >= 0 && box.y >= 0 && box.x + box.width <= 391 && box.y + box.height <= 845, 'Start outside mobile viewport');
       await page.setViewportSize({ width: 1200, height: 800 });
       await go.click();
+      // A newly visited Workshop roster may have no saved fleet. The ordinary
+      // Start action opens its editor rather than launching an empty battle.
+      await frame().waitForFunction(() => window.game?.world || document.querySelector('.ib-editor .ib-go')?.getClientRects().length, null, { timeout });
+      const editor = ui.locator('.ib-editor:visible');
+      if (await editor.count()) {
+        await board.getByRole('button', { name: 'Randomize All' }).click();
+        await editor.locator('.ib-go').click();
+      }
       await running();
       assert.equal((await frame().evaluate(() => game.setup.mapFile)).toLowerCase(), file.toLowerCase(), 'Wrong battlefield loaded');
     }

@@ -5,6 +5,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomUUID } from 'node:crypto';
 import { openGame } from './megfs.mjs';
+import { readVerified } from './verified-pack-read.mjs';
 
 export const primaries = new Map([
   ['1125571106', 'Thrawn’s Revenge'],
@@ -82,7 +83,26 @@ function readInfo(folder) {
 }
 // Each publication is atomic; existing manifests keep referring to immutable blob names across rebuilds.
 export function buildPack(home, id, folder, { materialize = false } = {}) {
+  return withLibraryWrite(home, () => buildLocked(home, id, folder, materialize));
+}
+// Serialize private-library publishers and explicit trimming. A stale lock is
+// left for manual inspection after a crash; never steal a running build's lock.
+export function withLibraryWrite(home, work) {
+  fs.mkdirSync(home, { recursive: true });
+  const lock = path.join(home, '.pack-maintenance.lock');
+  const fd = fs.openSync(lock, 'wx');
+  const unlock = () => { fs.closeSync(fd); fs.unlinkSync(lock); };
+  let result;
+  try { fs.writeFileSync(fd, `${process.pid}\n`); result = work(); }
+  catch (err) { unlock(); throw err; }
+  if (result && typeof result.then === 'function') return Promise.resolve(result).finally(unlock);
+  unlock();
+  return result;
+}
+function buildLocked(home, id, folder, materialize) {
   checkId(id);
+  const file = path.join(manifestDir(home), id + '.json');
+  materialize ||= fs.existsSync(file) && json(file).materialized === true;
   const entries = sourceLayer(folder),
     rows = [];
   for (const [key, e] of entries) {
@@ -97,7 +117,7 @@ export function buildPack(home, id, folder, { materialize = false } = {}) {
   rows.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   const revision = hash(JSON.stringify(rows)),
     info = readInfo(folder);
-  atomic(path.join(manifestDir(home), id + '.json'), JSON.stringify({ format: 1, id, revision, info, rows }));
+  atomic(file, JSON.stringify({ format: 1, id, revision, info, rows, ...(materialize && { materialized: true }) }));
   return { revision, rows };
 }
 function ensureObject(home, sha, size, source) {
@@ -130,8 +150,7 @@ export function loadPack(home, id, folder) {
   const m = json(path.join(manifestDir(home), id + '.json'));
   if (m.format !== 1 || m.id !== id || !Array.isArray(m.rows) || hash(JSON.stringify(m.rows)) !== m.revision)
     throw new Error('Invalid universal pack manifest.');
-  const entries = new Map(),
-    verified = new Set();
+  const entries = new Map(), offline = m.materialized === true;
   let original;
   for (const [key, sha, size, loose] of m.rows) {
     if (typeof key !== 'string' || entries.has(key)) throw new Error('Invalid virtual key');
@@ -140,14 +159,22 @@ export function loadPack(home, id, folder) {
       continue;
     }
     if (!/^[a-f0-9]{64}$/.test(sha) || !Number.isSafeInteger(size) || size < 0) throw new Error('Invalid object reference');
+    const object = { file: objectFile(home, sha), size };
     entries.set(key, {
-      file: objectFile(home, sha),
-      size,
+      ...object, // canonical object address for offline checks and metadata, not necessarily a file on disk
       packLoose: loose,
-      ensure() {
-        if (verified.has(sha)) return;
-        ensureObject(home, sha, size, () => folder && (original ||= sourceLayer(folder)).get(key));
-        verified.add(sha);
+      readBytes(start, length) {
+        if (folder && !offline) {
+          try {
+            const e = (original ||= sourceLayer(folder)).get(key);
+            if (e) return readVerified(e, sha, size, start, length);
+          } catch (err) {
+            if (!fs.existsSync(object.file)) throw Error('Parent content changed or unavailable; restore the install or rebuild the profile.', { cause: err });
+          }
+        }
+        if (!fs.existsSync(object.file)) throw Error('Missing parent or offline object; restore the install or rebuild the profile.');
+        try { return readVerified(object, sha, size, start, length); }
+        catch (err) { throw Error('Damaged library object; restore a verified copy or reimport.', { cause: err }); }
       }
     });
   }

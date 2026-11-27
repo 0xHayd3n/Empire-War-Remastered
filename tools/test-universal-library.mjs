@@ -89,11 +89,20 @@ try {
       packed.close();
     }
   }
+  assert.equal(auditPacks(home).cachedObjects, 0, 'ordinary loose/MEG reads and ranges must never materialize disk objects');
+  const cacheFile = path.join(home, 'objects', shared.slice(0, 2), shared);
+  put(cacheFile, 'same payload'); // legacy private object
+  const alias = loadPack(home, a, folder(a)).entries.get('DATA\\ONE.DDS');
+  put(path.join(folder(a), 'Data/One.dds'), 'same length!');
+  assert.equal(alias.readBytes().toString(), 'same payload', 'updated parent falls back to matching pinned bytes');
+  fs.unlinkSync(cacheFile);
+  assert.throws(() => alias.readBytes(), /content changed/, 'a warm mount cannot serve changed bytes or assume the object still exists');
+  put(path.join(folder(a), 'Data/One.dds'), 'same payload');
   // Snapshot independence from both parents, and failure rather than substituting a same-length changed source.
   put(path.join(folder(a), 'Data/New.txt'), 'latest');
   buildPack(home, a, folder(a));
   put(path.join(folder(a), 'Data/New.txt'), 'edited');
-  assert.throws(() => loadPack(home, a, folder(a)).entries.get('DATA\\NEW.TXT').ensure(), /content changed/);
+  assert.throws(() => loadPack(home, a, folder(a)).entries.get('DATA\\NEW.TXT').readBytes(), /content changed/);
   buildPack(home, a, folder(a), { materialize: true });
   fs.rmSync(parents, { recursive: true });
   assert(completeOfflinePack(home, a), 'Materialized packs remain available without their parent');
@@ -107,7 +116,7 @@ try {
   assert.equal(auditPacks(home, { verify: true }).invalidObjects, 1); // same length, wrong bytes
   put(path.join(home, 'objects', shared.slice(0, 2), 'repeated-copy'), 'same payload');
   assert.equal(auditPacks(home).unexpectedEntries, 1);
-  assert.throws(() => loadPack(home, a).entries.get('DATA\\ONE.DDS').ensure(), /Damaged/);
+  assert.throws(() => loadPack(home, a).entries.get('DATA\\ONE.DDS').readBytes(), /Damaged/);
   console.log(
     'PASS: isolated packs, shared bytes, distinct scripts, MEG/loose provenance, masks, languages, ranges, update and offline materialization'
   );

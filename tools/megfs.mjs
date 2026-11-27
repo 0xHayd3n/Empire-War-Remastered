@@ -209,7 +209,7 @@ export function openGame(gameDir, mods = [], { language = 0, expansion = true, p
       read(key) {
         const e = index.get(key);
         if (!e) return null;
-        e.ensure?.();
+        if (e.readBytes) return e.readBytes();
         if (e.file && e.off !== undefined) {
           const fd = fs.openSync(e.file, 'r'),
             b = Buffer.allocUnsafe(e.size);
@@ -225,8 +225,8 @@ export function openGame(gameDir, mods = [], { language = 0, expansion = true, p
       readPart(key, start, len) {
         const e = index.get(key);
         if (!e) return null;
-        e.ensure?.();
         len = Math.max(0, Math.min(len, e.size - start));
+        if (e.readBytes) return e.readBytes(start, len);
         const buf = Buffer.allocUnsafe(len),
           at = (e.off || 0) + start;
         if (e.file) {

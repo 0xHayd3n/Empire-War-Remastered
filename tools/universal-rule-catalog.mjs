@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import { parseXML } from '../public/js/xml.js';
 import { ruleFields, validValue, revanId } from '../public/js/game/universalrules.js';
 import { listPacks, loadPack } from './universal-library.mjs';
@@ -9,8 +8,7 @@ export function portableRules(pack) {
     e = pack.entries.get(key),
     values = {};
   if (e && e.size <= 8 * 1024 * 1024) {
-    e.ensure();
-    const node = parseXML(fs.readFileSync(e.file, 'latin1')).children[0];
+    const node = parseXML(e.readBytes().toString('latin1')).children[0];
     for (const [field, { tag }] of Object.entries(ruleFields)) {
       const raw = node?.val(tag),
         value = Number(raw);

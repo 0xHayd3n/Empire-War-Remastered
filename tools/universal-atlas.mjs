@@ -199,7 +199,7 @@ export function launchPlan(atlas, q) {
 }
 // Without the parent install a lazy manifest (even with a warm preview atlas)
 // is not playable. A fully materialized pack remains usable offline. Byte/hash
-// verification still happens in loadPack.ensure before an asset is served.
+// verification still happens in readBytes before an asset is served.
 export function completeOfflinePack(home, id) {
   const { entries } = loadPack(home, id);
   return [...entries.values()].every(e => !e || fs.statSync(e.file, { throwIfNoEntry: false })?.size === e.size);

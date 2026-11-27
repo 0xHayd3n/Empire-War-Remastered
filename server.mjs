@@ -253,22 +253,24 @@ const handle = async (req, res) => {
       }
       if (!key) return send(res, 204, '');
       const entry = assets.index.get(key);
-      if (entry.ensure) {
-        try { entry.ensure(); } catch (error) { console.warn('Universal asset:', error.message); return send(res, 409, 'Pack unavailable. Restore the parent or rebuild the profile.', undefined, { 'Cache-Control':'no-store' }); }
+      try {
+        const size = entry.size,
+          range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+        if (range && (range[1] || range[2])) {
+          const a = range[1] ? +range[1] : Math.max(0, size - +range[2]),
+            b = range[1] && range[2] ? Math.min(+range[2], size - 1) : size - 1;
+          if (a > b || a >= size) return send(res, 416, '', 'text/plain', { 'Content-Range': `bytes */${size}` });
+          return send(res, 206, assets.readPart(key, a, b - a + 1), mime(key), {
+            'Content-Range': `bytes ${a}-${b}/${size}`,
+            'Accept-Ranges': 'bytes',
+            'Cache-Control': assetCache
+          });
+        }
+        return send(res, 200, assets.read(key), mime(key), { 'Accept-Ranges': 'bytes', 'Cache-Control': assetCache });
+      } catch (error) {
+        console.warn('Unavailable asset:', error.message);
+        return send(res, entry.readBytes ? 409 : 503, 'Asset unavailable. Restore the install or rebuild the profile.', undefined, { 'Cache-Control': 'no-store' });
       }
-      const size = entry.size,
-        range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
-      if (range && (range[1] || range[2])) {
-        const a = range[1] ? +range[1] : Math.max(0, size - +range[2]),
-          b = range[1] && range[2] ? Math.min(+range[2], size - 1) : size - 1;
-        if (a > b || a >= size) return send(res, 416, '', 'text/plain', { 'Content-Range': `bytes */${size}` });
-        return send(res, 206, assets.readPart(key, a, b - a + 1), mime(key), {
-          'Content-Range': `bytes ${a}-${b}/${size}`,
-          'Accept-Ranges': 'bytes',
-          'Cache-Control': assetCache
-        });
-      }
-      return send(res, 200, assets.read(key), mime(key), { 'Accept-Ranges': 'bytes', 'Cache-Control': assetCache });
     }
     if (session.library && req.method === 'GET' && p === '/api/universal/galactic-sources') {
       try {
